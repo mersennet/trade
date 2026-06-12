@@ -233,6 +233,36 @@ async function getOpenOrders(address) {
  * Expects {owner, market_id, side, price, size, tif} with price/size as
  * raw hex (1e18). Matching is atomic — the result reports fills directly.
  */
+// The node does NOT emit MersennetOrdersTrades WS events for submitOrder RPC
+// fills, so the indexer's subscription never sees them. We report fills to the
+// indexer directly here so trades/volume/candles populate for both bot and real
+// user orders. Fire-and-forget; never block or fail the order on a report error.
+const INDEXER_REPORT_URL = process.env.INDEXER_REPORT_URL || 'http://127.0.0.1:4010/trades';
+function hexToNum(v) {
+  try { return typeof v === 'string' && v.startsWith('0x') ? Number(BigInt(v)) : Number(v) || 0; }
+  catch { return 0; }
+}
+function reportFills(result, marketIdFallback, sideFallback) {
+  const trades = result && Array.isArray(result.trades) ? result.trades : [];
+  if (trades.length === 0) return;
+  const payload = trades.map(t => ({
+    market_id: hexToNum(t.market_id) || Number(marketIdFallback) || 0,
+    taker: t.taker,
+    maker: t.maker,
+    side: t.side || sideFallback,
+    price: hexToNum(t.price),
+    size: hexToNum(t.size),
+  }));
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 3000);
+  fetch(INDEXER_REPORT_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal: ctrl.signal,
+  }).catch(() => {}).finally(() => clearTimeout(timer));
+}
+
 async function submitOrder(params) {
   const { owner, market_id, side, price, size, tif } = params || {};
   if (!owner || !market_id || !side || !price || !size) {
@@ -240,7 +270,7 @@ async function submitOrder(params) {
     err.statusCode = 400;
     throw err;
   }
-  return rpcCall('mersennet_orders_submitOrder', [{
+  const result = await rpcCall('mersennet_orders_submitOrder', [{
     owner,
     market_id: Number(market_id),
     side,
@@ -248,6 +278,8 @@ async function submitOrder(params) {
     size,
     tif: tif || 'Gtc',
   }]);
+  reportFills(result, market_id, side);
+  return result;
 }
 
 async function cancelOrder(orderId) {

@@ -32,6 +32,9 @@ services:
       DATABASE_URL: postgresql://mersennet:m3rs3nn3t_db_2026@postgres:5432/mersennet_trade
       RPC_URL: ${RPC_URL:-https://rpc.mersennet.com}
       WS_URL: ${WS_URL:-wss://rpc.mersennet.com}
+      # Report user-order fills to the indexer (the node emits no WS trade event
+      # for submitOrder RPC fills) so trades/volume/charts populate.
+      INDEXER_REPORT_URL: http://indexer:4010/trades
     ports:
       - "127.0.0.1:4005:4005"
     depends_on:
@@ -48,6 +51,8 @@ services:
       RPC_URL: ${RPC_URL:-https://rpc.mersennet.com}
       WS_URL: ${WS_URL:-wss://rpc.mersennet.com}
       API_BASE: http://api:4005/api/v1
+      # Accept fill reports from the api container over the internal network.
+      REPORT_HOST: 0.0.0.0
     depends_on:
       postgres:
         condition: service_healthy
@@ -63,6 +68,37 @@ services:
       - "127.0.0.1:3000:3000"
     depends_on:
       - api
+
+  # Liquidity bots — keep the order book quoted and generate trade activity so
+  # the testnet looks alive. They seed the 5 markets on a fresh chain, deposit
+  # collateral, and report fills to the indexer. Start with `--profile bots`
+  # (e.g. `docker compose --profile bots up -d`) so they're opt-in.
+  market-maker:
+    build:
+      context: ./bots/market-maker
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["node", "index.js"]
+    environment:
+      RPC_URL: ${RPC_URL:-https://rpc.mersennet.com}
+      INDEXER_URL: http://indexer:4010/trades
+      MM_WALLET: ${MM_WALLET:-0x0000000000000000000000000000000000000001}
+    depends_on:
+      - indexer
+    profiles: ["bots"]
+
+  taker:
+    build:
+      context: ./bots/market-maker
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["node", "taker.js"]
+    environment:
+      RPC_URL: ${RPC_URL:-https://rpc.mersennet.com}
+      INDEXER_URL: http://indexer:4010/trades
+    depends_on:
+      - market-maker
+    profiles: ["bots"]
 
 volumes:
   pgdata:

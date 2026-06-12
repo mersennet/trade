@@ -8,6 +8,10 @@ const RPC_URL = process.env.RPC_URL || 'https://rpc.mersennet.com';
 const WS_URL = process.env.WS_URL || 'wss://rpc.mersennet.com';
 const DB_URL = process.env.DATABASE_URL || 'postgresql://mersennet:m3rs3nn3t_db_2026@127.0.0.1:5432/mersennet_trade';
 const REPORT_PORT = process.env.REPORT_PORT || 4010;
+// Bind host for the internal trade-report server. Defaults to loopback (safe on
+// a bare host); set REPORT_HOST=0.0.0.0 in docker so the api container can reach
+// it over the internal network (the port is not published externally).
+const REPORT_HOST = process.env.REPORT_HOST || '127.0.0.1';
 
 const pool = new Pool({ connectionString: DB_URL, max: 10, idleTimeoutMillis: 30000 });
 let rpcId = 1;
@@ -657,8 +661,8 @@ function startTradeReportServer() {
       res.writeHead(404); res.end('not found');
     }
   });
-  server.listen(REPORT_PORT, '127.0.0.1', () => {
-    console.log(`[indexer] Trade report server on http://127.0.0.1:${REPORT_PORT}/trades`);
+  server.listen(REPORT_PORT, REPORT_HOST, () => {
+    console.log(`[indexer] Trade report server on http://${REPORT_HOST}:${REPORT_PORT}/trades`);
   });
 }
 
