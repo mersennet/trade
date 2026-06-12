@@ -48,7 +48,7 @@ export default function RiskPage() {
 
         <h2 className="text-white mt-8">5. Infrastructure risk</h2>
         <p className="text-white/75">
-          Matching happens atomically on-chain — there is no off-chain sequencer. However, RPC or indexer
+          Matching happens atomically on-chain. There is no off-chain sequencer. However, RPC or indexer
           downtime means this interface may not reflect live state or accept new orders, though you can
           always <strong>interact with the Mersennet order-book engine directly over RPC</strong>.
         </p>

@@ -162,7 +162,7 @@ export default function TradeForm() {
         let priceForOrder = trade.price;
         if (trade.orderType === 'market') {
           const m = ticker?.markPrice || 0;
-          if (!m) throw new Error('No mark price available — try again in a moment');
+          if (!m) throw new Error('No mark price available. Try again in a moment.');
           priceForOrder = trade.side === 'buy'
             ? (m * (1 + slippagePct)).toString()
             : (m * (1 - slippagePct)).toString();
@@ -470,7 +470,7 @@ export default function TradeForm() {
         <button
           onClick={() => useStore.getState().setShowSettings(true)}
           className="px-2 py-1 bg-surface-2 rounded-md border border-border text-[10.5px] text-dim hover:text-foreground transition-colors font-mono whitespace-nowrap"
-          title="Slippage tolerance — click to change"
+          title="Slippage tolerance: click to change"
         >
           Slip {useStore.getState().slippage}%
         </button>

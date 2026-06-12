@@ -70,7 +70,7 @@ export default function ApiPage() {
       const res = await api.createApiKey(address, newLabel || undefined);
       setNewKey(res.key);
       setNewLabel('');
-      toast('API key created! Copy it now — it won\'t be shown again.', 'success');
+      toast('API key created! Copy it now; it won\'t be shown again.', 'success');
       api.getApiKeys(address).then((r) => setKeys(r.keys));
     } catch (e) { toast(`Failed: ${(e as Error).message}`, 'error'); }
     finally { setCreating(false); }

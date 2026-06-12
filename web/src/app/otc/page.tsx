@@ -53,7 +53,7 @@ export default function OTCPage() {
     setSubmitting(true);
     try {
       const res = await api.submitRfq({ address, market: symbol, side, size: Number(size) });
-      toast('RFQ submitted — quote received', 'success');
+      toast('RFQ submitted: quote received', 'success');
       setLastQuote(res.quote);
       setSize('');
       refresh();
@@ -68,7 +68,7 @@ export default function OTCPage() {
     if (!address) return;
     try {
       await api.acceptOtcQuote(quoteId, address);
-      toast('Quote accepted — trade executed', 'success');
+      toast('Quote accepted: trade executed', 'success');
       refresh();
     } catch (e) {
       toast(`Accept failed: ${(e as Error).message}`, 'error');
@@ -159,7 +159,7 @@ export default function OTCPage() {
           {!isConnected ? (
             <p className="text-dim text-xs text-center py-8">Connect wallet to view quotes</p>
           ) : quotes.length === 0 ? (
-            <p className="text-dim text-xs text-center py-8">No active quotes — submit an RFQ to receive pricing</p>
+            <p className="text-dim text-xs text-center py-8">No active quotes. Submit an RFQ to receive pricing.</p>
           ) : (
             <div className="space-y-2">
               {quotes.map((q) => {

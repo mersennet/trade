@@ -102,7 +102,7 @@ export default function AIAgentsPage() {
             Preview · simulated
           </span>
         </div>
-        <p className="text-dim text-sm">Configure automated strategies. Agents do not yet trade live — performance is simulated.</p>
+        <p className="text-dim text-sm">Configure automated strategies. Agents do not yet trade live. Performance is simulated.</p>
       </div>
       {isConnected && (
         <div className="flex justify-end mb-2">

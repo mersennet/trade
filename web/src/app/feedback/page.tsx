@@ -44,7 +44,7 @@ export default function FeedbackPage() {
         throw new Error(`API ${res.status}: ${txt.slice(0, 100)}`);
       }
       if (res.status === 404) {
-        toast.toast('Email fallback — opening mail client…', 'info');
+        toast.toast('Email fallback: opening mail client…', 'info');
         const subject = encodeURIComponent(`[${category}] Mersennet Trade feedback`);
         const body = encodeURIComponent(
           `Wallet: ${address || 'not connected'}\nCategory: ${category}\n\n${message}\n\nContact: ${contact}`
@@ -71,7 +71,7 @@ export default function FeedbackPage() {
       <header>
         <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight">Beta feedback</h1>
         <p className="text-dim text-xs md:text-[13px] mt-0.5 leading-relaxed">
-          Found a bug? Want a feature? Confused by something? Tell us — beta testers shape the product.
+          Found a bug? Want a feature? Confused by something? Tell us. Beta testers shape the product.
         </p>
       </header>
 
@@ -121,7 +121,7 @@ export default function FeedbackPage() {
             required
           />
           <div className="mt-1 flex items-center justify-between text-[10.5px] text-dim">
-            <span>Be specific — screenshots help. Paste image URLs or include them in your contact.</span>
+            <span>Be specific; screenshots help. Paste image URLs or include them in your contact.</span>
             <span className="font-mono tabular-nums">{message.length}</span>
           </div>
         </div>
@@ -134,7 +134,7 @@ export default function FeedbackPage() {
           <input
             value={contact}
             onChange={(e) => setContact(e.target.value)}
-            placeholder="Discord handle, Telegram, email — so we can reply"
+            placeholder="Discord handle, Telegram, email (so we can reply)"
             className="w-full px-3 py-2.5 rounded-md bg-surface-2 border border-border text-[13px] text-foreground placeholder:text-dim focus:outline-none focus:border-primary/40 transition-colors"
           />
         </div>

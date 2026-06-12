@@ -151,7 +151,7 @@ export default function VaultPage() {
         <div className="bg-surface border border-border rounded-xl p-4">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-[11px] font-semibold text-foreground uppercase tracking-wider">
-              Your Position — {currentStrategy.name}
+              Your Position: {currentStrategy.name}
             </h3>
             <button
               onClick={() => setShowLpCollateral(!showLpCollateral)}

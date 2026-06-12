@@ -53,8 +53,8 @@ export default function PointsPage() {
         </svg>
         <p className="text-[12px] leading-relaxed text-foreground/80">
           <span className="text-yellow font-semibold">Preview.</span>{' '}
-          The points program is not live yet — no balances are accrued from fees, LP deposits, or referrals,
-          so totals and the leaderboard read zero. The earn rates below are the planned design, shown for reference.
+          The points program is not live yet, so no balances are accrued from fees, LP deposits, or referrals,
+          and totals and the leaderboard read zero. The earn rates below are the planned design, shown for reference.
         </p>
       </div>
 

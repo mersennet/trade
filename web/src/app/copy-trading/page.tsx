@@ -217,7 +217,7 @@ export default function CopyTradingPage() {
             <p className="text-sm font-medium text-foreground">Copy Mode</p>
             <p className="text-[10px] text-dim">
               {copyMode
-                ? `Active — live-streaming ${followedSettings.length} trader(s) over WebSocket`
+                ? `Active: live-streaming ${followedSettings.length} trader(s) over WebSocket`
                 : 'Enable to auto-copy trades from followed traders'}
             </p>
           </div>

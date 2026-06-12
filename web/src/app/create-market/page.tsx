@@ -204,7 +204,7 @@ export default function CreateMarketPage() {
                       <span className="text-[10px] text-dim font-mono">{p.max_leverage}x max</span>
                     </div>
                     <p className="text-[11px] text-muted">
-                      {p.base}/{p.quote} — proposed by {shortenAddress(p.proposer)}
+                      {p.base}/{p.quote}, proposed by {shortenAddress(p.proposer)}
                     </p>
                     <p className="text-[10px] text-dim mt-0.5">{formatTimeAgo(p.created_at)}</p>
                   </div>

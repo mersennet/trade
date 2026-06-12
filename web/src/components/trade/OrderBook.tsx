@@ -153,7 +153,7 @@ export default function OrderBook() {
             <div className="flex-1 flex items-center justify-center">
               <EmptyState
                 label="Book is empty"
-                hint="No resting orders — place a limit order to seed liquidity"
+                hint="No resting orders. Place a limit order to seed liquidity."
               />
             </div>
           ) : (

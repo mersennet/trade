@@ -34,7 +34,7 @@ export default function TestnetPage() {
 
   const addToWallet = async () => {
     if (typeof window === 'undefined' || !window.ethereum) {
-      toast('No browser wallet found — install MetaMask to continue.', 'error');
+      toast('No browser wallet found. Install MetaMask to continue.', 'error');
       return;
     }
     setAdding(true);
@@ -44,7 +44,7 @@ export default function TestnetPage() {
     } catch (e) {
       const code = (e as { code?: number })?.code;
       if (code === 4001) toast('Request rejected in wallet', 'error');
-      else toast('Could not add network — try the manual settings below.', 'error');
+      else toast('Could not add network. Try the manual settings below.', 'error');
     } finally {
       setAdding(false);
     }
@@ -164,7 +164,7 @@ export default function TestnetPage() {
       <div className={cn('bg-surface border border-border rounded-xl px-5 py-4')}>
         <p className="text-[11px] text-dim leading-relaxed">
           Mersennet is a test network. Tokens hold no monetary value and the network may be reset.
-          Native collateral is <span className="text-foreground">MRSN</span> (18 decimals) — there is
+          Native collateral is <span className="text-foreground">MRSN</span> (18 decimals). There is
           no USDC on Mersennet.
         </p>
       </div>

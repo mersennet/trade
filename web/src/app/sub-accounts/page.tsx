@@ -72,7 +72,7 @@ export default function SubAccountsPage() {
       // wired to any signer, so trades/deposits still execute from the main
       // account. We surface that explicitly rather than implying isolation.
       setWalletStore({ address: acc.address });
-      toast(`Viewing ${acc.name} (watch-only — trades still use your main wallet)`, 'info');
+      toast(`Viewing ${acc.name} (watch-only, trades still use your main wallet)`, 'info');
     }
   };
 
@@ -146,7 +146,7 @@ export default function SubAccountsPage() {
         <div className="bg-surface-2 rounded-lg p-3 mb-4 text-xs text-dim leading-relaxed">
           <p className="mb-2">
             <span className="text-foreground font-medium">How it will work:</span> Once on-chain session-key delegation
-            ships, you will be able to register a temporary key that signs orders on your behalf — enabling instant
+            ships, you will be able to register a temporary key that signs orders on your behalf, enabling instant
             execution without a MetaMask popup for every trade.
           </p>
           <p>
@@ -200,7 +200,7 @@ export default function SubAccountsPage() {
       <div className="bg-surface-2 border border-border rounded-lg p-3 text-[11.5px] text-dim leading-relaxed">
         <span className="text-foreground font-medium">Watch-only.</span> Selecting a sub-account changes which address
         the data views (positions, collateral, orders) display. It does <span className="text-foreground">not</span>{' '}
-        switch the signer — any deposit or trade still executes from your connected main wallet. True per-account
+        switch the signer. Any deposit or trade still executes from your connected main wallet. True per-account
         isolation requires on-chain account abstraction, which is not live yet.
       </div>
 

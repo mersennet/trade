@@ -89,7 +89,7 @@ export default function PaperTradingPage() {
           <div className="w-2 h-2 rounded-full bg-cyan animate-pulse" />
           <h2 className="text-lg font-bold text-foreground">Paper Trading Mode</h2>
         </div>
-        <p className="text-sm text-dim">Virtual $100K Balance — No real funds at risk</p>
+        <p className="text-sm text-dim">Virtual $100K balance. No real funds at risk.</p>
       </div>
 
       {!isConnected ? (

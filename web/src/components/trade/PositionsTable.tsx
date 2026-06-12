@@ -93,7 +93,7 @@ export default function PositionsTable() {
     // slippage cushion as the IOC limit, mirroring TradeForm's market orders.
     const mark = tickers[pos.marketId]?.markPrice || 0;
     if (!mark) {
-      toast('No mark price available — try again in a moment', 'error');
+      toast('No mark price available. Try again in a moment.', 'error');
       return;
     }
     const slippagePct = (useAppStore.getState().slippage || 1) / 100;

@@ -37,7 +37,7 @@ export default function PrivacyPage() {
         <h2 className="text-white mt-8">Cookies</h2>
         <p className="text-white/75">
           We use <strong>no</strong> tracking cookies. We use no first-party or third-party analytics.
-          (We may add privacy-respecting analytics like Plausible later — this page will be updated.)
+          (We may add privacy-respecting analytics like Plausible later. This page will be updated.)
         </p>
 
         <h2 className="text-white mt-8">Your rights</h2>

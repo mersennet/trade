@@ -173,7 +173,7 @@ export default function TraderProfilePage() {
               </span>
             </div>
             <EquityCurveChart data={flowCurve} />
-            <p className="text-[10px] text-dim mt-2">Cumulative signed notional of recent fills — a directional sketch, not realized PnL.</p>
+            <p className="text-[10px] text-dim mt-2">Cumulative signed notional of recent fills, a directional sketch, not realized PnL.</p>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

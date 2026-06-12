@@ -101,10 +101,10 @@ export default function WelcomeModal() {
               from the Mersennet Faucet to get started.
             </Bullet>
             <Bullet tone="green">
-              Matching and settlement happen atomically on-chain in the Mersennet order-book engine — no off-chain sequencer.
+              Matching and settlement happen atomically on-chain in the Mersennet order-book engine, with no off-chain sequencer.
             </Bullet>
             <Bullet tone="yellow">
-              Use only what you can afford to lose. Markets are sparse — expect wide spreads.
+              Use only what you can afford to lose. Markets are sparse, so expect wide spreads.
             </Bullet>
             <Bullet tone="yellow">
               Report bugs through the <Link href="/feedback" className="underline text-primary hover:text-primary-hover">feedback form</Link>.
