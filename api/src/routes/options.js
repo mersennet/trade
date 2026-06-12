@@ -202,8 +202,13 @@ router.post('/exercise/:id', strictLimiter, async (req, res) => {
     }
 
     const spotResult = await client.query(
-      `SELECT price FROM spot_trades WHERE pair LIKE $1 ORDER BY created_at DESC LIMIT 1`,
-      [`${position.underlying}-%`]
+      `SELECT st.price
+         FROM spot_trades st
+         JOIN spot_markets sm ON sm.id = st.market_id
+        WHERE sm.base = $1
+        ORDER BY st.created_at DESC
+        LIMIT 1`,
+      [position.underlying]
     );
     const spotPrice = Number(spotResult.rows[0]?.price || 0);
     if (spotPrice <= 0) {
@@ -246,10 +251,16 @@ router.get('/greeks/:contractId', async (req, res) => {
     if (!contract.rows[0]) return res.status(404).json({ error: 'Contract not found' });
 
     const c = contract.rows[0];
-    // derive spot from latest underlying spot trade; fall back to strike if unavailable
+    // derive spot from latest underlying spot trade; fall back to strike if unavailable.
+    // spot_trades keys by market_id; map the underlying via spot_markets.base.
     const spotResult = await pool.query(
-      `SELECT price FROM spot_trades WHERE pair LIKE $1 ORDER BY created_at DESC LIMIT 1`,
-      [`${c.underlying}-%`]
+      `SELECT st.price
+         FROM spot_trades st
+         JOIN spot_markets sm ON sm.id = st.market_id
+        WHERE sm.base = $1
+        ORDER BY st.created_at DESC
+        LIMIT 1`,
+      [c.underlying]
     );
     const K = Number(c.strike);
     const S = Number(spotResult.rows[0]?.price) || K;
