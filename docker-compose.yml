@@ -1,0 +1,68 @@
+version: "3.8"
+
+# Mersennet Trade stack: Postgres + API + indexer + Next.js web.
+# TLS / vhost routing is handled by Caddy on the host (trade.mersennet.com
+# proxies / -> web:3000 and /api, /ws -> api:4005).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mersennet_trade
+      POSTGRES_USER: mersennet
+      POSTGRES_PASSWORD: m3rs3nn3t_db_2026
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mersennet"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      PORT: "4005"
+      DATABASE_URL: postgresql://mersennet:m3rs3nn3t_db_2026@postgres:5432/mersennet_trade
+      RPC_URL: ${RPC_URL:-https://rpc.mersennet.com}
+      WS_URL: ${WS_URL:-wss://rpc.mersennet.com}
+    ports:
+      - "127.0.0.1:4005:4005"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  indexer:
+    build:
+      context: ./indexer
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://mersennet:m3rs3nn3t_db_2026@postgres:5432/mersennet_trade
+      RPC_URL: ${RPC_URL:-https://rpc.mersennet.com}
+      WS_URL: ${WS_URL:-wss://rpc.mersennet.com}
+      API_BASE: http://api:4005/api/v1
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: /api/v1
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:

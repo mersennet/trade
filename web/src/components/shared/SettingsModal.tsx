@@ -1,0 +1,178 @@
+'use client';
+import { useEffect, useRef } from 'react';
+import { useStore } from '@/stores/useStore';
+import { cn } from '@/lib/utils';
+
+const SLIPPAGE_PRESETS = [0.1, 0.5, 1.0, 2.0];
+
+export default function SettingsModal() {
+  const {
+    showSettings, setShowSettings,
+    slippage, setSlippage,
+    soundEnabled, setSoundEnabled,
+    skipConfirm, setSkipConfirm,
+    oneClickEnabled, setOneClick,
+    deadManEnabled, setDeadMan,
+    theme, setTheme,
+  } = useStore();
+
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showSettings) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowSettings(false);
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [showSettings, setShowSettings]);
+
+  if (!showSettings) return null;
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowSettings(false)}>
+      <div
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-modal-title"
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md bg-surface border border-border rounded-2xl shadow-2xl overflow-hidden"
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <h2 id="settings-modal-title" className="text-sm font-semibold text-foreground">Settings</h2>
+          <button onClick={() => setShowSettings(false)} aria-label="Close settings" className="text-dim hover:text-foreground transition-colors p-1 rounded-lg hover:bg-surface-2">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="p-5 space-y-5 max-h-[70vh] overflow-y-auto">
+          {/* Slippage Tolerance */}
+          <div>
+            <label className="text-xs font-medium text-foreground mb-2 block">Slippage Tolerance</label>
+            <div className="flex items-center gap-2">
+              {SLIPPAGE_PRESETS.map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setSlippage(v)}
+                  className={cn(
+                    'flex-1 py-2 text-xs font-medium rounded-lg transition-all',
+                    slippage === v
+                      ? 'bg-primary/15 text-primary shadow-[inset_0_0_0_1px_rgba(125,255,155,0.25)]'
+                      : 'bg-surface-2 text-dim hover:text-muted'
+                  )}
+                >{v}%</button>
+              ))}
+              <div className="relative flex-1">
+                <input
+                  type="number"
+                  value={slippage}
+                  onChange={(e) => setSlippage(Math.max(0, Math.min(50, parseFloat(e.target.value) || 0)))}
+                  className="w-full bg-surface-2 border border-border rounded-lg px-2 py-2 text-xs text-foreground font-mono text-right pr-6 outline-none focus:border-primary/40"
+                  step="0.1"
+                />
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-dim">%</span>
+              </div>
+            </div>
+            {slippage > 5 && (
+              <p className="text-[10px] text-yellow mt-1.5 flex items-center gap-1">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                High slippage may result in unfavorable fills
+              </p>
+            )}
+          </div>
+
+          <div className="h-px bg-border" />
+
+          {/* Trading Options */}
+          <div className="space-y-3">
+            <h3 className="text-xs font-medium text-foreground">Trading</h3>
+            <ToggleRow
+              label="One-Click Trading"
+              description="Skip wallet confirmation for faster execution"
+              checked={oneClickEnabled}
+              onChange={setOneClick}
+            />
+            <ToggleRow
+              label="Skip Order Confirmation"
+              description="Don't show confirm dialog before placing orders"
+              checked={skipConfirm}
+              onChange={setSkipConfirm}
+            />
+            <ToggleRow
+              label="Dead Man's Switch"
+              description="Auto-cancel all open orders on disconnect"
+              checked={deadManEnabled}
+              onChange={setDeadMan}
+            />
+          </div>
+
+          <div className="h-px bg-border" />
+
+          {/* Alerts */}
+          <div className="space-y-3">
+            <h3 className="text-xs font-medium text-foreground">Alerts & Sounds</h3>
+            <ToggleRow
+              label="Sound Alerts"
+              description="Play sound on order fill, cancel, and liquidation"
+              checked={soundEnabled}
+              onChange={setSoundEnabled}
+            />
+          </div>
+
+          <div className="h-px bg-border" />
+
+          {/* Appearance */}
+          <div className="space-y-3">
+            <h3 className="text-xs font-medium text-foreground">Appearance</h3>
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-[11px] text-foreground block">Theme</span>
+                <span className="text-[10px] text-dim">{theme === 'dark' ? 'Dark mode' : 'Light mode'}</span>
+              </div>
+              <div className="flex gap-0.5 p-0.5 bg-surface-2 rounded-lg">
+                <button onClick={() => setTheme('dark')} className={cn(
+                  'px-3 py-1.5 text-[11px] font-medium rounded-md transition-all',
+                  theme === 'dark' ? 'bg-primary/10 text-primary' : 'text-dim hover:text-muted'
+                )}>Dark</button>
+                <button onClick={() => setTheme('light')} className={cn(
+                  'px-3 py-1.5 text-[11px] font-medium rounded-md transition-all',
+                  theme === 'light' ? 'bg-primary/10 text-primary' : 'text-dim hover:text-muted'
+                )}>Light</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ToggleRow({ label, description, checked, onChange }: { label: string; description: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="flex items-center justify-between">
+      <div>
+        <span className="text-[11px] text-foreground block">{label}</span>
+        <span className="text-[10px] text-dim">{description}</span>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        onClick={() => onChange(!checked)}
+        className={cn(
+          'w-9 h-5 rounded-full transition-all duration-200 relative shrink-0',
+          checked ? 'bg-primary' : 'bg-surface-3 border border-border'
+        )}
+      >
+        <div className={cn(
+          'w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-all duration-200 absolute top-[3px]',
+          checked ? 'left-[18px]' : 'left-[3px]'
+        )} />
+      </button>
+    </div>
+  );
+}

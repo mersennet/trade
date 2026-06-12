@@ -1,0 +1,316 @@
+/**
+ * Mersennet chain adapter for Mersennet Trade.
+ *
+ * Talks to the Mersennet L1 (chain ID 131071) — order book, positions, and
+ * collateral live in the native MersennetOrders CLOB precompile at 0x...0100.
+ * There is no off-chain sequencer and no external Vault/PerpEngine/Oracle
+ * contracts: matching is on-chain and atomic.
+ *
+ * Surfaces:
+ *   - `mersennet_orders_*` JSON-RPC for order book state + order submission
+ *   - `eth_call` against the precompile for per-account reads
+ *   - calldata builders so the frontend can sign deposit/withdraw txs
+ */
+
+const { ethers } = require('ethers');
+
+const RPC_URL = process.env.RPC_URL || 'https://rpc.mersennet.com';
+const PRECOMPILE = '0x0000000000000000000000000000000000000100';
+
+// On-chain conventions (MersennetOrders precompile, matching the live testnet
+// and the original MersennetTrade terminal): collateral, prices, and sizes are
+// plain integer units (no decimal scaling). The engine computes
+// notional = price * size and compares it against collateral directly.
+const USDC_DECIMALS = 0; // export name kept for route compatibility — MRSN collateral units
+const SIZE_DECIMALS = 0;
+const PRICE_DECIMALS = 0;
+const USDC_UNIT  = 10n ** BigInt(USDC_DECIMALS);
+const SIZE_UNIT  = 10n ** BigInt(SIZE_DECIMALS);
+const PRICE_UNIT = 10n ** BigInt(PRICE_DECIMALS);
+
+const MARKETS = [
+  { id: 1, symbol: 'MRSN/USDC', base: 'MRSN', quote: 'USDC', maxLeverage: 50,  fundingRate: 0.01 },
+  { id: 2, symbol: 'BTC/USDC',  base: 'BTC',  quote: 'USDC', maxLeverage: 100, fundingRate: 0.008 },
+  { id: 3, symbol: 'ETH/USDC',  base: 'ETH',  quote: 'USDC', maxLeverage: 50,  fundingRate: 0.012 },
+  { id: 4, symbol: 'SOL/USDC',  base: 'SOL',  quote: 'USDC', maxLeverage: 20,  fundingRate: 0.01 },
+  { id: 5, symbol: 'ARB/USDC',  base: 'ARB',  quote: 'USDC', maxLeverage: 20,  fundingRate: 0.015 },
+];
+
+// ---------------------------------------------------------------------
+// Generic JSON-RPC
+// ---------------------------------------------------------------------
+
+let _rpcId = 1;
+async function rpcCall(method, params = []) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+  try {
+    const res = await fetch(RPC_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: _rpcId++, method, params }),
+      signal: controller.signal,
+    });
+    const json = await res.json();
+    if (json.error) throw new Error(json.error.message || JSON.stringify(json.error));
+    return json.result;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function ethCall(data, from) {
+  const callObj = { to: PRECOMPILE, data };
+  if (from) callObj.from = from;
+  return rpcCall('eth_call', [callObj, 'latest']);
+}
+
+// ---------------------------------------------------------------------
+// ABI helpers (precompile uses standard Solidity ABI encoding)
+// ---------------------------------------------------------------------
+
+const PRECOMPILE_IFACE = new ethers.utils.Interface([
+  'function placeOrder(uint64 marketId, bool isBuy, uint256 price, uint256 size, uint8 tif) returns (uint256, uint256, uint256)',
+  'function cancelOrder(uint256 orderId) returns (bool)',
+  'function depositCollateral(uint256 amount) returns (bool)',
+  'function withdrawCollateral(uint256 amount) returns (bool)',
+  'function getPosition(uint64 marketId) view returns (int128 size, uint256 entryPrice)',
+  'function getCollateral() view returns (uint256)',
+  'function isLiquidatable(address account) view returns (bool)',
+  'function getBestBidAsk(uint64 marketId) view returns (uint256 bestBid, uint256 bestAsk)',
+]);
+
+function rawToUnits(raw, decimals) {
+  // Convert a BigInt-style raw amount string into a JS Number with `decimals` precision.
+  if (raw == null) return 0;
+  const s = typeof raw === 'string' ? raw : raw.toString();
+  if (!decimals) return Number(s);
+  const sign = s.startsWith('-') ? -1 : 1;
+  const abs  = s.replace(/^-/, '');
+  if (abs === '0') return 0;
+  const padded = abs.padStart(decimals + 1, '0');
+  const intPart  = padded.slice(0, -decimals) || '0';
+  const fracPart = padded.slice(-decimals);
+  return sign * Number(`${intPart}.${fracPart}`);
+}
+
+// ---------------------------------------------------------------------
+// Per-account reads (precompile eth_call with `from` = trader)
+// ---------------------------------------------------------------------
+
+async function getPosition(marketId, address) {
+  try {
+    const data = PRECOMPILE_IFACE.encodeFunctionData('getPosition', [marketId]);
+    const r = await ethCall(data, address);
+    const [size, entryPrice] = PRECOMPILE_IFACE.decodeFunctionResult('getPosition', r);
+    const sizeRaw = size.toString();
+    const entryPriceRaw = entryPrice.toString();
+    const notionalRaw = (BigInt(sizeRaw) < 0n ? -BigInt(sizeRaw) : BigInt(sizeRaw)) * BigInt(entryPriceRaw) / SIZE_UNIT;
+    return {
+      sizeRaw,                                                // raw 1e18 (signed)
+      size: rawToUnits(sizeRaw, SIZE_DECIMALS),               // human base units
+      entryPriceRaw,                                          // raw 1e18
+      entryPrice: rawToUnits(entryPriceRaw, PRICE_DECIMALS),  // human quote
+      entryNotionalRaw: notionalRaw.toString(),
+      entryNotional: rawToUnits(notionalRaw.toString(), USDC_DECIMALS),
+      reservedMargin: 0,        // margin reservation is internal to the precompile
+      reservedMarginRaw: '0',
+    };
+  } catch {
+    return { sizeRaw: '0', size: 0, entryPriceRaw: '0', entryPrice: 0, entryNotionalRaw: '0', entryNotional: 0, reservedMargin: 0, reservedMarginRaw: '0' };
+  }
+}
+
+async function getCollateralRaw(address) {
+  try {
+    const data = PRECOMPILE_IFACE.encodeFunctionData('getCollateral', []);
+    const r = await ethCall(data, address);
+    const [collateral] = PRECOMPILE_IFACE.decodeFunctionResult('getCollateral', r);
+    return collateral.toString();
+  } catch {
+    return '0';
+  }
+}
+
+async function getCollateral(address) {
+  return rawToUnits(await getCollateralRaw(address), USDC_DECIMALS);
+}
+
+// The precompile tracks a single collateral balance; margin reservation is
+// internal. Free collateral therefore equals the total balance for display.
+async function getFreeCollateral(address) {
+  return getCollateral(address);
+}
+
+async function getBestBidAsk(marketId) {
+  try {
+    const data = PRECOMPILE_IFACE.encodeFunctionData('getBestBidAsk', [marketId]);
+    const r = await ethCall(data);
+    const [bestBid, bestAsk] = PRECOMPILE_IFACE.decodeFunctionResult('getBestBidAsk', r);
+    return { bestBid: bestBid.toString(), bestAsk: bestAsk.toString() };
+  } catch {
+    return { bestBid: '0', bestAsk: '0' };
+  }
+}
+
+/** Mark price = order book mid, raw 1e18 string. Falls back to best side or '0'. */
+async function getMarkPrice(marketId) {
+  const { bestBid, bestAsk } = await getBestBidAsk(marketId);
+  const bid = BigInt(bestBid);
+  const ask = BigInt(bestAsk);
+  if (bid > 0n && ask > 0n) return ((bid + ask) / 2n).toString();
+  if (bid > 0n) return bid.toString();
+  if (ask > 0n) return ask.toString();
+  return '0';
+}
+
+/** Display-only price with age. Mersennet matches on-chain, so mid is never stale. */
+async function getOraclePriceForDisplay(marketId) {
+  const price = await getMarkPrice(marketId);
+  return { price, age: 0 };
+}
+
+async function isLiquidatable(marketId, address) {
+  try {
+    const data = PRECOMPILE_IFACE.encodeFunctionData('isLiquidatable', [address]);
+    const r = await ethCall(data);
+    const [ok] = PRECOMPILE_IFACE.decodeFunctionResult('isLiquidatable', r);
+    return { liquidatable: ok, maintenanceMargin: '0', equity: '0' };
+  } catch {
+    return { liquidatable: false };
+  }
+}
+
+// Stats that came from the earlier contract-based vault/perp engine don't exist as
+// dedicated chain reads here; the indexer aggregates them from fills.
+async function getOpenInterest() { return '0'; }
+async function getInsuranceFundUsd() { return 0; }
+async function getPnlPoolUsd() { return 0; }
+async function getVaultTvlUsd() { return 0; }
+
+async function getMarketConfig(marketId) {
+  const m = MARKETS.find((x) => x.id === Number(marketId));
+  if (!m) return null;
+  return {
+    enabled: true,
+    initialMarginBps: Math.floor(10000 / m.maxLeverage),
+    maintenanceMarginBps: Math.floor(10000 / m.maxLeverage / 2),
+    takerFeeBps: 5,
+    makerFeeBps: 2,
+    liquidationFeeBps: 50,
+    fundingIntervalSec: 8 * 3600,
+    cumulativeFunding: '0',
+    lastFundingTime: 0,
+  };
+}
+
+// ---------------------------------------------------------------------
+// Order book — native on-chain CLOB via mersennet_orders_* RPC
+// ---------------------------------------------------------------------
+
+async function getOrderBook(marketId) {
+  try {
+    const book = await rpcCall('mersennet_orders_getOrderBook', [Number(marketId)]);
+    return book || { bids: [], asks: [] };
+  } catch {
+    return { bids: [], asks: [] };
+  }
+}
+
+async function getOpenOrders(address) {
+  try {
+    const body = await rpcCall('mersennet_orders_getOpenOrders', [address]);
+    if (Array.isArray(body)) return body;
+    if (Array.isArray(body?.orders)) return body.orders;
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Submit an order to the on-chain CLOB.
+ * Expects {owner, market_id, side, price, size, tif} with price/size as
+ * raw hex (1e18). Matching is atomic — the result reports fills directly.
+ */
+async function submitOrder(params) {
+  const { owner, market_id, side, price, size, tif } = params || {};
+  if (!owner || !market_id || !side || !price || !size) {
+    const err = new Error('submitOrder requires {owner, market_id, side, price, size, tif?}');
+    err.statusCode = 400;
+    throw err;
+  }
+  return rpcCall('mersennet_orders_submitOrder', [{
+    owner,
+    market_id: Number(market_id),
+    side,
+    price,
+    size,
+    tif: tif || 'Gtc',
+  }]);
+}
+
+async function cancelOrder(orderId) {
+  return rpcCall('mersennet_orders_cancelOrder', [orderId]);
+}
+
+// ---------------------------------------------------------------------
+// Native MRSN balance
+// ---------------------------------------------------------------------
+
+async function getBalance(address) {
+  const r = await rpcCall('eth_getBalance', [address, 'latest']);
+  return BigInt(r).toString();
+}
+
+async function getBlockNumber() {
+  const r = await rpcCall('eth_blockNumber');
+  return Number(BigInt(r));
+}
+
+// Deposit / withdraw collateral via the precompile.
+// These return calldata for the frontend to sign with the user's wallet.
+// Deposits are native MRSN: the tx carries `value` = amount (no ERC20 approve).
+function depositCalldata(amount) {
+  return PRECOMPILE_IFACE.encodeFunctionData('depositCollateral', [amount]);
+}
+
+function withdrawCalldata(amount) {
+  return PRECOMPILE_IFACE.encodeFunctionData('withdrawCollateral', [amount]);
+}
+
+module.exports = {
+  MARKETS,
+  rpcCall,
+  ethCall,
+  // Decimal helpers (exposed so routes can convert raw -> human consistently)
+  USDC_DECIMALS, SIZE_DECIMALS, PRICE_DECIMALS,
+  USDC_UNIT, SIZE_UNIT, PRICE_UNIT,
+  rawToUnits,
+  // Reads
+  getPosition,
+  getCollateral,
+  getCollateralRaw,
+  getFreeCollateral,
+  getMarkPrice,
+  getOraclePriceForDisplay,
+  getOpenInterest,
+  getInsuranceFundUsd,
+  getPnlPoolUsd,
+  getVaultTvlUsd,
+  isLiquidatable,
+  getMarketConfig,
+  // Order book (on-chain CLOB)
+  getOrderBook,
+  getOpenOrders,
+  submitOrder,
+  cancelOrder,
+  getBestBidAsk,
+  // Chain
+  getBalance,
+  getBlockNumber,
+  // Tx helpers
+  depositCalldata,
+  withdrawCalldata,
+  PRECOMPILE,
+};

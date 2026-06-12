@@ -1,0 +1,203 @@
+@import "tailwindcss";
+/* Sora font is loaded via <link> in app/layout.tsx — putting any @import after
+   `@import "tailwindcss"` makes Tailwind v4 silently drop its expanded output
+   (the resulting bundle would have an @import after other rules, which is
+   spec-invalid). Load fonts through layout.tsx or next/font instead. */
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-glow: var(--primary-glow);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-border: var(--border-color);
+  --color-border-subtle: var(--border-subtle);
+  --color-green: var(--green);
+  --color-red: var(--red);
+  --color-yellow: var(--yellow);
+  --color-cyan: var(--cyan);
+  --color-muted: var(--muted);
+  --color-dim: var(--dim);
+  --color-orange: #f97316;
+  --font-sans: "Sora", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", monospace;
+}
+
+/* Mersennet brand — terminal green on pure black (matches mersennet.com) */
+:root {
+  --background: #000000;
+  --foreground: #ececef;
+  --primary: #7dff9b;
+  --primary-hover: #5ee87f;
+  --primary-glow: rgba(125, 255, 155, 0.12);
+  --surface: #0a0a0c;
+  --surface-2: #111114;
+  --surface-3: #18181c;
+  --border-color: rgba(255, 255, 255, 0.08);
+  --border-subtle: rgba(255, 255, 255, 0.04);
+  --green: #34d399;
+  --red: #ff5240;
+  --yellow: #ff9a3c;
+  --cyan: #5b8cff;
+  --muted: #9a9aa6;
+  --dim: #62626f;
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --background: #fafafa;
+  --foreground: #0f0f12;
+  --primary: #0fae62;
+  --primary-hover: #0a8f50;
+  --primary-glow: rgba(15, 174, 98, 0.1);
+  --surface: #ffffff;
+  --surface-2: #f4f4f5;
+  --surface-3: #e8e8ec;
+  --border-color: rgba(0, 0, 0, 0.08);
+  --border-subtle: rgba(0, 0, 0, 0.04);
+  --green: #16a34a;
+  --red: #dc2626;
+  --yellow: #c2710c;
+  --cyan: #2563eb;
+  --muted: #71717a;
+  --dim: #a1a1aa;
+  color-scheme: light;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: "Sora", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+::selection {
+  background: var(--primary);
+  color: var(--background);
+}
+
+.glass {
+  background: rgba(10, 10, 15, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.glass-card {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.03) 0%,
+    rgba(255, 255, 255, 0.01) 100%
+  );
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.glow-purple {
+  box-shadow: 0 0 20px rgba(125, 255, 155, 0.12),
+              0 0 40px rgba(125, 255, 155, 0.06);
+}
+
+.glow-green {
+  box-shadow: 0 0 12px rgba(52, 211, 153, 0.15);
+}
+
+.glow-red {
+  box-shadow: 0 0 12px rgba(255, 82, 64, 0.15);
+}
+
+.premium-gradient {
+  background: linear-gradient(135deg, #2bd96a 0%, #7dff9b 50%, #c4ffd4 100%);
+}
+
+.premium-border {
+  border-image: linear-gradient(135deg, rgba(125, 255, 155, 0.3), rgba(125, 255, 155, 0.05)) 1;
+}
+
+.hover-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* Skeleton shimmer — CSS-only loading placeholder */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 3px;
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(125, 255, 155, 0.05),
+    rgba(255, 255, 255, 0.06),
+    transparent
+  );
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+[data-theme="light"] .skeleton {
+  background: rgba(0, 0, 0, 0.05);
+}
+@keyframes skeleton-shimmer {
+  100% { transform: translateX(100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after { animation: none; }
+}
+
+/* Keyboard focus — phosphor ring on interactive elements */
+:where(button, a, input, select, textarea, [role="button"]):focus-visible {
+  outline: 1.5px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@supports (height: 100dvh) {
+  .h-dvh { height: 100dvh; }
+}
+
+button, a {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+@media (max-width: 767px) {
+  * { -webkit-text-size-adjust: 100%; }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "Mersennet Trade",
+  "short_name": "Mersennet Trade",
+  "description": "Perpetuals trading terminal on Mersennet's native shielded order book",
+  "start_url": "/trade",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#7dff9b",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

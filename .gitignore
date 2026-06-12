@@ -1,0 +1,53 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+.next/
+**/.next/
+out/
+dist/
+build/
+
+# Hardhat / contracts
+contracts/artifacts/
+contracts/cache/
+contracts/coverage/
+contracts/coverage.json
+contracts/typechain-types/
+
+# Python
+sdk-python/__pycache__/
+sdk-python/*.egg-info/
+**/__pycache__/
+*.pyc
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# IDE / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Misc
+*.tsbuildinfo
+.turbo/
+.pnp.*
+.yarn/
+.cache/
+
+# Local test artifacts
+chain_check.js
+ws_test.js
+/tmp/

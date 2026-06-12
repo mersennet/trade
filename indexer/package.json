@@ -1,0 +1,15 @@
+{
+  "name": "mersennet-trade-indexer",
+  "version": "1.0.0",
+  "description": "Mersennet Trade indexer — indexes chain events into PostgreSQL",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "backfill": "node index.js --backfill"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "pg": "^8.13.0",
+    "ws": "^8.18.0"
+  }
+}

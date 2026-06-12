@@ -1,0 +1,12 @@
+{
+  "name": "mersennet-market-maker",
+  "version": "1.0.0",
+  "description": "Mersennet Trade reference market-maker + taker bots (mersennet_orders_* RPC)",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
