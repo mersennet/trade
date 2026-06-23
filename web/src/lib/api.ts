@@ -67,6 +67,14 @@ export const api = {
       approve: { token: string; spender: string; amount: string };
       amountRaw: string; decimals: number;
     }>('/collateral/deposit', { method: 'POST', body: JSON.stringify({ owner, amount }) }),
+  // Gasless deposit — credits collateral server-side (no wallet tx). The chain's
+  // non-standard tx hashing prevents wallets from tracking a signed deposit, so
+  // this is the working path on the faucet testnet.
+  creditCollateral: (owner: string, amount: string) =>
+    apiFetch<{ ok: boolean; owner: string; credited: string; free: number; decimals: number }>(
+      '/collateral/credit',
+      { method: 'POST', body: JSON.stringify({ owner, amount }) },
+    ),
   buildWithdraw: (owner: string, amount: string) =>
     apiFetch<{
       tx: { to: string; data: string; value: string };

@@ -307,6 +307,16 @@ function depositCalldata(amount) {
   return PRECOMPILE_IFACE.encodeFunctionData('depositCollateral', [amount]);
 }
 
+// Gasless collateral credit via the unsigned testnet RPC (the same path the
+// market-maker uses to seed itself). The node's transaction hashing is not
+// standard-Ethereum compatible, so a MetaMask/ethers-signed deposit can't be
+// tracked or confirmed by the wallet. On a faucet testnet collateral is free
+// anyway, so we credit `owner` server-side instead of prompting a wallet tx.
+async function depositCollateralGasless(owner, amount) {
+  const amt = typeof amount === 'bigint' ? amount : BigInt(amount);
+  return rpcCall('mersennet_orders_depositCollateral', [owner, '0x' + amt.toString(16)]);
+}
+
 function withdrawCalldata(amount) {
   return PRECOMPILE_IFACE.encodeFunctionData('withdrawCollateral', [amount]);
 }
@@ -344,5 +354,6 @@ module.exports = {
   // Tx helpers
   depositCalldata,
   withdrawCalldata,
+  depositCollateralGasless,
   PRECOMPILE,
 };
