@@ -6,11 +6,11 @@ import { formatNumber, shortenAddress, cn } from '@/lib/utils';
 import AddressAvatar from '@/components/AddressAvatar';
 
 const TIERS = [
-  { name: 'Bronze',   min: 0,      tone: 'text-orange',     dot: 'bg-orange' },
-  { name: 'Silver',   min: 1000,   tone: 'text-foreground', dot: 'bg-foreground' },
-  { name: 'Gold',     min: 10000,  tone: 'text-yellow',     dot: 'bg-yellow' },
-  { name: 'Platinum', min: 50000,  tone: 'text-cyan',       dot: 'bg-cyan' },
-  { name: 'Diamond',  min: 200000, tone: 'text-primary',    dot: 'bg-primary' },
+  { name: 'Bronze',   min: 0,       tone: 'text-orange',     dot: 'bg-orange' },
+  { name: 'Silver',   min: 1000,    tone: 'text-foreground', dot: 'bg-foreground' },
+  { name: 'Gold',     min: 10000,   tone: 'text-yellow',     dot: 'bg-yellow' },
+  { name: 'Platinum', min: 100000,  tone: 'text-cyan',       dot: 'bg-cyan' },
+  { name: 'Diamond',  min: 1000000, tone: 'text-primary',    dot: 'bg-primary' },
 ];
 
 function tierTone(name: string) {
@@ -40,21 +40,21 @@ export default function PointsPage() {
       <header>
         <div className="flex items-center gap-2 flex-wrap">
           <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight">Points & Rewards</h1>
-          <span className="px-1.5 py-0.5 bg-yellow/10 text-yellow rounded text-[9px] font-semibold uppercase tracking-wider">Preview · simulated data</span>
+          <span className="px-1.5 py-0.5 bg-primary/10 text-primary rounded text-[9px] font-semibold uppercase tracking-wider">Season 1 · Live</span>
         </div>
         <p className="text-dim text-xs md:text-[13px] mt-0.5">Earn points through trading, providing liquidity, and referrals</p>
       </header>
 
-      {/* Honest preview notice — no accrual job writes points yet */}
-      <div className="flex items-start gap-2.5 bg-yellow/[0.06] border border-yellow/20 rounded-xl px-4 py-3">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-yellow shrink-0 mt-0.5">
-          <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
-          <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+      {/* Trading points are live (accrued from on-chain volume). LP / referral /
+          competition multipliers are still being wired up. */}
+      <div className="flex items-start gap-2.5 bg-primary/[0.06] border border-primary/20 rounded-xl px-4 py-3">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary shrink-0 mt-0.5">
+          <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" />
         </svg>
         <p className="text-[12px] leading-relaxed text-foreground/80">
-          <span className="text-yellow font-semibold">Preview.</span>{' '}
-          The points program is not live yet, so no balances are accrued from fees, LP deposits, or referrals,
-          and totals and the leaderboard read zero. The earn rates below are the planned design, shown for reference.
+          <span className="text-primary font-semibold">Trading points are live</span>{' '}
+          and accrue automatically from your on-chain trading volume (updated every few minutes).
+          LP, referral, and competition points are coming soon and currently read zero.
         </p>
       </div>
 
@@ -106,21 +106,24 @@ export default function PointsPage() {
       {/* How to earn */}
       <div className="bg-surface border border-border rounded-xl overflow-hidden">
         <div className="px-4 py-2.5 border-b border-border">
-          <h3 className="text-[11px] font-semibold text-foreground uppercase tracking-wider">How to Earn (planned)</h3>
+          <h3 className="text-[11px] font-semibold text-foreground uppercase tracking-wider">How to Earn</h3>
         </div>
         <div className="divide-y divide-border">
           {[
-            { action: 'Trading',     desc: '1 point per 1 MRSN in fees paid',      mult: '1×',     tone: 'text-primary' },
-            { action: 'Vault LP',    desc: '2 points per 1 MRSN deposited per day', mult: '2×',    tone: 'text-green'   },
-            { action: 'Referrals',   desc: '10% of referee trading points',        mult: '0.1×',   tone: 'text-cyan'    },
-            { action: 'Competitions',desc: 'Bonus points for top finishers',       mult: 'Varies', tone: 'text-yellow'  },
+            { action: 'Trading',     desc: '1 point per $1 of volume traded',       mult: 'Live',   tone: 'text-primary', live: true  },
+            { action: 'Vault LP',    desc: '2 points per 1 MRSN deposited per day', mult: 'Soon',   tone: 'text-dim',     live: false },
+            { action: 'Referrals',   desc: '10% of referee trading points',         mult: 'Soon',   tone: 'text-dim',     live: false },
+            { action: 'Competitions',desc: 'Bonus points for top finishers',        mult: 'Soon',   tone: 'text-dim',     live: false },
           ].map((e) => (
             <div key={e.action} className="flex items-center justify-between px-4 py-3">
               <div>
                 <p className="text-foreground text-[13px] font-medium">{e.action}</p>
                 <p className="text-[11.5px] text-dim mt-0.5">{e.desc}</p>
               </div>
-              <span className={cn('font-mono text-[14px] font-semibold tabular-nums', e.tone)}>{e.mult}</span>
+              <span className={cn(
+                'font-mono text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded',
+                e.live ? 'text-primary bg-primary/10' : 'text-dim bg-surface-2'
+              )}>{e.mult}</span>
             </div>
           ))}
         </div>

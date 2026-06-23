@@ -6,7 +6,7 @@ const router = Router();
 router.get('/prices', async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT symbol, price, source, confidence, updated_at
+      `SELECT symbol, price, sources, confidence, updated_at
        FROM oracle_prices
        ORDER BY symbol ASC`
     );
@@ -14,7 +14,7 @@ router.get('/prices', async (req, res) => {
       prices: result.rows.map(r => ({
         symbol: r.symbol,
         price: Number(r.price),
-        source: r.source,
+        sources: Number(r.sources || 0),
         confidence: Number(r.confidence || 0),
         updatedAt: r.updated_at,
       })),
@@ -39,7 +39,7 @@ router.get('/price/:symbol', async (req, res) => {
     res.json({
       symbol: row.symbol,
       price: Number(row.price),
-      source: row.source,
+      sources: Number(row.sources || 0),
       confidence: Number(row.confidence || 0),
       updatedAt: row.updated_at,
       timestamp: Date.now(),

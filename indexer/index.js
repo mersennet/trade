@@ -281,6 +281,24 @@ async function synthesizeOracleCandles() {
   if (prices.size === 0) return;
   const now = new Date();
 
+  // Persist the live oracle marks so /api/v1/oracle/prices and /oracle/health
+  // are populated (they read the oracle_prices table, which previously had no
+  // writer). Best-effort — never let an oracle-cache error break candle synth.
+  for (const [marketId, px] of prices) {
+    const sym = ORACLE_MARKETS.find((m) => m.id === marketId)?.symbol;
+    if (!sym || !(px > 0)) continue;
+    try {
+      await pool.query(
+        `INSERT INTO oracle_prices (symbol, price, confidence, sources, updated_at)
+         VALUES ($1, $2, $3, $4, NOW())
+         ON CONFLICT (symbol) DO UPDATE SET
+           price = EXCLUDED.price, confidence = EXCLUDED.confidence,
+           sources = EXCLUDED.sources, updated_at = NOW()`,
+        [sym, px, 0.99, 1]
+      );
+    } catch (_) { /* table may be absent on an un-migrated deploy */ }
+  }
+
   for (const [marketId, px] of prices) {
     const raw = usdToRaw(px);
     if (raw === 0) continue;
@@ -526,6 +544,74 @@ async function updateLeaderboard() {
   }
 }
 
+// Loyalty points from cumulative taker volume. Idempotent: trading_points is
+// recomputed from all-time volume each run and upserted, so re-runs never
+// double-count. A `points` history row is written only for the positive delta
+// since the last run, so the points page shows recent activity.
+const POINTS_PER_USD = 1; // 1 point per $1 of taker notional volume
+function pointsTier(total) {
+  if (total >= 1_000_000) return 'Diamond';
+  if (total >= 100_000) return 'Platinum';
+  if (total >= 10_000) return 'Gold';
+  if (total >= 1_000) return 'Silver';
+  return 'Bronze';
+}
+async function awardPoints() {
+  const season = 1;
+  try {
+    const vol = await pool.query(
+      `SELECT LOWER(taker) AS address, SUM(price * size)::numeric AS volume
+       FROM trades
+       WHERE taker IS NOT NULL AND block_timestamp IS NOT NULL
+       GROUP BY LOWER(taker)`
+    );
+    let updated = 0;
+    for (const row of vol.rows) {
+      const address = row.address;
+      const volumeUsd = Number(row.volume) || 0;
+      const trading = Math.floor((volumeUsd * POINTS_PER_USD) / TRADE_USD_SCALE);
+      if (trading <= 0) continue;
+
+      const existing = await pool.query(
+        `SELECT trading_points, lp_points, referral_points FROM points_balance
+         WHERE address = $1 AND season = $2`,
+        [address, season]
+      );
+      const prev = existing.rows[0] || {};
+      const prevTrading = Number(prev.trading_points) || 0;
+      if (trading <= prevTrading) continue; // no new volume since last run
+
+      const lp = Number(prev.lp_points) || 0;
+      const ref = Number(prev.referral_points) || 0;
+      const total = trading + lp + ref;
+
+      await pool.query(
+        `INSERT INTO points_balance
+           (address, season, total_points, trading_points, lp_points, referral_points, tier, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+         ON CONFLICT (address, season) DO UPDATE SET
+           total_points = EXCLUDED.total_points,
+           trading_points = EXCLUDED.trading_points,
+           tier = EXCLUDED.tier,
+           updated_at = NOW()`,
+        [address, season, total, trading, lp, ref, pointsTier(total)]
+      );
+      await pool.query(
+        `INSERT INTO points (address, season, point_type, amount, reason)
+         VALUES ($1, $2, 'trading', $3, 'Trading volume')`,
+        [address, season, trading - prevTrading]
+      );
+      updated++;
+    }
+    if (updated > 0) console.log(`[points] awarded trading points to ${updated} trader(s)`);
+    // Bound the history table — it gets one row per active trader per run.
+    // Balances live in points_balance; 30 days of event history is plenty.
+    await pool.query(`DELETE FROM points WHERE created_at < NOW() - interval '30 days'`).catch(() => {});
+  } catch (e) {
+    console.error('[points] Error awarding:', e.message);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Live event tailing over the Mersennet WebSocket RPC.
 // Subscribes to newHeads (block cursor) and MersennetOrdersTrades (fill events).
@@ -693,12 +779,14 @@ async function main() {
   
   setInterval(aggregateCandles, 60_000);
   setInterval(updateLeaderboard, 300_000);
+  setInterval(awardPoints, 300_000);
   // Synthesize a candle from the live oracle every 30s so the chart never
   // looks empty even when there's no organic trading volume yet.
   setInterval(synthesizeOracleCandles, 30_000);
 
   aggregateCandles();
   updateLeaderboard();
+  awardPoints();
 
   // Fire-and-forget historical backfill — don't block startup.
   // We delay 5s to let the API service finish its own oracle warmup.
@@ -708,7 +796,7 @@ async function main() {
   // First forward synth right after backfill kicks off.
   setTimeout(() => synthesizeOracleCandles().catch(() => {}), 8000);
 
-  console.log('[indexer] Running. Candle aggregation 60s | oracle synth 30s | leaderboard 5m.');
+  console.log('[indexer] Running. Candle aggregation 60s | oracle synth 30s | leaderboard 5m | points 5m.');
 }
 
 main().catch(e => {

@@ -90,6 +90,7 @@ async function fetchMidPrice(marketId) {
 }
 
 let submitErrLogged = false;
+let marketMissing = false; // set when the chain reports "unknown market" (markets wiped by a state reset)
 async function submitOrder(marketId, side, price, size) {
   try {
     return await rpcCall('mersennet_orders_submitOrder', [{
@@ -103,6 +104,7 @@ async function submitOrder(marketId, side, price, size) {
   } catch (e) {
     // Log once per cycle so a real failure (bad method/margin/market) is
     // visible instead of silently producing an empty book.
+    if (e.message && e.message.includes('unknown market')) marketMissing = true;
     if (!submitErrLogged) {
       console.error(`[mm] submitOrder(m${marketId} ${side} ${price}x${size}) failed: ${e.message}`);
       submitErrLogged = true;
@@ -218,6 +220,7 @@ async function refreshQuotes() {
   isRefreshing = true;
   cycleCount++;
   submitErrLogged = false;
+  marketMissing = false;
   const start = Date.now();
 
   try {
@@ -277,6 +280,15 @@ async function refreshQuotes() {
 
     const midStr = CONFIG.markets.map(id => `${MARKETS[id].symbol}=${liveMid[id] || '?'}`).join(' ');
     console.log(`[mm] #${cycleCount}: cancel=${cancelled} place=${placed}/${allOrders.length} fills=${fills} ${opsPerSec}ops/s ${totalTime}ms | ${midStr}`);
+
+    // Self-heal: if the chain lost its markets (e.g. a state reset/re-seed),
+    // every submit fails with "unknown market" and the book goes empty. Re-seed
+    // markets + maker collateral so liquidity recovers without a manual restart.
+    if (marketMissing && placed === 0) {
+      console.warn('[mm] markets missing on chain — re-seeding markets + collateral');
+      try { await ensureMarkets(); await ensureCollateral(); }
+      catch (e) { console.error(`[mm] re-seed failed: ${e.message}`); }
+    }
 
   } catch (e) {
     console.error('[mm] Error:', e.message);
