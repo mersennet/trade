@@ -506,6 +506,12 @@ async function updateLeaderboard() {
            FROM trades
            WHERE block_timestamp IS NOT NULL
              AND block_timestamp > NOW() - $2::interval
+             -- Exclude system / market-maker bot accounts (addresses whose
+             -- first 19 bytes are zero, e.g. 0x0000..0001/000c/000d/0015).
+             -- These self-trade for liquidity and would otherwise dominate
+             -- the board with identical billion-dollar stats. Real wallets
+             -- never fall in this range.
+             AND taker NOT LIKE '0x00000000000000000000000000000000000000%'
            GROUP BY taker, market_id
          ),
          agg AS (
@@ -538,6 +544,14 @@ async function updateLeaderboard() {
            updated_at  = NOW()`,
         [period.name, period.interval, TRADE_USD_SCALE]
       );
+      // Purge any previously-stored bot/system rows so the board reflects
+      // only real traders going forward.
+      await pool.query(
+        `DELETE FROM leaderboard
+          WHERE period = $1
+            AND address LIKE '0x00000000000000000000000000000000000000%'`,
+        [period.name]
+      );
     } catch (e) {
       console.error(`[leaderboard] Error updating ${period.name}:`, e.message);
     }
@@ -563,6 +577,9 @@ async function awardPoints() {
       `SELECT LOWER(taker) AS address, SUM(price * size)::numeric AS volume
        FROM trades
        WHERE taker IS NOT NULL AND block_timestamp IS NOT NULL
+         -- Exclude system / market-maker bot accounts (first 19 bytes zero)
+         -- so points reflect real traders only, matching the leaderboard.
+         AND LOWER(taker) NOT LIKE '0x00000000000000000000000000000000000000%'
        GROUP BY LOWER(taker)`
     );
     let updated = 0;

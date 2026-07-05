@@ -61,19 +61,27 @@ async function getMarketStats(marketId) {
          WHERE market_id = $1 AND block_timestamp > NOW() - interval '24 hours'`,
       [marketId]
     ),
+    // Reference close from ~24h ago (not the first candle ever) and the
+    // latest close, both in the SAME chain price units.
     pool.query(
-      `SELECT close FROM candles
-       WHERE market_id = $1 AND resolution = '1h'
-       ORDER BY open_time ASC LIMIT 1`,
+      `SELECT
+         (SELECT close FROM candles
+            WHERE market_id = $1 AND resolution = '1h'
+              AND open_time <= NOW() - interval '24 hours'
+            ORDER BY open_time DESC LIMIT 1) AS ref_close,
+         (SELECT close FROM candles
+            WHERE market_id = $1 AND resolution = '1h'
+            ORDER BY open_time DESC LIMIT 1) AS last_close`,
       [marketId]
     ),
   ]);
 
   const volume24h = Number(volResult.rows[0]?.volume || 0);
   const trades24h = Number(volResult.rows[0]?.trades || 0);
-  const oldPrice = Number(changeResult.rows[0]?.close || 0);
+  const refClose = Number(changeResult.rows[0]?.ref_close || 0);
+  const lastClose = Number(changeResult.rows[0]?.last_close || 0);
 
-  return { volume24h, trades24h, oldPrice };
+  return { volume24h, trades24h, refClose, lastClose };
 }
 
 // 24h price-change cache lives in services/change24h.js so both the REST
@@ -84,7 +92,7 @@ router.get('/:marketId/ticker', async (req, res) => {
   try {
     const marketId = Number(req.params.marketId);
     const wsCache = dataCache?.tickers?.get(marketId);
-    const { volume24h, trades24h, oldPrice } = await getMarketStats(marketId);
+    const { volume24h, trades24h, refClose, lastClose } = await getMarketStats(marketId);
 
     // The on-chain CLOB stores prices as plain integer units.
     const toUsd = (raw) => {
@@ -124,12 +132,16 @@ router.get('/:marketId/ticker', async (req, res) => {
       markPrice = oracleMarkUsd || wsMark || bestBid || bestAsk;
     }
 
-    let change24h = oldPrice > 0 && markPrice > 0
-      ? ((markPrice - oldPrice) / oldPrice) * 100
-      : 0;
-    // Fall back to a real 24h figure from the public price API when we don't
-    // have indexed trade history yet (early beta). Reads from a 5-min cache.
-    if (change24h === 0) change24h = getCachedChange24hPct(marketId) ?? 0;
+    // 24h change: prefer the real public-exchange feed (BTC/ETH/SOL/ARB).
+    // For MRSN (no external feed) derive it from our own candles using a
+    // 24h-ago reference in matching chain units. Never mix the USD mark
+    // with chain-unit candles — that produced nonsense values like +125%.
+    let change24h = getCachedChange24hPct(marketId);
+    if (!Number.isFinite(change24h)) {
+      change24h = refClose > 0 && lastClose > 0
+        ? ((lastClose - refClose) / refClose) * 100
+        : 0;
+    }
 
     res.json({
       marketId, bestBid, bestAsk, markPrice,

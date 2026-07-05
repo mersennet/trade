@@ -111,24 +111,39 @@ function setupWebSocket(server) {
                  WHERE market_id = $1 AND block_timestamp > NOW() - interval '24 hours'`,
               [m.id]
             ),
+            // Reference candle from ~24h ago and the latest candle, both in
+            // the SAME chain price units, so the % is unit-consistent.
             pool.query(
-              `SELECT close FROM candles WHERE market_id = $1 AND resolution = '1h'
-               ORDER BY open_time ASC LIMIT 1`,
+              `SELECT
+                 (SELECT close FROM candles
+                    WHERE market_id = $1 AND resolution = '1h'
+                      AND open_time <= NOW() - interval '24 hours'
+                    ORDER BY open_time DESC LIMIT 1) AS ref_close,
+                 (SELECT close FROM candles
+                    WHERE market_id = $1 AND resolution = '1h'
+                    ORDER BY open_time DESC LIMIT 1) AS last_close`,
               [m.id]
             ),
           ]);
 
           const volume24h = Number(volR.rows[0]?.volume || 0);
           const trades24h = Number(volR.rows[0]?.trades || 0);
-          const oldPrice = Number(chgR.rows[0]?.close || 0);
-          let change24h = oldPrice > 0 && markPrice > 0
-            ? Math.round(((markPrice - oldPrice) / oldPrice) * 10000) / 100
-            : 0;
-          // Fall back to public-exchange 24h cache so the WS broadcast
-          // doesn't overwrite the REST-populated change24h with 0.
-          if (change24h === 0) {
-            const cached = getCachedChange24hPct(m.id);
-            if (Number.isFinite(cached)) change24h = Math.round(cached * 100) / 100;
+
+          // 24h change: prefer the real public-exchange feed for markets
+          // that have one (BTC/ETH/SOL/ARB). For MRSN (no external feed)
+          // derive it from our own candles using a 24h-ago reference in
+          // matching units — never by mixing USD mark with chain-unit
+          // candles, which produced nonsense values like +125%.
+          let change24h = 0;
+          const cached = getCachedChange24hPct(m.id);
+          if (Number.isFinite(cached)) {
+            change24h = Math.round(cached * 100) / 100;
+          } else {
+            const ref = Number(chgR.rows[0]?.ref_close || 0);
+            const last = Number(chgR.rows[0]?.last_close || 0);
+            if (ref > 0 && last > 0) {
+              change24h = Math.round(((last - ref) / ref) * 10000) / 100;
+            }
           }
 
           const ticker = {
