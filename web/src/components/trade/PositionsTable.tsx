@@ -13,7 +13,7 @@ type Tab = 'positions' | 'orders' | 'trades' | 'funding' | 'history';
 
 export default function PositionsTable() {
   const { market, positions, orders, setPositions, setOrders, tickers } = useStore();
-  const { address, isConnected } = useWallet();
+  const { address, isConnected, connect } = useWallet();
   const { toast } = useToast();
   const [tab, setTab] = useState<Tab>('positions');
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -242,7 +242,15 @@ export default function PositionsTable() {
           ) : (
             <EmptyState
               label="No open positions"
-              hint={isConnected ? 'Place your first order to open a position' : 'Connect a wallet to start trading'}
+              hint={isConnected ? 'Place your first order to open a position' : 'Connect a wallet to track live P&L, margin, and funding'}
+              action={!isConnected ? (
+                <button
+                  onClick={() => { connect().catch(() => {}); }}
+                  className="px-4 h-7 premium-gradient text-black rounded-lg text-[11px] font-semibold transition-all hover:brightness-110"
+                >
+                  Connect Wallet
+                </button>
+              ) : undefined}
             />
           )
         )}

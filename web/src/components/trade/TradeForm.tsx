@@ -8,13 +8,11 @@ import { cn, formatPrice, formatNumber } from '@/lib/utils';
 import { getReferralCode } from '@/lib/referral';
 import { playSound } from '@/lib/sounds';
 import { useTranslation } from '@/i18n';
-const ORDER_TYPE_KEYS = [
-  { value: 'limit', tKey: 'trade.limit', fallback: 'Limit' },
-  { value: 'market', tKey: 'trade.market', fallback: 'Market' },
-  { value: 'stop', tKey: 'trade.stop', fallback: 'Stop' },
-  { value: 'trailing', tKey: 'trade.trailingShort', fallback: 'Trail' },
-  { value: 'twap', tKey: 'trade.twap', fallback: 'TWAP' },
-  { value: 'scale', tKey: 'trade.scale', fallback: 'Scale' },
+const PRO_ORDER_TYPES = [
+  { value: 'stop', tKey: 'trade.stop', fallback: 'Stop', desc: 'Trigger at price' },
+  { value: 'trailing', tKey: 'trade.trailingShort', fallback: 'Trail', desc: 'Follow the market' },
+  { value: 'twap', tKey: 'trade.twap', fallback: 'TWAP', desc: 'Slice over time' },
+  { value: 'scale', tKey: 'trade.scale', fallback: 'Scale', desc: 'Ladder of limits' },
 ] as const;
 
 const LEVERAGE_PRESETS = [1, 2, 5, 10, 25, 50];
@@ -42,6 +40,7 @@ export default function TradeForm() {
   const [twapDuration, setTwapDuration] = useState('60');
   const [scalePriceFrom, setScalePriceFrom] = useState('');
   const [scalePriceTo, setScalePriceTo] = useState('');
+  const [showProTypes, setShowProTypes] = useState(false);
 
   const currentPosition = useMemo(() => {
     return positions.find((p) => p.marketId === market.id);
@@ -246,23 +245,56 @@ export default function TradeForm() {
         </div>
       )}
 
-      {/* Order type — segmented control with visible 1px dividers.
-          `basis-0` + `flex-1` gives each cell an equal share of the row.
-          Labels are pre-shrunk (Trailing → Trail) so the widest label
-          (Market, 6 chars) fits in its cell at 9px without ellipsis. */}
-      <div className="flex gap-px bg-background rounded-md border border-border overflow-hidden">
-        {(isSpot ? SPOT_ORDER_TYPES : ORDER_TYPE_KEYS).map((ot) => (
-          <button
-            key={ot.value}
-            onClick={() => setTrade({ orderType: ot.value as never })}
-            className={cn(
-              'basis-0 flex-1 min-w-0 px-0.5 py-1 text-[9px] font-semibold transition-colors whitespace-nowrap',
-              trade.orderType === ot.value
-                ? 'bg-foreground/[0.07] text-foreground'
-                : 'bg-surface-2 text-dim hover:text-foreground'
-            )}
-          >{t(ot.tKey, ot.fallback)}</button>
-        ))}
+      {/* Order type — tiered segmented control: Limit and Market are the
+          primary (most used) choices at readable size; the advanced types
+          (Stop / Trail / TWAP / Scale) live behind a "Pro" dropdown so they
+          don't shrink the common path down to 9px labels. */}
+      <div className="relative">
+        <div className="flex gap-px bg-background rounded-md border border-border overflow-hidden">
+          {SPOT_ORDER_TYPES.map((ot) => (
+            <button
+              key={ot.value}
+              onClick={() => { setTrade({ orderType: ot.value as never }); setShowProTypes(false); }}
+              className={cn(
+                'basis-0 flex-1 min-w-0 px-1 py-1.5 text-[11px] font-semibold transition-colors whitespace-nowrap',
+                trade.orderType === ot.value
+                  ? 'bg-foreground/[0.07] text-foreground'
+                  : 'bg-surface-2 text-dim hover:text-foreground'
+              )}
+            >{t(ot.tKey, ot.fallback)}</button>
+          ))}
+          {!isSpot && (
+            <button
+              onClick={() => setShowProTypes((v) => !v)}
+              className={cn(
+                'basis-0 flex-1 min-w-0 px-1 py-1.5 text-[11px] font-semibold transition-colors whitespace-nowrap flex items-center justify-center gap-1',
+                PRO_ORDER_TYPES.some((ot) => ot.value === trade.orderType)
+                  ? 'bg-foreground/[0.07] text-foreground'
+                  : 'bg-surface-2 text-dim hover:text-foreground'
+              )}
+            >
+              {PRO_ORDER_TYPES.find((ot) => ot.value === trade.orderType)?.fallback ?? 'Pro'}
+              <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><polyline points="6 9 12 15 18 9" /></svg>
+            </button>
+          )}
+        </div>
+        {showProTypes && !isSpot && (
+          <div className="absolute right-0 top-full mt-1 bg-surface border border-border rounded-lg shadow-xl z-30 py-1 min-w-[150px]">
+            {PRO_ORDER_TYPES.map((ot) => (
+              <button
+                key={ot.value}
+                onClick={() => { setTrade({ orderType: ot.value as never }); setShowProTypes(false); }}
+                className={cn(
+                  'flex items-center justify-between w-full text-left px-3 py-1.5 text-[11px] transition-colors',
+                  trade.orderType === ot.value ? 'text-primary bg-primary/10' : 'text-foreground hover:bg-surface-2'
+                )}
+              >
+                <span className="font-medium">{t(ot.tKey, ot.fallback)}</span>
+                <span className="text-[9px] text-dim">{ot.desc}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Current position pill (only when there is one) */}
@@ -480,20 +512,23 @@ export default function TradeForm() {
       {/* Options row (perps-specific options hidden in spot) */}
       <div className="flex items-center gap-4 flex-wrap">
         {!isSpot && (
-          <label className="flex items-center gap-2 text-[11px] text-muted cursor-pointer select-none">
+          <label className="flex items-center gap-2 text-[11px] text-muted cursor-pointer select-none"
+            title="Attach take-profit and stop-loss trigger prices to this order">
             <input type="checkbox" checked={trade.tpEnabled}
               onChange={(e) => setTrade({ tpEnabled: e.target.checked })} className="accent-primary w-3.5 h-3.5 rounded" />
             {t('trade.tp', 'TP')}/{t('trade.sl', 'SL')}
           </label>
         )}
         {!isSpot && (
-          <label className="flex items-center gap-2 text-[11px] text-muted cursor-pointer select-none">
+          <label className="flex items-center gap-2 text-[11px] text-muted cursor-pointer select-none"
+            title="Order can only reduce your existing position, never increase or flip it">
             <input type="checkbox" checked={trade.reduceOnly}
               onChange={(e) => setTrade({ reduceOnly: e.target.checked })} className="accent-primary w-3.5 h-3.5 rounded" />
             {t('trade.reduceOnly', 'Reduce Only')}
           </label>
         )}
-        <label className="flex items-center gap-2 text-[11px] text-muted cursor-pointer select-none">
+        <label className="flex items-center gap-2 text-[11px] text-muted cursor-pointer select-none"
+          title="Submit orders without a wallet signature or gas — Mersennet relays them for free">
           <input type="checkbox" checked={gaslessEnabled}
             onChange={(e) => setGasless(e.target.checked)} className="accent-cyan w-3.5 h-3.5 rounded" />
           {t('trade.gasless', 'Gasless')}

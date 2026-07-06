@@ -95,8 +95,11 @@ export default function LeaderboardPage() {
               </span>
             </Link>
           );
-        }) : (
-          <div className="text-center py-8 text-dim text-xs">No traders yet</div>
+        }        ) : (
+          <div className="text-center py-10 px-4">
+            <p className="text-[13px] font-semibold text-foreground">Be the first to make the board</p>
+            <p className="text-xs text-dim mt-1">Place a trade to get ranked by PnL, volume, and win rate.</p>
+          </div>
         )}
       </div>
 
@@ -142,8 +145,11 @@ export default function LeaderboardPage() {
                   <td className="px-4 py-2.5 text-right text-foreground/70 font-mono tabular-nums">{t.winRate}%</td>
                 </tr>
               );
-            }) : (
-              <tr><td colSpan={6} className="text-center py-10 text-dim text-xs">No traders yet. Start trading to appear here.</td></tr>
+            }            ) : (
+              <tr><td colSpan={6} className="text-center py-14">
+                <p className="text-[13px] font-semibold text-foreground">Be the first to make the board</p>
+                <p className="text-xs text-dim mt-1">Place a trade and you&apos;ll show up here ranked by PnL, volume, and win rate.</p>
+              </td></tr>
             )}
           </tbody>
         </table>

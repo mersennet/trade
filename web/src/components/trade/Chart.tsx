@@ -200,6 +200,7 @@ export default function Chart() {
   const [priceLines, setPriceLines] = useState<PriceLine[]>([]);
   const [fibLevels, setFibLevels] = useState<FibLevel[]>([]);
   const [showDrawingPanel, setShowDrawingPanel] = useState(false);
+  const [showIndicatorPanel, setShowIndicatorPanel] = useState(false);
   const [loading, setLoading] = useState(true);
   const candlesCache = useRef<any[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
@@ -817,18 +818,38 @@ export default function Chart() {
 
         {chartMode === 'price' && (
           <div className="flex items-center gap-1 md:gap-1.5 shrink-0">
-            {INDICATORS.map(({ key, label, state, setter }) => (
-              <button key={key} onClick={() => setter(!state)}
-                className={cn('px-1.5 py-0.5 text-[10px] font-medium rounded transition-all', state ? 'bg-primary/15 text-primary' : 'text-dim hover:text-muted')}>
-                {label}
+            {/* Indicators dropdown (keeps the toolbar compact; active count shown on the trigger) */}
+            <div className="relative">
+              <button onClick={() => { setShowIndicatorPanel(!showIndicatorPanel); setShowDrawingPanel(false); }}
+                className={cn('flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded transition-all',
+                  showIndicatorPanel || INDICATORS.some(i => i.state) ? 'bg-primary/15 text-primary' : 'text-dim hover:text-muted hover:bg-surface-2')}>
+                Indicators
+                {INDICATORS.filter(i => i.state).length > 0 && (
+                  <span className="text-[9px] font-bold bg-primary/20 rounded px-1 leading-4">{INDICATORS.filter(i => i.state).length}</span>
+                )}
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="6 9 12 15 18 9" /></svg>
               </button>
-            ))}
+              {showIndicatorPanel && (
+                <div className="absolute right-0 top-full mt-1 bg-surface border border-border rounded-lg shadow-xl z-50 py-1 min-w-[170px]">
+                  {INDICATORS.map(({ key, label, state, setter }) => (
+                    <button key={key} onClick={() => setter(!state)}
+                      className={cn('flex items-center justify-between w-full text-left px-3 py-1.5 text-[11px] transition-colors',
+                        state ? 'text-primary' : 'text-foreground hover:bg-surface-2')}>
+                      {label}
+                      {state && (
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
             <div className="w-px h-4 bg-border mx-0.5" />
 
             {/* Drawing tools */}
             <div className="relative">
-              <button onClick={() => setShowDrawingPanel(!showDrawingPanel)}
+              <button onClick={() => { setShowDrawingPanel(!showDrawingPanel); setShowIndicatorPanel(false); }}
                 className={cn('p-1 rounded transition-all', showDrawingPanel || drawingTool !== 'none' ? 'bg-primary/15 text-primary' : 'text-dim hover:text-muted hover:bg-surface-2')}
                 title="Drawing Tools">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

@@ -59,7 +59,7 @@ function StatCard({ label, value, valueClass }: { label: string; value: string; 
 }
 
 export default function PortfolioPage() {
-  const { address, isConnected } = useWallet();
+  const { address, isConnected, connect } = useWallet();
   const { toast } = useToast();
   const [data, setData] = useState<PortfolioMarginData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -106,6 +106,12 @@ export default function PortfolioPage() {
           </div>
           <p className="text-sm text-foreground mb-0.5">Connect your wallet</p>
           <p className="text-xs text-dim">Your positions, collateral, and margin will appear here</p>
+          <button
+            onClick={() => { connect().catch(() => {}); }}
+            className="mt-4 px-5 h-8 premium-gradient text-black rounded-lg text-[11.5px] font-semibold transition-all hover:brightness-110"
+          >
+            Connect Wallet
+          </button>
         </div>
       </div>
     );

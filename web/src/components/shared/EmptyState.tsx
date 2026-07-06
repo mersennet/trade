@@ -26,18 +26,22 @@ export default function EmptyState({
   hint,
   className,
   compact = false,
+  action,
 }: {
   label: string;
   hint?: string;
   className?: string;
   compact?: boolean;
+  /* Optional call-to-action rendered under the hint (e.g. a Connect button). */
+  action?: React.ReactNode;
 }) {
   return (
     <div className={cn('flex items-center justify-center h-full w-full', compact ? 'py-6' : 'py-8', className)}>
       <div className="text-center px-4">
-        <FiveBars size={compact ? 18 : 24} className="mx-auto mb-2 text-dim/30" />
-        <p className="text-[11px] uppercase tracking-wider text-dim font-mono">{label}</p>
-        {hint && <p className="text-[11px] text-dim/50 mt-1">{hint}</p>}
+        <FiveBars size={compact ? 18 : 24} className="mx-auto mb-2 text-dim/40" />
+        <p className="text-[11px] uppercase tracking-wider text-muted font-mono">{label}</p>
+        {hint && <p className="text-[11px] text-dim/60 mt-1 max-w-[240px] mx-auto leading-relaxed">{hint}</p>}
+        {action && <div className="mt-3 flex justify-center">{action}</div>}
       </div>
     </div>
   );
