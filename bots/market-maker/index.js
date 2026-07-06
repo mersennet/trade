@@ -13,24 +13,33 @@
 const RPC_URL = process.env.RPC_URL || 'https://rpc.mersennet.com';
 const INDEXER_URL = process.env.INDEXER_URL || 'http://127.0.0.1:4010/trades';
 
+// Orders now settle as consensus transactions (one tx per order, mined
+// over blocks). 30 levels x 2 sides x 5 markets = 300 tx/cycle saturated
+// the mempool faster than the chain could mine, so most orders never
+// rested. Use a modest number of levels so every order lands and the book
+// stays deep + stable across all markets. ARB (seed 1) uses a larger tick
+// so its bid ladder doesn't collapse below price 1.
 const MARKETS = {
-  1: { symbol: 'MRSN', seed: 115,   tick: 1,    baseSize: 50,  levels: 30 },
-  2: { symbol: 'BTC',  seed: 74500, tick: 10,   baseSize: 2,   levels: 30 },
-  3: { symbol: 'ETH',  seed: 3730,  tick: 1,    baseSize: 8,   levels: 30 },
-  4: { symbol: 'SOL',  seed: 148,   tick: 1,    baseSize: 25,  levels: 30 },
-  5: { symbol: 'ARB',  seed: 1,     tick: 1,    baseSize: 500, levels: 20 },
+  1: { symbol: 'MRSN', seed: 115,   tick: 1,    baseSize: 50,  levels: 8 },
+  2: { symbol: 'BTC',  seed: 74500, tick: 10,   baseSize: 2,   levels: 8 },
+  3: { symbol: 'ETH',  seed: 3730,  tick: 1,    baseSize: 8,   levels: 8 },
+  4: { symbol: 'SOL',  seed: 148,   tick: 1,    baseSize: 25,  levels: 8 },
+  5: { symbol: 'ARB',  seed: 100,   tick: 1,    baseSize: 500, levels: 8 },
 };
 
 const CONFIG = {
   owner: process.env.MM_WALLET || '0x0000000000000000000000000000000000000001',
   markets: [1, 2, 3, 4, 5],
-  refreshInterval: 5_000,
+  // Slower cadence so each cycle's order txs fully mine (drain the
+  // per-sender mempool) before the next batch — prevents the backlog that
+  // starved later markets.
+  refreshInterval: 10_000,
   // Orders now settle through consensus (mined over blocks), so cancelling
   // and re-placing every cycle churns the book faster than it can rest and
   // leaves it shallow. Refresh on a longer cadence and cancel only
   // periodically so resting liquidity accumulates into a visible book.
   cancelBeforeRefresh: (process.env.MM_CANCEL_EVERY_CYCLE || 'false') === 'true',
-  cancelEveryNCycles: Number(process.env.MM_CANCEL_EVERY_N || 6),
+  cancelEveryNCycles: Number(process.env.MM_CANCEL_EVERY_N || 12),
   // Collateral deposited for the maker wallet on startup (integer units — the
   // precompile uses unscaled collateral/price/size and notional = price*size).
   seedCollateral: process.env.MM_COLLATERAL || '1000000000000',
@@ -248,10 +257,19 @@ async function refreshQuotes() {
       }
     }));
 
+    // Interleave orders across markets (round-robin by depth level) so no
+    // single market monopolizes the low mempool nonces — orders settle as
+    // sequential txs from one sender, so a flat per-market concatenation
+    // left later markets perpetually behind and unfilled.
+    const perMarket = CONFIG.markets.map((marketId) =>
+      buildOrders(marketId, liveMid[marketId] || MARKETS[marketId].seed),
+    );
     const allOrders = [];
-    for (const marketId of CONFIG.markets) {
-      const mid = liveMid[marketId] || MARKETS[marketId].seed;
-      allOrders.push(...buildOrders(marketId, mid));
+    const maxLen = Math.max(0, ...perMarket.map((o) => o.length));
+    for (let i = 0; i < maxLen; i++) {
+      for (const orders of perMarket) {
+        if (i < orders.length) allOrders.push(orders[i]);
+      }
     }
 
     const placeStart = Date.now();
