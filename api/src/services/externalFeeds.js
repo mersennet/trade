@@ -39,7 +39,7 @@ async function initSyntheticTables() {
       category TEXT NOT NULL,
       base_price NUMERIC NOT NULL,
       current_price NUMERIC,
-      funding_rate NUMERIC DEFAULT 0.01,
+      funding_rate NUMERIC DEFAULT 0.0001,
       max_leverage INTEGER DEFAULT 20,
       status TEXT DEFAULT 'active',
       created_at TIMESTAMP DEFAULT NOW(),

@@ -29,11 +29,14 @@ const SIZE_UNIT  = 10n ** BigInt(SIZE_DECIMALS);
 const PRICE_UNIT = 10n ** BigInt(PRICE_DECIMALS);
 
 const MARKETS = [
-  { id: 1, symbol: 'MRSN/USDC', base: 'MRSN', quote: 'USDC', maxLeverage: 50,  fundingRate: 0.01 },
-  { id: 2, symbol: 'BTC/USDC',  base: 'BTC',  quote: 'USDC', maxLeverage: 100, fundingRate: 0.008 },
-  { id: 3, symbol: 'ETH/USDC',  base: 'ETH',  quote: 'USDC', maxLeverage: 50,  fundingRate: 0.012 },
-  { id: 4, symbol: 'SOL/USDC',  base: 'SOL',  quote: 'USDC', maxLeverage: 20,  fundingRate: 0.01 },
-  { id: 5, symbol: 'ARB/USDC',  base: 'ARB',  quote: 'USDC', maxLeverage: 20,  fundingRate: 0.015 },
+  // fundingRate is the per-8h rate as a fraction (0.0001 = 0.01% per interval,
+  // ~11% APR) — in line with typical perp venues. The old 0.01 (1% per 8h)
+  // annualized to a nonsensical +1095%.
+  { id: 1, symbol: 'MRSN/USDC', base: 'MRSN', quote: 'USDC', maxLeverage: 50,  fundingRate: 0.0001 },
+  { id: 2, symbol: 'BTC/USDC',  base: 'BTC',  quote: 'USDC', maxLeverage: 100, fundingRate: 0.00008 },
+  { id: 3, symbol: 'ETH/USDC',  base: 'ETH',  quote: 'USDC', maxLeverage: 50,  fundingRate: 0.00012 },
+  { id: 4, symbol: 'SOL/USDC',  base: 'SOL',  quote: 'USDC', maxLeverage: 20,  fundingRate: 0.0001 },
+  { id: 5, symbol: 'ARB/USDC',  base: 'ARB',  quote: 'USDC', maxLeverage: 20,  fundingRate: 0.00015 },
 ];
 
 // ---------------------------------------------------------------------

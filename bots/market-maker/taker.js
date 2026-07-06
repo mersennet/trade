@@ -1,33 +1,43 @@
 /**
- * Mersennet Trade Taker Bot — High-Frequency Trade Generator
+ * Mersennet Trade Taker Bot — Ambient Trade Flow
  *
- * Fires hundreds of trades per second using parallel HTTP connections.
- * Multiple simulated traders crossing the spread simultaneously.
- * Realistic patterns: bursts, varied sizes, weighted market selection.
+ * Simulates organic taker activity: small waves of spread-crossing orders on
+ * a relaxed cadence, so the tape ticks, candles form, and 24h volume is real
+ * without saturating the chain. Orders route through consensus (one tx per
+ * order), so fills are emitted as MersennetOrdersTrades WS events that the
+ * indexer picks up — no direct fill reporting needed.
  */
 
 const RPC_URL = process.env.RPC_URL || 'https://rpc.mersennet.com';
 
+// Seeds must match the market maker's so the outlier filter anchors on the
+// same price regime (ARB in particular quotes around 100, not 1).
 const MARKETS = {
-  1:  { symbol: 'MRSN',  weight: 3.0, seed: 115,   tick: 1,  sizeRange: [1, 10]    },
-  2:  { symbol: 'BTC',   weight: 5.0, seed: 74500, tick: 10, sizeRange: [1, 2]     },
-  3:  { symbol: 'ETH',   weight: 4.0, seed: 3730,  tick: 1,  sizeRange: [1, 5]     },
-  4:  { symbol: 'SOL',   weight: 3.0, seed: 148,   tick: 1,  sizeRange: [1, 8]     },
-  5:  { symbol: 'ARB',   weight: 1.5, seed: 1,     tick: 1,  sizeRange: [10, 100]  },
+  1:  { symbol: 'MRSN',  weight: 3.0, seed: 115,   tick: 1,  sizeRange: [1, 10]  },
+  2:  { symbol: 'BTC',   weight: 5.0, seed: 74500, tick: 10, sizeRange: [1, 2]   },
+  3:  { symbol: 'ETH',   weight: 4.0, seed: 3730,  tick: 1,  sizeRange: [1, 5]   },
+  4:  { symbol: 'SOL',   weight: 3.0, seed: 148,   tick: 1,  sizeRange: [1, 8]   },
+  5:  { symbol: 'ARB',   weight: 1.5, seed: 100,   tick: 1,  sizeRange: [5, 40]  },
 };
 const liveMid = {};
 function hexToNum(h) { return h ? Number(BigInt(h)) : 0; }
 
+// System-range addresses (0x…0b-0x…1e) — inside the 0x0000… prefix that the
+// leaderboard/points queries filter out, so bot flow never pollutes human
+// rankings. Starts at 0x0b to skip the standard EVM precompile addresses
+// (0x01-0x0a), which cannot receive plain value transfers for gas.
 const TAKERS = Array.from({ length: 20 }, (_, i) =>
-  '0x' + (i + 2).toString(16).padStart(40, '0')
+  '0x' + (i + 11).toString(16).padStart(40, '0')
 );
 
+// Ambient cadence: a small wave every few seconds ≈ 0.5-1 order/s. Orders are
+// consensus txs (mined over ~1s blocks), so this stays well under chain
+// throughput while keeping the tape/candles/volume visibly alive.
 const CONFIG = {
-  waveSizeMin: 3,
-  waveSizeMax: 8,
-  waveDelayMin: 2000,
-  waveDelayMax: 5000,
-  maxSockets: 100,
+  waveSizeMin: 2,
+  waveSizeMax: 5,
+  waveDelayMin: 4000,
+  waveDelayMax: 9000,
   priceFetchInterval: 10_000,
 };
 
@@ -119,9 +129,10 @@ function generateTrade() {
   return { marketId, side, price, size, taker, symbol: m.symbol };
 }
 
-const INDEXER_URL = process.env.INDEXER_URL || 'http://127.0.0.1:4010/trades';
-const pendingReports = [];
-
+// Orders settle through consensus: submitOrder returns { accepted, txHash }
+// and the tx mines over the next blocks. Fills are emitted on-chain as
+// MersennetOrdersTrades WS events, which the indexer already consumes — so
+// there is no direct fill reporting here.
 async function submitTrade(trade) {
   try {
     const result = await rpcCall('mersennet_orders_submitOrder', [{
@@ -132,43 +143,14 @@ async function submitTrade(trade) {
       size: toHex(trade.size),
       tif: 'gtc',
     }]);
-    const fills = result?.trades?.length || 0;
-    const filled = result?.filled ? Number(BigInt(result.filled)) : 0;
-
-    if (fills > 0 && result.trades) {
-      for (const t of result.trades) {
-        pendingReports.push({
-          marketId: trade.marketId,
-          taker: trade.taker,
-          maker: t.maker || '0x0',
-          side: trade.side,
-          price: t.price ? Number(BigInt(t.price)) : trade.price,
-          size: t.size ? Number(BigInt(t.size)) : trade.size,
-        });
-      }
-    }
-
-    return { fills, filled, orderId: result?.order_id };
+    return { accepted: !!(result?.accepted || result?.txHash) };
   } catch (e) {
     if (!submitErrLogged) {
       console.error(`[taker] submitOrder failed: ${e.message}`);
       submitErrLogged = true;
     }
-    return { fills: 0, filled: 0, orderId: null };
+    return { accepted: false };
   }
-}
-
-async function flushReports() {
-  if (pendingReports.length === 0) return;
-  const batch = pendingReports.splice(0, pendingReports.length);
-  try {
-    const res = await fetch(INDEXER_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(batch),
-    });
-    if (!res.ok) console.log(`[taker] Report failed: ${res.status}`);
-  } catch {}
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -182,22 +164,14 @@ async function runWave() {
   const results = await Promise.allSettled(trades.map(t => submitTrade(t)));
   const elapsed = Date.now() - start;
 
-  let waveFills = 0;
-  let wavePlaced = 0;
+  let waveAccepted = 0;
   for (const r of results) {
-    if (r.status === 'fulfilled') {
-      waveFills += r.value.fills;
-      if (r.value.orderId || r.value.fills > 0) wavePlaced++;
-    }
+    if (r.status === 'fulfilled' && r.value.accepted) waveAccepted++;
   }
 
   totalTrades += waveSize;
-  totalFills += waveFills;
-  const opsPerSec = Math.round(waveSize / (elapsed / 1000));
-
-  console.log(`[taker] Wave: ${waveSize} orders in ${elapsed}ms (${opsPerSec}/s) | placed=${wavePlaced} fills=${waveFills} | total: ${totalTrades} orders, ${totalFills} fills`);
-
-  flushReports().catch(() => {});
+  totalFills += waveAccepted;
+  console.log(`[taker] Wave: ${waveSize} orders in ${elapsed}ms | accepted=${waveAccepted} | total submitted: ${totalTrades}`);
 }
 
 async function main() {
