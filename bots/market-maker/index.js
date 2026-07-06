@@ -25,7 +25,12 @@ const CONFIG = {
   owner: process.env.MM_WALLET || '0x0000000000000000000000000000000000000001',
   markets: [1, 2, 3, 4, 5],
   refreshInterval: 5_000,
-  cancelBeforeRefresh: true,
+  // Orders now settle through consensus (mined over blocks), so cancelling
+  // and re-placing every cycle churns the book faster than it can rest and
+  // leaves it shallow. Refresh on a longer cadence and cancel only
+  // periodically so resting liquidity accumulates into a visible book.
+  cancelBeforeRefresh: (process.env.MM_CANCEL_EVERY_CYCLE || 'false') === 'true',
+  cancelEveryNCycles: Number(process.env.MM_CANCEL_EVERY_N || 6),
   // Collateral deposited for the maker wallet on startup (integer units — the
   // precompile uses unscaled collateral/price/size and notional = price*size).
   seedCollateral: process.env.MM_COLLATERAL || '1000000000000',
@@ -224,9 +229,10 @@ async function refreshQuotes() {
   const start = Date.now();
 
   try {
-    // Cancel stale orders every cycle to keep book fresh
+    // Cancel stale orders periodically (not every cycle) so consensus-
+    // settled resting orders have time to accumulate into a deep book.
     let cancelled = 0;
-    if (CONFIG.cancelBeforeRefresh) {
+    if (CONFIG.cancelBeforeRefresh || cycleCount % CONFIG.cancelEveryNCycles === 0) {
       cancelled = await cancelAllOrders();
     }
 
