@@ -109,13 +109,53 @@ async function fetchMidPrices() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Inventory management — sustainability.
+//
+// A 50/50 random walk accumulates net positions, which eventually pins the
+// takers' margin and dries up fills. We read each taker's REAL on-chain
+// position via eth_call to the precompile's getPosition(uint64) (the caller
+// address scopes the read), and bias the trade side against the inventory —
+// long inventory sells more, short inventory buys more. Positions then
+// mean-revert around flat forever.
+// ---------------------------------------------------------------------------
+const GET_POSITION_SELECTOR = '0x0f85fc5a'; // keccak("getPosition(uint64)")[:4]
+const ORDERS_PRECOMPILE = '0x0000000000000000000000000000000000000100';
+const inventory = {}; // `${taker}:${marketId}` -> signed size (i128 as Number)
+
+async function fetchPosition(taker, marketId) {
+  const data = GET_POSITION_SELECTOR + BigInt(marketId).toString(16).padStart(64, '0');
+  const out = await rpcCall('eth_call', [{ from: taker, to: ORDERS_PRECOMPILE, data, gas: '0x30000' }, 'latest']);
+  if (!out || out === '0x' || out.length < 66) return 0;
+  // int128 encoded in a 32-byte word (two's complement, sign-extended)
+  let size = BigInt('0x' + out.slice(2, 66));
+  if (size > (1n << 255n)) size -= (1n << 256n);
+  return Number(size);
+}
+
+async function refreshInventory() {
+  for (const taker of TAKERS) {
+    for (const id of Object.keys(MARKETS)) {
+      try { inventory[`${taker}:${id}`] = await fetchPosition(taker, Number(id)); }
+      catch { /* keep last known */ }
+    }
+  }
+}
+
 function generateTrade() {
   const marketId = pickMarket();
   const m = MARKETS[marketId];
-  const side = Math.random() < 0.52 ? 'buy' : 'sell';
   const taker = randEl(TAKERS);
-  const size = randInt(m.sizeRange[0], m.sizeRange[1]);
   const mid = liveMid[marketId] || m.seed;
+
+  // Side bias against on-chain inventory: flat -> 50/50; heavily long ->
+  // mostly sells; heavily short -> mostly buys. Full bias at 20x base size.
+  const inv = inventory[`${taker}:${marketId}`] || 0;
+  const cap = 20 * m.sizeRange[1];
+  const skew = Math.max(-1, Math.min(1, inv / cap)); // -1..1
+  const buyProb = 0.5 - 0.45 * skew;
+  const side = Math.random() < buyProb ? 'buy' : 'sell';
+  const size = randInt(m.sizeRange[0], m.sizeRange[1]);
 
   // Cross the spread aggressively to guarantee fills
   let price;
@@ -194,6 +234,21 @@ async function main() {
   console.log('[taker] Mid prices:', Object.entries(liveMid).map(([k, v]) => `${MARKETS[k].symbol}=${v}`).join(' '));
 
   setInterval(() => fetchMidPrices().catch(() => {}), CONFIG.priceFetchInterval);
+
+  // Inventory refresh: read real on-chain positions every 60s and log net
+  // exposure so drift is visible in the container logs.
+  await refreshInventory().catch(() => {});
+  setInterval(() => {
+    refreshInventory()
+      .then(() => {
+        const per = Object.keys(MARKETS).map((id) => {
+          const net = TAKERS.reduce((s, t) => s + (inventory[`${t}:${id}`] || 0), 0);
+          return `${MARKETS[id].symbol}=${net}`;
+        });
+        console.log(`[taker] net inventory: ${per.join(' ')}`);
+      })
+      .catch(() => {});
+  }, 60_000);
 
   while (true) {
     try {

@@ -376,8 +376,7 @@ async function backfillMarket(market, flatPriceUsd) {
         await pool.query(`
           INSERT INTO candles (market_id, resolution, open_time, open, high, low, close, volume, trade_count)
           SELECT $1::int, $2::text,
-                 date_trunc('minute', open_time) -
-                   (EXTRACT(MINUTE FROM open_time)::int % $3) * interval '1 minute' as bucket,
+                 date_bin(($3::text || ' minutes')::interval, open_time, TIMESTAMPTZ '1970-01-01') as bucket,
                  (array_agg(open  ORDER BY open_time ASC))[1],
                  MAX(high), MIN(low),
                  (array_agg(close ORDER BY open_time DESC))[1],
@@ -440,14 +439,16 @@ async function aggregateCandles() {
   
   for (const res of resolutions) {
     try {
-      const multiplier = MINUTE_MULTIPLIERS[res.name] || 1;
       await pool.query(`
         INSERT INTO candles (market_id, resolution, open_time, open, high, low, close, volume, trade_count)
         SELECT
           market_id,
           $1 as resolution,
-          date_trunc('minute', block_timestamp) -
-            (EXTRACT(MINUTE FROM block_timestamp)::int % ${multiplier}) * interval '1 minute' as open_time,
+          -- date_bin aligns every timeframe correctly (the old minute-modulo
+          -- math produced hourly buckets mislabeled as 4h/1d/1w). Epoch
+          -- origin matches the JS bucketStart() used by the synth writer so
+          -- synthetic and trade-derived candles share bucket boundaries.
+          date_bin('${res.interval}', block_timestamp, TIMESTAMPTZ '1970-01-01') as open_time,
           (array_agg(price ORDER BY block_timestamp ASC))[1] as open,
           MAX(price) as high,
           MIN(price) as low,
@@ -459,8 +460,13 @@ async function aggregateCandles() {
         GROUP BY market_id, open_time
         ON CONFLICT (market_id, resolution, open_time)
         DO UPDATE SET
-          high = GREATEST(candles.high, EXCLUDED.high),
-          low = LEAST(candles.low, EXCLUDED.low),
+          -- A trade-derived candle fully REPLACES a synthetic (trade_count=0)
+          -- one: merging with GREATEST/LEAST kept stale synthetic highs/lows
+          -- and the synthetic open forever. Trade-vs-trade updates still
+          -- merge so late-arriving trades widen the range.
+          open  = CASE WHEN candles.trade_count = 0 THEN EXCLUDED.open ELSE candles.open END,
+          high  = CASE WHEN candles.trade_count = 0 THEN EXCLUDED.high ELSE GREATEST(candles.high, EXCLUDED.high) END,
+          low   = CASE WHEN candles.trade_count = 0 THEN EXCLUDED.low  ELSE LEAST(candles.low, EXCLUDED.low) END,
           close = EXCLUDED.close,
           volume = EXCLUDED.volume,
           trade_count = EXCLUDED.trade_count
