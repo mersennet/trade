@@ -283,7 +283,7 @@ export default function TradeForm() {
             type="number" value={trade.price}
             onChange={(e) => setTrade({ price: e.target.value })}
             placeholder="Trigger price"
-            className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-foreground font-mono outline-none focus:border-primary/40 transition-all"
+            className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-dim font-mono outline-none focus:border-primary/60 focus:bg-surface-3 transition-all"
           />
         </div>
       )}
@@ -294,7 +294,7 @@ export default function TradeForm() {
             type="number" value={trade.price}
             onChange={(e) => setTrade({ price: e.target.value })}
             placeholder="e.g. 1.5"
-            className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-foreground font-mono outline-none focus:border-primary/40 transition-all"
+            className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-dim font-mono outline-none focus:border-primary/60 focus:bg-surface-3 transition-all"
           />
         </div>
       )}
@@ -305,7 +305,7 @@ export default function TradeForm() {
             type="number" value={trade.price}
             onChange={(e) => setTrade({ price: e.target.value })}
             placeholder="0.00"
-            className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-foreground font-mono outline-none focus:border-primary/40 transition-all"
+            className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-dim font-mono outline-none focus:border-primary/60 focus:bg-surface-3 transition-all"
           />
         </div>
       )}
@@ -320,7 +320,7 @@ export default function TradeForm() {
           <div>
             <label className="text-[11px] text-muted mb-1.5 block font-medium">Price Limit (optional)</label>
             <input type="number" value={trade.price} onChange={(e) => setTrade({ price: e.target.value })}
-              placeholder="Max/min price" className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-foreground font-mono outline-none focus:border-primary/40 transition-all" />
+              placeholder="Max/min price" className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-dim font-mono outline-none focus:border-primary/60 focus:bg-surface-3 transition-all" />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
@@ -370,7 +370,7 @@ export default function TradeForm() {
           type="number" value={trade.size}
           onChange={(e) => setTrade({ size: e.target.value })}
           placeholder="0.00"
-          className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-foreground font-mono outline-none focus:border-primary/40 transition-all"
+          className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-dim font-mono outline-none focus:border-primary/60 focus:bg-surface-3 transition-all"
         />
         {/* Size % presets */}
         <div className="flex gap-px bg-background rounded-md border border-border overflow-hidden mt-1.5">
@@ -438,7 +438,8 @@ export default function TradeForm() {
           <input
             type="range" min={1} max={market.maxLeverage} value={trade.leverage}
             onChange={(e) => setTrade({ leverage: Number(e.target.value) })}
-            className="w-full accent-primary h-1.5"
+            className="range-fill w-full"
+            style={{ ['--pct' as string]: `${((trade.leverage - 1) / Math.max(1, market.maxLeverage - 1)) * 100}%` }}
           />
           <div className="flex gap-px bg-background rounded-md border border-border overflow-hidden mt-1.5">
             {LEVERAGE_PRESETS.filter(l => l <= market.maxLeverage).map((l) => (

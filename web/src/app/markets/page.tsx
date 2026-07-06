@@ -46,11 +46,12 @@ export default function MarketsPage() {
     router.push('/trade');
   };
 
+  // Only surface filter tabs that have markets (plus Favorites, which is
+  // user-driven). Empty "Pre-Launch"/"Equities" tabs made the page look
+  // padded with unbuilt sections.
   const filters: { key: typeof filter; label: string; count?: number }[] = [
     { key: 'all', label: 'All Markets', count: markets.length },
     { key: 'favorites', label: 'Favorites', count: favorites.length },
-    { key: 'prelaunch', label: 'Pre-Launch', count: 0 },
-    { key: 'synthetic', label: 'Equities', count: 0 },
   ];
 
   return (

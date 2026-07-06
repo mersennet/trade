@@ -57,20 +57,12 @@ const ITEMS = [
   },
 ];
 
-// Destinations reachable only through the "More" sheet on mobile (everything in
-// the sidebar that is not one of the four primary bottom-bar tabs above).
+// Destinations reachable only through the "More" sheet on mobile. Scoped to
+// live features (matching the desktop sidebar) so mobile users aren't shown
+// a wall of empty roadmap screens.
 const MORE_LINKS = [
-  { href: '/analytics', label: 'Analytics', tKey: 'nav.analytics' },
   { href: '/leaderboard', label: 'Leaderboard', tKey: 'nav.leaderboard' },
-  { href: '/competitions', label: 'Competitions', tKey: 'nav.competitions' },
   { href: '/points', label: 'Points', tKey: 'nav.points' },
-  { href: '/copy-trading', label: 'Copy Trade', tKey: 'nav.copyTrading' },
-  { href: '/ai-agents', label: 'AI Agents', tKey: 'nav.aiAgents' },
-  { href: '/whales', label: 'Whales', tKey: 'nav.whales' },
-  { href: '/otc', label: 'OTC', tKey: 'nav.otc' },
-  { href: '/governance', label: 'Governance', tKey: 'nav.governance' },
-  { href: '/sub-accounts', label: 'Sub-Accounts', tKey: 'nav.subAccounts' },
-  { href: '/referrals', label: 'Referrals', tKey: 'nav.referrals' },
   { href: '/api', label: 'API', tKey: 'nav.api' },
   { href: '/feedback', label: 'Feedback' },
 ];

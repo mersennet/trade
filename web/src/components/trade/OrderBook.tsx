@@ -170,19 +170,19 @@ export default function OrderBook() {
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setTrade({ price: level.price.toString(), side: 'buy' }); } }}
                   >
                     <div className="absolute inset-y-0 right-0 bg-red/[0.10]" style={{ width: `${level.pct}%` }} />
-                    <span className="relative text-red tabular-nums">{formatPrice(level.price)}</span>
-                    <span className="relative text-right text-foreground/60 tabular-nums">{formatNumber(level.size, 0)}</span>
-                    <span className="relative text-right text-dim tabular-nums">{formatNumber(level.total, 0)}</span>
+                    <span className="relative text-red font-semibold tabular-nums">{formatPrice(level.price)}</span>
+                    <span className="relative text-right text-foreground/70 tabular-nums">{formatNumber(level.size, 0)}</span>
+                    <span className="relative text-right text-dim/70 tabular-nums">{formatNumber(level.total, 0)}</span>
                   </div>
                 ))}
               </div>
 
-              <div className="px-3 py-2 border-y border-border bg-surface-2/40 flex items-center justify-between shrink-0">
-                <span className="text-sm font-bold text-foreground font-mono tabular-nums">
+              <div className="px-3 py-2 border-y border-border bg-surface-2/60 flex items-center justify-between shrink-0">
+                <span className="text-[15px] font-bold text-foreground font-mono tabular-nums tracking-tight">
                   {midPrice ? formatPrice(midPrice) : '—'}
                 </span>
-                <span className="text-[11px] text-dim font-mono">
-                  Spread: {formatPrice(spread)}
+                <span className="text-[10px] text-muted font-mono px-1.5 py-0.5 rounded bg-surface-3/80 border border-border-subtle">
+                  spread {formatPrice(spread)}
                 </span>
               </div>
 
@@ -198,9 +198,9 @@ export default function OrderBook() {
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setTrade({ price: level.price.toString(), side: 'sell' }); } }}
                   >
                     <div className="absolute inset-y-0 right-0 bg-green/[0.10]" style={{ width: `${level.pct}%` }} />
-                    <span className="relative text-green tabular-nums">{formatPrice(level.price)}</span>
-                    <span className="relative text-right text-foreground/60 tabular-nums">{formatNumber(level.size, 0)}</span>
-                    <span className="relative text-right text-dim tabular-nums">{formatNumber(level.total, 0)}</span>
+                    <span className="relative text-green font-semibold tabular-nums">{formatPrice(level.price)}</span>
+                    <span className="relative text-right text-foreground/70 tabular-nums">{formatNumber(level.size, 0)}</span>
+                    <span className="relative text-right text-dim/70 tabular-nums">{formatNumber(level.total, 0)}</span>
                   </div>
                 ))}
               </div>

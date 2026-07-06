@@ -177,6 +177,47 @@ input[type="number"] {
   outline-offset: 1px;
 }
 
+/* Range slider with a visible filled track + prominent thumb. The filled
+   portion is driven by the inline `--pct` custom property. Used for the
+   leverage control, where the default native slider was nearly invisible. */
+.range-fill {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--primary) 0%,
+    var(--primary) var(--pct, 0%),
+    var(--surface-3) var(--pct, 0%),
+    var(--surface-3) 100%
+  );
+  outline: none;
+  cursor: pointer;
+}
+.range-fill::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid var(--primary);
+  box-shadow: 0 0 8px rgba(125, 255, 155, 0.5);
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+.range-fill::-webkit-slider-thumb:hover { transform: scale(1.15); }
+.range-fill::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid var(--primary);
+  box-shadow: 0 0 8px rgba(125, 255, 155, 0.5);
+  cursor: pointer;
+}
+
 .scrollbar-none {
   -ms-overflow-style: none;
   scrollbar-width: none;
