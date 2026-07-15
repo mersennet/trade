@@ -8,6 +8,7 @@ import { cn, formatPrice, formatNumber } from '@/lib/utils';
 import { getReferralCode } from '@/lib/referral';
 import { playSound } from '@/lib/sounds';
 import { useTranslation } from '@/i18n';
+import { loadViewingKey, submitShieldedOrder, toChainUnits } from '@/lib/shielded';
 const PRO_ORDER_TYPES = [
   { value: 'stop', tKey: 'trade.stop', fallback: 'Stop', desc: 'Trigger at price' },
   { value: 'trailing', tKey: 'trade.trailingShort', fallback: 'Trail', desc: 'Follow the market' },
@@ -27,6 +28,9 @@ export default function TradeForm() {
   const { market, trade, setTrade, skipConfirm, marginMode, setMarginMode, tickers, positions, oneClickEnabled, sessionKey, gaslessEnabled, setGasless } = useStore();
   const tradeMode = useStore((s) => s.tradeMode);
   const isSpot = tradeMode === 'spot';
+  const privateMode = useStore((s) => s.privateMode);
+  const privacyForkActive = useStore((s) => s.privacyForkActive);
+  const shieldedActive = privateMode && privacyForkActive && !isSpot;
   const { address, isConnected, provider } = useWallet();
   const collateral = useStore((s) => Number(s.wallet.collateral) || 0);
   const { toast } = useToast();
@@ -103,6 +107,38 @@ export default function TradeForm() {
 
     setLoading(true);
     try {
+      // Private mode: route through the shielded intent lane instead of the
+      // transparent CLOB. Side is salted, authorship hidden; the wallet
+      // records the order locally for client-side reconstruction.
+      if (shieldedActive) {
+        if (trade.orderType !== 'limit' && trade.orderType !== 'market') {
+          throw new Error('Private mode supports limit and market orders');
+        }
+        const vk = loadViewingKey();
+        if (!vk) {
+          throw new Error('Set up a viewing key in the Privacy panel first');
+        }
+        let priceForOrder = trade.price;
+        if (trade.orderType === 'market') {
+          const m = tickers[market.id]?.markPrice || 0;
+          if (!m) throw new Error('No mark price available. Try again in a moment.');
+          const slippagePct = (useStore.getState().slippage || 1) / 100;
+          priceForOrder = trade.side === 'buy'
+            ? (m * (1 + slippagePct)).toFixed(8)
+            : (m * (1 - slippagePct)).toFixed(8);
+        }
+        const { intentId } = await submitShieldedOrder(vk, {
+          marketId: market.id,
+          side: trade.side,
+          price: toChainUnits(priceForOrder),
+          size: toChainUnits(trade.size),
+        });
+        toast(`Shielded ${trade.side} order submitted (${intentId.slice(0, 10)}…)`, 'success');
+        if (useStore.getState().soundEnabled) playSound('fill');
+        setTrade({ size: '' });
+        return;
+      }
+
       let orderOwner = address;
       if (useOneClick) {
         try {
@@ -552,6 +588,17 @@ export default function TradeForm() {
               placeholder="SL Price"
               className="w-full bg-surface-2 border border-border rounded-lg px-2.5 py-2 text-xs text-foreground font-mono outline-none focus:border-red/40 transition-all" />
           </div>
+        </div>
+      )}
+
+      {/* Shielded-route indicator: visible whenever private mode will apply
+          to the next order so the user always knows which lane they're on. */}
+      {shieldedActive && (
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-primary/10 border border-primary/20">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary shrink-0">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          </svg>
+          <span className="text-[10px] text-primary font-medium">Private mode — order routes through the shielded lane</span>
         </div>
       )}
 

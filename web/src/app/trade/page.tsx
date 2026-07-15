@@ -8,6 +8,7 @@ import TradeForm from '@/components/trade/TradeForm';
 import PositionsTable from '@/components/trade/PositionsTable';
 import FundingChart from '@/components/trade/FundingChart';
 import AccountPanel from '@/components/trade/AccountPanel';
+import PrivacyPanel from '@/components/trade/PrivacyPanel';
 import { cn, formatPrice } from '@/lib/utils';
 import { useStore } from '@/stores/useStore';
 
@@ -101,7 +102,7 @@ export default function TradePage() {
           <div className="h-full overflow-hidden"><OrderBook /></div>
         )}
         {mobileTab === 'trade' && (
-          <div className="h-full overflow-y-auto"><TradeForm /></div>
+          <div className="h-full overflow-y-auto"><TradeForm /><PrivacyPanel /></div>
         )}
         {mobileTab === 'positions' && (
           <div className="h-full overflow-hidden"><PositionsTable /></div>
@@ -129,6 +130,7 @@ export default function TradePage() {
         <div className="min-h-0 min-w-0 overflow-y-auto bg-surface flex flex-col gap-px">
           <TradeForm />
           <AccountPanel />
+          <PrivacyPanel />
         </div>
       </div>
     </div>

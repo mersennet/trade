@@ -44,6 +44,10 @@ interface AppState {
   gaslessEnabled: boolean;
   paperMode: boolean;
   tradeMode: 'perps' | 'spot';
+  /** Shielded trading: route orders through the ZK privacy layer. Only
+   *  engageable once the privacy hard fork is active on the chain. */
+  privateMode: boolean;
+  privacyForkActive: boolean;
 
   setTheme: (t: 'dark' | 'light') => void;
   setMarket: (m: Market) => void;
@@ -64,6 +68,8 @@ interface AppState {
   setGasless: (v: boolean) => void;
   setPaperMode: (v: boolean) => void;
   setTradeMode: (m: 'perps' | 'spot') => void;
+  setPrivateMode: (v: boolean) => void;
+  setPrivacyForkActive: (v: boolean) => void;
 }
 
 // Must match API market id 1 (chain.js MARKETS[0]) — MRSN/USDC, 50x. A mismatch
@@ -95,6 +101,8 @@ export const useStore = create<AppState>()(
       gaslessEnabled: false,
       paperMode: false,
       tradeMode: 'perps',
+      privateMode: false,
+      privacyForkActive: false,
 
       setTheme: (theme) => {
         document.documentElement.setAttribute('data-theme', theme);
@@ -120,6 +128,12 @@ export const useStore = create<AppState>()(
       setGasless: (gaslessEnabled) => set({ gaslessEnabled }),
       setPaperMode: (paperMode) => set({ paperMode }),
       setTradeMode: (tradeMode) => set({ tradeMode }),
+      setPrivateMode: (privateMode) => set({ privateMode }),
+      setPrivacyForkActive: (privacyForkActive) => set((s) => ({
+        privacyForkActive,
+        // Never leave private mode engaged if the fork isn't live.
+        privateMode: privacyForkActive ? s.privateMode : false,
+      })),
     }),
     {
       name: 'mersennet-trade-store',
