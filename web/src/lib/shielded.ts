@@ -35,13 +35,23 @@ export class ShieldedRpcError extends Error {
 /** -32605 = shielded methods disabled until the privacy hard fork activates. */
 export const ERR_PRIVACY_NOT_ACTIVE = -32605;
 
+const RPC_TIMEOUT_MS = 15_000;
+
 export async function chainRpc<T = unknown>(method: string, params: unknown[] = []): Promise<T> {
   const url = getDefaultChain().rpcUrls[0];
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: ++rpcId, method, params }),
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: ++rpcId, method, params }),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
   const json = await res.json();
   if (json.error) {
     throw new ShieldedRpcError(json.error.message ?? 'RPC error', json.error.code ?? 0);

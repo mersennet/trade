@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useWallet } from '@/hooks/useWallet';
 import { useToast } from '@/components/shared/Toast';
 import { api, type VaultState, type VaultUserState } from '@/lib/api';
-import { formatNumber, formatUsd, formatPct, cn } from '@/lib/utils';
+import { formatNumber, formatPct, cn } from '@/lib/utils';
 import TokenLogo from '@/components/TokenLogo';
 
 const VAULT_STRATEGIES = [
@@ -64,7 +64,7 @@ export default function VaultPage() {
     setLoading(true);
     try {
       const res = await api.vaultWithdraw(address, userVault.shares);
-      toast(`Withdrawn ${formatNumber(res.amount, 4)} USDC`, 'success');
+      toast(`Withdrawn ${formatNumber(res.amount, 4)} MRSN`, 'success');
       api.getVaultState().then(setVault);
       api.getVaultUser(address).then(setUserVault);
     } catch (e) { toast(`Withdraw failed: ${(e as Error).message}`, 'error'); }
@@ -75,13 +75,13 @@ export default function VaultPage() {
 
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-5">
-      {/* Header — left-aligned with USDC token chip to clarify deposit asset */}
+      {/* Header — left-aligned with MRSN token chip to clarify deposit asset */}
       <header className="flex items-end justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight flex items-center gap-2">
             Mersennet Vault
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-surface-2 text-[10px] text-dim font-mono">
-              <TokenLogo symbol="USDC" size={12} /> USDC
+              <TokenLogo symbol="MRSN" size={12} /> MRSN
             </span>
           </h1>
           <p className="text-dim text-xs md:text-[13px] mt-0.5">Earn yield across multiple automated strategies</p>
@@ -108,7 +108,7 @@ export default function VaultPage() {
 
       {/* Top stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatTile label="Total TVL" value={vault ? formatUsd(vault.totalTvl) : '—'} />
+        <StatTile label="Total TVL" value={vault ? `${formatNumber(vault.totalTvl)} MRSN` : '—'} />
         <StatTile label="APY (7d)"  value={vault ? formatPct(vault.apy7d)  : '—'} valueClass="text-green" />
         <StatTile label="APY (30d)" value={vault ? formatPct(vault.apy30d) : '—'} valueClass="text-green" />
         <StatTile label="Depositors" value={vault?.depositors?.toString() || '—'} />
@@ -162,9 +162,9 @@ export default function VaultPage() {
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
             <PosTile label="LP Tokens"      value={formatNumber(userVault.shares, 4)} />
-            <PosTile label="Value"          value={formatUsd(userVault.value)} />
+            <PosTile label="Value"          value={`${formatNumber(userVault.value)} MRSN`} />
             <PosTile label="Share of Vault" value={`${userVault.shareOfVault}%`} />
-            <PosTile label="Collateral Value" value={formatUsd(userVault.value * 0.7)} valueClass="text-cyan" />
+            <PosTile label="Collateral Value" value={`${formatNumber(userVault.value * 0.7)} MRSN`} valueClass="text-cyan" />
           </div>
           {showLpCollateral && (
             <div className="mt-2 p-3 bg-surface-2 rounded-lg border border-cyan/20">
@@ -173,11 +173,11 @@ export default function VaultPage() {
               </p>
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <span className="text-[10.5px] text-dim font-mono">
-                  {formatNumber(userVault.shares, 4)} LP = {formatUsd(userVault.value * 0.7)} margin
+                  {formatNumber(userVault.shares, 4)} LP = {formatNumber(userVault.value * 0.7)} MRSN margin
                 </span>
-                <button className="px-3 py-1.5 bg-cyan/10 text-cyan text-[11px] font-semibold rounded-md hover:bg-cyan/20 transition-colors">
-                  Enable as Collateral
-                </button>
+                <span className="px-3 py-1.5 bg-surface-2 text-dim text-[11px] font-semibold rounded-md">
+                  Available when vaults go on-chain
+                </span>
               </div>
             </div>
           )}
@@ -195,7 +195,7 @@ export default function VaultPage() {
                       <span className="text-dim font-mono">{new Date(h.created_at).toLocaleDateString()}</span>
                     </div>
                     <div className="text-right font-mono tabular-nums">
-                      <span className="text-foreground">{formatNumber(h.amount, 2)} USDC</span>
+                      <span className="text-foreground">{formatNumber(h.amount, 2)} MRSN</span>
                       <span className="text-dim ml-2">({formatNumber(h.shares, 4)} LP)</span>
                     </div>
                   </div>
@@ -210,11 +210,11 @@ export default function VaultPage() {
       <div className="bg-surface border border-border rounded-xl p-4">
         <h3 className="text-[11px] font-semibold text-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
           <span>Deposit to {currentStrategy.name}</span>
-          <span className="text-dim font-normal normal-case tracking-normal text-[11px]">· USDC accepted</span>
+          <span className="text-dim font-normal normal-case tracking-normal text-[11px]">· MRSN accepted</span>
         </h3>
         <div className="flex gap-2">
           <div className="flex-1 relative">
-            <TokenLogo symbol="USDC" size={18} className="absolute left-2.5 top-1/2 -translate-y-1/2" />
+            <TokenLogo symbol="MRSN" size={18} className="absolute left-2.5 top-1/2 -translate-y-1/2" />
             <input
               type="number"
               inputMode="decimal"

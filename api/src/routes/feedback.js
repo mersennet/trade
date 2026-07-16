@@ -41,7 +41,7 @@ const crypto = require('crypto');
 function hashIp(req) {
   const ip = req.headers['x-real-ip'] || req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || '';
   if (!ip) return null;
-  return crypto.createHash('sha256').update(ip + (process.env.FEEDBACK_IP_SALT || 'mersennet')).digest('hex').slice(0, 16);
+  return crypto.createHash('sha256').update(ip + (process.env.FEEDBACK_IP_SALT || 'mersennet-trade')).digest('hex').slice(0, 16);
 }
 
 router.post('/', async (req, res) => {

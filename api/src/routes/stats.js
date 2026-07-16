@@ -95,7 +95,7 @@ router.get('/health', async (req, res) => {
 // signals (services, oracle, balances, disk, backups). Updated every minute by
 // the systemd timer; falls back to live DB+chain probe if no snapshot present.
 const fs = require('fs');
-const STATUS_FILE = process.env.HEALTH_STATUS_FILE || '/var/log/mersennet-health.json';
+const STATUS_FILE = process.env.HEALTH_STATUS_FILE || '/var/log/mersennet-trade-health.json';
 router.get('/status', async (req, res) => {
   try {
     if (fs.existsSync(STATUS_FILE)) {
