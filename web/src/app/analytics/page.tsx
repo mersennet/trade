@@ -1,10 +1,23 @@
 'use client';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useWallet } from '@/hooks/useWallet';
-import { api, type ProtocolStats, type Trade, type TraderProfile } from '@/lib/api';
+import { api, type ProtocolStats, type Trade, type TraderProfile, type TraderStatRow } from '@/lib/api';
 import { formatNumber, cn } from '@/lib/utils';
 
 type Period = '24h' | '7d' | '30d' | 'all';
+
+// UI period -> leaderboard period key produced by the indexer (updateLeaderboard).
+const LEADERBOARD_PERIOD: Record<Period, string> = {
+  '24h': 'daily',
+  '7d': 'weekly',
+  '30d': 'monthly',
+  'all': 'alltime',
+};
+
+const num = (v: number | string | undefined): number => {
+  const n = typeof v === 'string' ? Number(v) : v;
+  return Number.isFinite(n) ? (n as number) : 0;
+};
 
 // Native collateral on Mersennet is MRSN, so amounts are labelled MRSN (no '$').
 function formatMrsn(n: number): string {
@@ -24,7 +37,18 @@ interface ComputedStats {
   totalVolume: number;
 }
 
-function computeStats(trades: Trade[], period: Period): { stats: ComputedStats; equityCurve: { time: number; value: number }[] } {
+// Per-trade cash flow: a sell brings cash in, a buy sends cash out. Summed, this
+// is realized PnL when a position nets flat and cost basis while it's open — the
+// same cash-flow model the indexer's leaderboard uses (see updateLeaderboard).
+function tradeCashFlow(t: Trade): number {
+  return (t.side === 'sell' ? 1 : -1) * t.price * t.size;
+}
+
+function computeStats(
+  trades: Trade[],
+  period: Period,
+  row: TraderStatRow | undefined,
+): { stats: ComputedStats; equityCurve: { time: number; value: number }[] } {
   const now = Date.now();
   const cutoff: Record<Period, number> = {
     '24h': now - 86400000,
@@ -32,52 +56,43 @@ function computeStats(trades: Trade[], period: Period): { stats: ComputedStats; 
     '30d': now - 30 * 86400000,
     'all': 0,
   };
-  const filtered = trades.filter((t) => new Date(t.time).getTime() >= cutoff[period]);
-  if (filtered.length === 0) {
-    return {
-      stats: { totalTrades: 0, winRate: 0, avgTradeSize: 0, bestTrade: 0, worstTrade: 0, maxDrawdown: 0, avgHoldTime: '—', profitFactor: 0, totalPnl: 0, totalVolume: 0 },
-      equityCurve: [],
-    };
-  }
+  // The recent-trades list (last 20 fills) drives the equity-curve shape; the
+  // headline aggregates come from the indexer's real per-period leaderboard row.
+  const filtered = trades
+    .filter((t) => new Date(t.time).getTime() >= cutoff[period])
+    .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
 
-  const sorted = [...filtered].sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
-  let cumPnl = 0;
+  let cum = 0;
   let peak = 0;
   let maxDd = 0;
-  let totalGains = 0;
-  let totalLosses = 0;
   const curve: { time: number; value: number }[] = [];
-
-  for (const t of sorted) {
-    const pnl = t.side === 'buy' ? t.price * t.size * 0.002 : -t.price * t.size * 0.001;
-    cumPnl += pnl;
-    if (cumPnl > peak) peak = cumPnl;
-    const dd = peak - cumPnl;
-    if (dd > maxDd) maxDd = dd;
-    if (pnl > 0) totalGains += pnl;
-    else totalLosses += Math.abs(pnl);
-    curve.push({ time: Math.floor(new Date(t.time).getTime() / 1000), value: cumPnl });
+  for (const t of filtered) {
+    cum += tradeCashFlow(t);
+    if (cum > peak) peak = cum;
+    if (peak - cum > maxDd) maxDd = peak - cum;
+    curve.push({ time: Math.floor(new Date(t.time).getTime() / 1000), value: cum });
   }
 
-  const wins = sorted.filter((t) => t.side === 'buy').length;
-  const totalVol = sorted.reduce((s, t) => s + t.price * t.size, 0);
-  const avgSize = totalVol / sorted.length;
-
-  const pnls = sorted.map((t) => t.side === 'buy' ? t.price * t.size * 0.002 : -t.price * t.size * 0.001);
-  const best = Math.max(...pnls);
-  const worst = Math.min(...pnls);
+  const winCount = num(row?.win_count);
+  const lossCount = num(row?.loss_count);
+  const decided = winCount + lossCount;
+  const tradeCount = num(row?.trade_count) || filtered.length;
+  const totalVol = num(row?.volume) || filtered.reduce((s, t) => s + t.price * t.size, 0);
 
   return {
     stats: {
-      totalTrades: sorted.length,
-      winRate: sorted.length > 0 ? (wins / sorted.length) * 100 : 0,
-      avgTradeSize: avgSize,
-      bestTrade: best,
-      worstTrade: worst,
+      totalTrades: tradeCount,
+      // Real win/loss counts from per-market roundtrips (indexer), not a proxy.
+      winRate: decided > 0 ? (winCount / decided) * 100 : 0,
+      avgTradeSize: tradeCount > 0 ? totalVol / tradeCount : 0,
+      bestTrade: num(row?.best_trade),
+      worstTrade: num(row?.worst_trade),
       maxDrawdown: maxDd,
-      avgHoldTime: sorted.length > 1 ? formatHoldTime((new Date(sorted[sorted.length - 1].time).getTime() - new Date(sorted[0].time).getTime()) / sorted.length) : '—',
-      profitFactor: totalLosses > 0 ? totalGains / totalLosses : totalGains > 0 ? Infinity : 0,
-      totalPnl: cumPnl,
+      avgHoldTime: filtered.length > 1
+        ? formatHoldTime((new Date(filtered[filtered.length - 1].time).getTime() - new Date(filtered[0].time).getTime()) / filtered.length)
+        : '—',
+      profitFactor: lossCount > 0 ? winCount / lossCount : winCount > 0 ? Infinity : 0,
+      totalPnl: num(row?.pnl),
       totalVolume: totalVol,
     },
     equityCurve: curve,
@@ -98,7 +113,7 @@ function getMonthlyBreakdown(trades: Trade[]): { month: string; trades: number; 
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
     if (!months[key]) months[key] = { trades: 0, pnl: 0, wins: 0 };
     months[key].trades++;
-    const pnl = t.side === 'buy' ? t.price * t.size * 0.002 : -t.price * t.size * 0.001;
+    const pnl = tradeCashFlow(t);
     months[key].pnl += pnl;
     if (pnl > 0) months[key].wins++;
   }
@@ -208,7 +223,8 @@ export default function AnalyticsPage() {
   }, [address, isConnected]);
 
   const trades = profile?.recentTrades ?? [];
-  const { stats, equityCurve } = computeStats(trades, period);
+  const statRow = profile?.stats?.[LEADERBOARD_PERIOD[period]];
+  const { stats, equityCurve } = computeStats(trades, period, statRow);
   const monthly = getMonthlyBreakdown(trades);
 
   const periods: { key: Period; label: string }[] = [
@@ -223,8 +239,8 @@ export default function AnalyticsPage() {
       <div className="text-center mb-2">
         <h2 className="text-2xl font-bold text-foreground mb-2 flex items-center justify-center gap-2">
           Analytics
-          <span className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded bg-yellow/10 text-yellow text-[10px] font-semibold uppercase tracking-wider">
-            Preview &middot; Simulated PnL
+          <span className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded bg-cyan/10 text-cyan text-[10px] font-semibold uppercase tracking-wider">
+            Cash-flow PnL &middot; Beta
           </span>
         </h2>
         <p className="text-dim text-sm">Track your trading performance with detailed statistics</p>
@@ -253,21 +269,22 @@ export default function AnalyticsPage() {
           </div>
         ) : (
           <>
-            {/* Trade volume, counts, sizes and hold times below are real (from on-chain
-                trade history). Realized PnL is not yet indexed per trade, so the equity
-                curve, win-rate, best/worst, drawdown and profit-factor use a placeholder
-                PnL model and are shown for preview only. */}
-            <div className="bg-yellow/10 border border-yellow/40 rounded-lg p-3 flex items-start gap-2.5">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-yellow shrink-0 mt-0.5">
-                <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
-                <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+            {/* PnL, win/loss, best/worst and volume come from the indexer's real
+                per-period leaderboard aggregates (cash-flow method). The equity
+                curve is the running cash flow of your last 20 fills, so it reads
+                as cost basis while a position is open and realizes when it nets
+                flat. Average hold time is an approximation over recent fills. */}
+            <div className="bg-cyan/10 border border-cyan/40 rounded-lg p-3 flex items-start gap-2.5">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-cyan shrink-0 mt-0.5">
+                <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
               </svg>
               <div className="text-[12px] leading-relaxed">
-                <span className="text-yellow font-semibold">Preview &middot; Simulated PnL.</span>{' '}
+                <span className="text-cyan font-semibold">Cash-flow PnL &middot; Beta.</span>{' '}
                 <span className="text-foreground/80">
-                  Trade counts, volume, average size and hold times are real. Realized PnL is not yet
-                  indexed per trade, so the equity curve, win rate, best/worst trade, drawdown and
-                  profit factor use a placeholder model for demo purposes.
+                  PnL, win rate, best/worst trade and volume are real, computed from your on-chain
+                  fills using a cash-flow model (a sell brings cash in, a buy sends it out). While a
+                  position is still open this reads as cost basis; it realizes once the position nets
+                  flat. The equity curve tracks your last 20 fills; average hold time is approximate.
                 </span>
               </div>
             </div>
@@ -306,7 +323,7 @@ export default function AnalyticsPage() {
                 { label: 'Worst Trade', value: formatMrsn(stats.worstTrade), color: 'text-red' },
                 { label: 'Max Drawdown', value: formatMrsn(stats.maxDrawdown), color: 'text-orange' },
                 { label: 'Avg Hold Time', value: stats.avgHoldTime },
-                { label: 'Profit Factor', value: stats.profitFactor === Infinity ? '∞' : stats.profitFactor.toFixed(2), color: stats.profitFactor >= 1 ? 'text-green' : 'text-red' },
+                { label: 'Win / Loss', value: stats.profitFactor === Infinity ? '∞' : stats.profitFactor.toFixed(2), color: stats.profitFactor >= 1 ? 'text-green' : 'text-red' },
               ].map((item) => (
                 <div key={item.label} className="bg-surface border border-border rounded-xl p-3">
                   <p className="text-[10px] text-dim uppercase tracking-wider font-medium mb-1">{item.label}</p>
