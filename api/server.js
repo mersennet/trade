@@ -193,8 +193,31 @@ async function seedCompetitions() {
   console.log('[api] Seeded 3 competitions');
 }
 
+// The markets table is read by whales/funding-arb/otc joins but was seeded by
+// hand on the host — sync it from chain.MARKETS at boot so symbol renames land.
+async function syncMarketsTable() {
+  const { MARKETS } = require('./src/services/chain');
+  await pool.query(`CREATE TABLE IF NOT EXISTS markets (id INT PRIMARY KEY, symbol TEXT NOT NULL, base TEXT, quote TEXT, max_leverage INT)`);
+  await pool.query(`ALTER TABLE markets ADD COLUMN IF NOT EXISTS base TEXT`).catch(() => {});
+  await pool.query(`ALTER TABLE markets ADD COLUMN IF NOT EXISTS quote TEXT`).catch(() => {});
+  await pool.query(`ALTER TABLE markets ADD COLUMN IF NOT EXISTS max_leverage INT`).catch(() => {});
+  for (const m of MARKETS) {
+    const r = await pool.query(
+      `UPDATE markets SET symbol = $2, base = $3, quote = $4, max_leverage = $5 WHERE id = $1`,
+      [m.id, m.symbol, m.base, m.quote, m.maxLeverage]
+    );
+    if (r.rowCount === 0) {
+      await pool.query(
+        `INSERT INTO markets (id, symbol, base, quote, max_leverage) VALUES ($1, $2, $3, $4, $5)`,
+        [m.id, m.symbol, m.base, m.quote, m.maxLeverage]
+      );
+    }
+  }
+}
+
 async function initAllTables() {
   await Promise.all([
+    syncMarketsTable().then(() => console.log('[api] Markets table synced from chain.MARKETS')).catch(e => console.log('[api] Markets sync:', e.message)),
     initConditionalOrdersTable().then(() => { startPriceMonitor(); console.log('[api] Conditional orders monitor started'); }),
     initGovernanceTables().then(() => console.log('[api] Governance tables initialized')),
     seedCompetitions().catch((e) => console.log('[api] Competition seed:', e.message)),

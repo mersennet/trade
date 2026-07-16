@@ -72,9 +72,9 @@ interface AppState {
   setPrivacyForkActive: (v: boolean) => void;
 }
 
-// Must match API market id 1 (chain.js MARKETS[0]) — MRSN/USDC, 50x. A mismatch
+// Must match API market id 1 (chain.js MARKETS[0]) — MRSN/USD, 50x. A mismatch
 // here makes a fresh session render the wrong symbol/logo/leverage over MRSN data.
-const defaultMarket: Market = { id: 1, symbol: 'MRSN/USDC', base: 'MRSN', quote: 'USDC', fundingRate: 0.0001, maxLeverage: 50 };
+const defaultMarket: Market = { id: 1, symbol: 'MRSN/USD', base: 'MRSN', quote: 'USD', fundingRate: 0.0001, maxLeverage: 50 };
 
 export const useStore = create<AppState>()(
   persist(

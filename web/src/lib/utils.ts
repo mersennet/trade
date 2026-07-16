@@ -46,9 +46,9 @@ export function formatTimeAgo(date: string | Date): string {
 }
 
 export const MARKETS = [
-  { id: 1, symbol: 'MRSN/USDC', base: 'MRSN', quote: 'USDC' },
-  { id: 2, symbol: 'BTC/USDC', base: 'BTC', quote: 'USDC' },
-  { id: 3, symbol: 'ETH/USDC', base: 'ETH', quote: 'USDC' },
-  { id: 4, symbol: 'SOL/USDC', base: 'SOL', quote: 'USDC' },
-  { id: 5, symbol: 'ARB/USDC', base: 'ARB', quote: 'USDC' },
+  { id: 1, symbol: 'MRSN/USD', base: 'MRSN', quote: 'USD' },
+  { id: 2, symbol: 'BTC/USD', base: 'BTC', quote: 'USD' },
+  { id: 3, symbol: 'ETH/USD', base: 'ETH', quote: 'USD' },
+  { id: 4, symbol: 'SOL/USD', base: 'SOL', quote: 'USD' },
+  { id: 5, symbol: 'ARB/USD', base: 'ARB', quote: 'USD' },
 ];

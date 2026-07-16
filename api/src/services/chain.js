@@ -32,11 +32,13 @@ const MARKETS = [
   // fundingRate is the per-8h rate as a fraction (0.0001 = 0.01% per interval,
   // ~11% APR) — in line with typical perp venues. The old 0.01 (1% per 8h)
   // annualized to a nonsensical +1095%.
-  { id: 1, symbol: 'MRSN/USDC', base: 'MRSN', quote: 'USDC', maxLeverage: 50,  fundingRate: 0.0001 },
-  { id: 2, symbol: 'BTC/USDC',  base: 'BTC',  quote: 'USDC', maxLeverage: 100, fundingRate: 0.00008 },
-  { id: 3, symbol: 'ETH/USDC',  base: 'ETH',  quote: 'USDC', maxLeverage: 50,  fundingRate: 0.00012 },
-  { id: 4, symbol: 'SOL/USDC',  base: 'SOL',  quote: 'USDC', maxLeverage: 20,  fundingRate: 0.0001 },
-  { id: 5, symbol: 'ARB/USDC',  base: 'ARB',  quote: 'USDC', maxLeverage: 20,  fundingRate: 0.00015 },
+  // USD-quoted perps, MRSN-collateralized. There is no USDC on the perp side —
+  // the quote is the oracle's USD price (spot pairs against MockUSDC live in spotEngine).
+  { id: 1, symbol: 'MRSN/USD', base: 'MRSN', quote: 'USD', maxLeverage: 50,  fundingRate: 0.0001 },
+  { id: 2, symbol: 'BTC/USD',  base: 'BTC',  quote: 'USD', maxLeverage: 100, fundingRate: 0.00008 },
+  { id: 3, symbol: 'ETH/USD',  base: 'ETH',  quote: 'USD', maxLeverage: 50,  fundingRate: 0.00012 },
+  { id: 4, symbol: 'SOL/USD',  base: 'SOL',  quote: 'USD', maxLeverage: 20,  fundingRate: 0.0001 },
+  { id: 5, symbol: 'ARB/USD',  base: 'ARB',  quote: 'USD', maxLeverage: 20,  fundingRate: 0.00015 },
 ];
 
 // ---------------------------------------------------------------------
