@@ -27,7 +27,7 @@ export default function CreateMarketPage() {
 
   const [symbol, setSymbol] = useState('');
   const [baseAsset, setBaseAsset] = useState('');
-  const [quoteAsset, setQuoteAsset] = useState('USDC');
+  const [quoteAsset, setQuoteAsset] = useState('USD');
   const [maxLeverage, setMaxLeverage] = useState(20);
 
   const fetchProposals = useCallback(async () => {
@@ -63,7 +63,7 @@ export default function CreateMarketPage() {
       toast('Market proposal submitted!', 'success');
       setSymbol('');
       setBaseAsset('');
-      setQuoteAsset('USDC');
+      setQuoteAsset('USD');
       setMaxLeverage(20);
       fetchProposals();
     } catch (e) {
@@ -114,7 +114,7 @@ export default function CreateMarketPage() {
             <input
               value={symbol}
               onChange={(e) => setSymbol(e.target.value)}
-              placeholder="e.g. DOGE/USDC"
+              placeholder="e.g. DOGE/USD"
               className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary transition-colors font-mono"
             />
           </div>
@@ -132,7 +132,7 @@ export default function CreateMarketPage() {
             <input
               value={quoteAsset}
               onChange={(e) => setQuoteAsset(e.target.value)}
-              placeholder="USDC"
+              placeholder="USD"
               className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary transition-colors font-mono"
             />
           </div>
