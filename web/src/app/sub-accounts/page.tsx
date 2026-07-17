@@ -67,12 +67,14 @@ export default function SubAccountsPage() {
       toast('Switched to main account', 'info');
     } else {
       const acc = accounts[idx];
-      // Watch-only: this only changes which address the data views query. The
-      // signer stays the connected wallet — sub-account private keys are not
-      // wired to any signer, so trades/deposits still execute from the main
-      // account. We surface that explicitly rather than implying isolation.
+      // On Mersennet's testnet, orders and collateral deposits are keyed by the
+      // `owner` address (no wallet signature), so switching the active address
+      // makes this sub-account the trading identity: its own collateral, its own
+      // positions and orders. Fund it from the faucet + deposit like any account.
+      // The generated key is kept locally so the sub-account can also be imported
+      // into an external wallet.
       setWalletStore({ address: acc.address });
-      toast(`Viewing ${acc.name} (watch-only, trades still use your main wallet)`, 'info');
+      toast(`Switched to ${acc.name} — now trading as this account (fund it via the faucet)`, 'info');
     }
   };
 
@@ -120,7 +122,7 @@ export default function SubAccountsPage() {
             </svg>
           </div>
           <h3 className="text-sm font-medium text-foreground mb-1">Connect Wallet</h3>
-          <p className="text-xs text-dim max-w-md mx-auto">Connect your wallet to create watch-only sub-accounts and preview the session-key flow. On-chain isolation and one-click delegation are not live yet.</p>
+          <p className="text-xs text-dim max-w-md mx-auto">Connect your wallet to create testnet sub-accounts, each an independent trading identity you fund from the faucet. One-click session-key delegation (trading without a wallet popup) is previewed below and not live yet.</p>
         </div>
       </div>
     );
@@ -130,7 +132,7 @@ export default function SubAccountsPage() {
     <div className="p-4 max-w-full space-y-6">
       <div className="text-center mb-8">
         <h2 className="text-2xl font-bold text-foreground mb-2">Sub-Accounts & Session Keys</h2>
-        <p className="text-dim text-sm">Watch-only sub-accounts and session-key preview</p>
+        <p className="text-dim text-sm">Independent testnet trading accounts, plus a session-key preview</p>
       </div>
 
       {/* One-Click Trading / Session Keys */}
@@ -196,12 +198,13 @@ export default function SubAccountsPage() {
         )}
       </div>
 
-      {/* Watch-only disclosure */}
+      {/* How switching works on the testnet */}
       <div className="bg-surface-2 border border-border rounded-lg p-3 text-[11.5px] text-dim leading-relaxed">
-        <span className="text-foreground font-medium">Watch-only.</span> Selecting a sub-account changes which address
-        the data views (positions, collateral, orders) display. It does <span className="text-foreground">not</span>{' '}
-        switch the signer. Any deposit or trade still executes from your connected main wallet. True per-account
-        isolation requires on-chain account abstraction, which is not live yet.
+        <span className="text-foreground font-medium">How this works on testnet.</span> Mersennet keys orders and
+        collateral by the <span className="text-foreground">owner address</span> (no wallet signature required), so
+        switching to a sub-account makes it your active trading identity: its own collateral, positions and orders.
+        Fund each one from the faucet and deposit like any account. Signature-gated delegation (one signer controlling
+        many accounts, as with on-chain account abstraction) is not live yet.
       </div>
 
       {/* Main Account */}
@@ -235,11 +238,11 @@ export default function SubAccountsPage() {
               <p className="text-xs font-medium text-foreground uppercase tracking-wider">{acc.name}</p>
               <p className="text-xs text-dim font-mono">{shortenAddress(acc.address, 8)}</p>
             </div>
-            {activeIdx === i && <span className="px-2 py-0.5 bg-cyan/20 text-cyan rounded text-xs">Viewing</span>}
+            {activeIdx === i && <span className="px-2 py-0.5 bg-cyan/20 text-cyan rounded text-xs">Active</span>}
           </div>
           <div className="flex gap-2">
             <button onClick={() => switchTo(i)} className="px-3 py-1 bg-primary/10 text-primary rounded text-xs hover:bg-primary/20 transition-colors duration-200">
-              View (watch-only)
+              Trade as this
             </button>
             <button onClick={() => copyKey(acc.privateKey)} className="px-3 py-1 bg-surface-2 text-dim hover:text-muted rounded text-xs transition-colors duration-200">
               Export Key

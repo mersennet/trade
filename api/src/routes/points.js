@@ -6,6 +6,11 @@ const router = Router();
 router.get('/:address', async (req, res) => {
   try {
     const addr = req.params.address.toLowerCase();
+    // Reject non-address params so sibling paths (e.g. /points/leaderboard) can't
+    // be swallowed by this catch-all and return a bogus pseudo-account.
+    if (!/^0x[0-9a-f]{40}$/.test(addr)) {
+      return res.status(400).json({ error: 'Invalid address' });
+    }
     const season = Number(req.query.season) || 1;
 
     const balance = await pool.query(
