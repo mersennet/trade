@@ -36,7 +36,7 @@ const ENDPOINTS = [
   { method: 'GET', path: '/whales/activity', desc: 'Whale activity feed' },
   { method: 'POST', path: '/agents', desc: 'Create AI trading agent' },
   { method: 'POST', path: '/otc/rfq', desc: 'Request for quote' },
-  { method: 'GET', path: '/bridge/chains', desc: 'Supported bridge chains' },
+  { method: 'GET', path: '/bridge/chains', desc: 'Bridge chains (disabled — bridge not live)' },
   { method: 'GET', path: '/oracle/prices', desc: 'Oracle price feeds' },
   { method: 'POST', path: '/paper/order', desc: 'Paper trade order' },
   { method: 'GET', path: '/funding-arb/comparison', desc: 'Funding rate comparison' },
