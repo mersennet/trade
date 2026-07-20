@@ -82,37 +82,15 @@ router.post('/deposit', strictLimiter, async (req, res) => {
   }
 });
 
-// Gasless deposit — credits collateral server-side via the unsigned RPC.
-// The chain's transaction hashing is not standard-Ethereum compatible, so a
-// MetaMask/ethers-signed deposit can't be tracked or confirmed by the wallet.
-// Collateral is free on the faucet testnet, so we credit it directly here and
-// skip the broken wallet round-trip.
-const MAX_GASLESS_DEPOSIT = 1_000_000n; // sane per-call cap (raw collateral units)
-router.post('/credit', strictLimiter, async (req, res) => {
-  try {
-    const { owner, amount } = req.body;
-    if (!owner || !amount) return res.status(400).json({ error: 'Missing fields: owner, amount' });
-    if (!ETH_ADDR_RE.test(owner.toLowerCase())) return res.status(400).json({ error: 'Invalid owner address' });
-    if (Number(amount) <= 0 || !Number.isFinite(Number(amount))) {
-      return res.status(400).json({ error: 'Amount must be positive' });
-    }
-    const value = humanToRaw(amount);
-    if (value > MAX_GASLESS_DEPOSIT) {
-      return res.status(400).json({ error: `Amount exceeds testnet cap of ${MAX_GASLESS_DEPOSIT}` });
-    }
-    await chain.depositCollateralGasless(owner, value);
-    const free = await chain.getFreeCollateral(owner);
-    res.json({
-      ok: true,
-      owner,
-      credited: value.toString(),
-      free,
-      decimals: chain.USDC_DECIMALS,
-      timestamp: Date.now(),
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+// Gasless deposit is permanently disabled. The unsigned
+// mersennet_orders_depositCollateral RPC let anyone credit (and drain via
+// trading) any address. Deposits must be wallet-signed placeOrder/deposit
+// txs to the CLOB precompile (0x…0100). Use POST /deposit for the calldata.
+router.post('/credit', strictLimiter, async (_req, res) => {
+  res.status(410).json({
+    error: 'Gasless collateral credit is disabled. Sign a depositCollateral transaction to the CLOB precompile (0x…0100).',
+    code: 'SIGNED_DEPOSIT_REQUIRED',
+  });
 });
 
 router.post('/withdraw', strictLimiter, async (req, res) => {

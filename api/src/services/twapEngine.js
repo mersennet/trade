@@ -54,25 +54,13 @@ async function executeSlice(twap) {
       if (side === 'sell' && price < twap.price_limit) return null;
     }
 
-    const result = await chain.submitOrder({
-      owner: twap.owner,
-      market_id: twap.market_id,
-      side,
-      price: toHex(price),
-      size: toHex(sliceSize),
-      tif: 'Ioc',
-    });
-
-    await pool.query(
-      'INSERT INTO twap_fills (twap_id, price, size) VALUES ($1, $2, $3)',
-      [twap.id, price, sliceSize]
+    // TWAP slices used to place unsigned orders as `owner` — that path is
+    // closed. Keep the schedule in the DB but do not execute until a signed
+    // session/delegation flow exists.
+    console.warn(
+      `[twap] Skipping slice for #${twap.id} (${twap.owner}): signed session keys required`
     );
-    await pool.query(
-      'UPDATE twap_orders SET executed_size = executed_size + $1, updated_at = NOW() WHERE id = $2',
-      [sliceSize, twap.id]
-    );
-
-    return { price, size: sliceSize, result };
+    return null;
   } catch (e) {
     console.error(`[twap] Slice error for #${twap.id}:`, e.message);
     return null;

@@ -88,17 +88,14 @@ async function evaluateConditionalOrder(order) {
 }
 
 async function triggerOrder(order) {
-  // Floor to integer chain units (CLOB is integer-only), never round up.
-  const toHex = (n) => '0x' + BigInt(Math.max(0, Math.floor(Number(n) || 0))).toString(16);
-  const result = await chain.submitOrder({
-    owner: order.owner,
-    market_id: order.market_id,
-    side: String(order.side || '').toLowerCase(),
-    price: toHex(order.limit_price || order.trigger_price || 0),
-    size: toHex(order.size),
-    tif: 'Ioc',
-  });
-  return result;
+  // Unsigned placement on the owner's behalf is disabled (account takeover).
+  // Conditional orders still arm in the DB for UI history, but execution
+  // requires a wallet-signed session/delegation path that is not yet wired.
+  const err = new Error(
+    `Conditional order #${order.id} for ${order.owner} cannot auto-execute: signed session keys are required`
+  );
+  err.code = 'SIGNED_ORDER_REQUIRED';
+  throw err;
 }
 
 let monitorInterval = null;

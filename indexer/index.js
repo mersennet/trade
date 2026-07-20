@@ -18,8 +18,33 @@ const REPORT_SECRET = process.env.REPORT_SECRET || '';
 // Market-maker/taker bot addresses to exclude from the leaderboard and points
 // (comma-separated, any case). Bots now use real keypairs (not 0x0000-prefixed
 // system addresses), so the old prefix heuristic no longer catches them.
-const BOT_ADDRESSES = (process.env.BOT_ADDRESSES || '')
-  .split(',')
+// Default list matches BOT_SEED=mersennet-bot-v1 / NUM_TAKERS=20 (maker + taker-0..19).
+const DEFAULT_BOT_ADDRESSES = [
+  '0x6dd9bb44ddfaba76d8868915d6fe80c3f8a932ec',
+  '0x2d268a6cf714a0a58a84c5345f2113f562a9ecb6',
+  '0x05ed2c228f7fd5fc5750fbc36e7cc9ed95fdb08e',
+  '0x5d6bc28f0db7048fe28dfb13cb4ddcb145ccd340',
+  '0xd7e327055ab807d15dba84cf37524c4cf50e85b2',
+  '0x2022e622d892221acef633987f84c446995608f1',
+  '0xf27147c700feae6699be064df85f9a51958bfba3',
+  '0x02305256df788283dd4881d53a291dffb9285614',
+  '0x063d85c5aa15a3046d3bd2adb1e25718d1e203d0',
+  '0xd4a93bdc80411dc27f5cd28c5faee9d5a368b53e',
+  '0xae19feacea693facaebc3a24572ff30af84287df',
+  '0x19a8e9379bdd2e4fb73473d746d44dc590233c28',
+  '0x6e59d540f1843f51cfc72f18af04b1e1b99a6306',
+  '0xd33b3b34eec8e2d116f948ce9f9c279ce74df4b8',
+  '0x2f5e283d1dd4be66c4a692b83cdb266359d63989',
+  '0xe08fd6ff63b370beaedf7710db362b3ae2b5d224',
+  '0xb9d3191b8e762466e1ff523163f4517a11cc5a01',
+  '0x85b593a711bcc721a33929300f39ccd04e94b644',
+  '0x599d48e9028190f0ce46ca2b64101d42ea07d0b9',
+  '0xa038a60c9ef33de711f4604573a7e1431a37d933',
+  '0xed8db2dfc8999f859048ce83d555281d627df845',
+];
+const BOT_ADDRESSES = (process.env.BOT_ADDRESSES
+  ? process.env.BOT_ADDRESSES.split(',')
+  : DEFAULT_BOT_ADDRESSES)
   .map((a) => a.trim().toLowerCase())
   .filter((a) => /^0x[0-9a-f]{40}$/.test(a));
 // Bind host for the internal trade-report server. Defaults to loopback (safe on
@@ -568,8 +593,11 @@ async function updateLeaderboard() {
       await pool.query(
         `DELETE FROM leaderboard
           WHERE period = $1
-            AND address LIKE '0x00000000000000000000000000000000000000%'`,
-        [period.name]
+            AND (
+              address LIKE '0x00000000000000000000000000000000000000%'
+              OR LOWER(address) = ANY($2::text[])
+            )`,
+        [period.name, BOT_ADDRESSES]
       );
     } catch (e) {
       console.error(`[leaderboard] Error updating ${period.name}:`, e.message);

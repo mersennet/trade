@@ -146,58 +146,10 @@ router.post('/', strictLimiter, async (req, res) => {
       });
     }
 
-    if (!size) {
-      return res.status(400).json({ error: 'Missing required field: size' });
-    }
-    if (!price) {
-      return res.status(400).json({ error: 'Missing required field: price (for limit/market orders)' });
-    }
-
-    // Legacy fallback retained only for internal/authorized flows; unsigned
-    // order placement is rejected by the node unless explicitly enabled.
-    const chainPrice = toChainHex(price);
-    const chainSize = toChainHex(size);
-    if (!chainPrice) {
-      return res.status(400).json({ error: `Price must be a positive integer in chain units (got ${price})` });
-    }
-    if (!chainSize) {
-      return res.status(400).json({ error: `Size must be at least 1 integer chain unit (got ${size})` });
-    }
-    const result = await chain.submitOrder({
-      owner, market_id, side, price: chainPrice, size: chainSize, tif: tif || 'Gtc',
+    return res.status(400).json({
+      error: 'Orders must be wallet-signed. Send a signed placeOrder tx to the CLOB precompile via eth_sendRawTransaction.',
+      code: 'SIGNED_ORDER_REQUIRED',
     });
-
-    if (tp_price || sl_price) {
-      const conditionalInserts = [];
-      if (tp_price) {
-        conditionalInserts.push(pool.query(
-          `INSERT INTO conditional_orders
-            (owner, market_id, side, size, order_type, trigger_price, tp_price, leverage, reduce_only)
-           VALUES ($1, $2, $3, $4, 'stop', $5, $6, $7, true)`,
-          [owner, market_id, side === 'buy' ? 'sell' : 'buy', size, tp_price, tp_price, leverage || 1]
-        ));
-      }
-      if (sl_price) {
-        conditionalInserts.push(pool.query(
-          `INSERT INTO conditional_orders
-            (owner, market_id, side, size, order_type, trigger_price, sl_price, leverage, reduce_only)
-           VALUES ($1, $2, $3, $4, 'stop', $5, $6, $7, true)`,
-          [owner, market_id, side === 'buy' ? 'sell' : 'buy', size, sl_price, sl_price, leverage || 1]
-        ));
-      }
-      await Promise.all(conditionalInserts);
-    }
-
-    if (builder_code) {
-      try {
-        await pool.query(
-          `UPDATE builder_codes SET total_orders = total_orders + 1, total_volume = total_volume + $1 WHERE code = $2 AND active = true`,
-          [Number(price) * Number(size), builder_code]
-        );
-      } catch (_) {}
-    }
-
-    res.json({ result, timestamp: Date.now() });
   } catch (e) {
     const status = e.statusCode || 500;
     res.status(status).json({ error: e.message });

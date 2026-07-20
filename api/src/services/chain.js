@@ -270,27 +270,24 @@ function reportFills(result, marketIdFallback, sideFallback) {
   }).catch(() => {}).finally(() => clearTimeout(timer));
 }
 
-async function submitOrder(params) {
-  const { owner, market_id, side, price, size, tif } = params || {};
-  if (!owner || !market_id || !side || !price || !size) {
-    const err = new Error('submitOrder requires {owner, market_id, side, price, size, tif?}');
-    err.statusCode = 400;
-    throw err;
-  }
-  const result = await rpcCall('mersennet_orders_submitOrder', [{
-    owner,
-    market_id: Number(market_id),
-    side,
-    price,
-    size,
-    tif: tif || 'Gtc',
-  }]);
-  reportFills(result, market_id, side);
-  return result;
+async function submitOrder(_params) {
+  // Unsigned owner-field placement is disabled on the node. Clients must
+  // send a wallet-signed placeOrder tx to the CLOB precompile.
+  const err = new Error(
+    'Unsigned submitOrder is disabled; sign a placeOrder tx to 0x…0100 and submit via eth_sendRawTransaction'
+  );
+  err.statusCode = 410;
+  err.code = 'SIGNED_ORDER_REQUIRED';
+  throw err;
 }
 
-async function cancelOrder(orderId) {
-  return rpcCall('mersennet_orders_cancelOrder', [orderId]);
+async function cancelOrder(_orderId) {
+  const err = new Error(
+    'Unsigned cancelOrder is disabled; sign a cancelOrder tx to 0x…0100 and submit via eth_sendRawTransaction'
+  );
+  err.statusCode = 410;
+  err.code = 'SIGNED_ORDER_REQUIRED';
+  throw err;
 }
 
 // ---------------------------------------------------------------------
@@ -319,9 +316,13 @@ function depositCalldata(amount) {
 // standard-Ethereum compatible, so a MetaMask/ethers-signed deposit can't be
 // tracked or confirmed by the wallet. On a faucet testnet collateral is free
 // anyway, so we credit `owner` server-side instead of prompting a wallet tx.
-async function depositCollateralGasless(owner, amount) {
-  const amt = typeof amount === 'bigint' ? amount : BigInt(amount);
-  return rpcCall('mersennet_orders_depositCollateral', [owner, '0x' + amt.toString(16)]);
+async function depositCollateralGasless(_owner, _amount) {
+  const err = new Error(
+    'Unsigned depositCollateral is disabled; sign a depositCollateral tx to 0x…0100'
+  );
+  err.statusCode = 410;
+  err.code = 'SIGNED_DEPOSIT_REQUIRED';
+  throw err;
 }
 
 function withdrawCalldata(amount) {
