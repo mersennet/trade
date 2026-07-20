@@ -25,12 +25,17 @@ const maker = new BotWallet(RPC_URL, 'maker', process.env.MM_PRIVATE_KEY);
 // rested. Use a modest number of levels so every order lands and the book
 // stays deep + stable across all markets. ARB (seed 1) uses a larger tick
 // so its bid ladder doesn't collapse below price 1.
+// Levels are deliberately small: every order is a signed tx from ONE sender
+// (the maker), so orders settle as sequential nonces. Placing 5 markets x 2
+// sides x N levels per cycle faster than the chain mines wedges the maker's
+// mempool slot (nonce backlog) and stalls all its future orders. Keep the
+// per-cycle order count at/under what mines in one refresh interval.
 const MARKETS = {
-  1: { symbol: 'MRSN', seed: 115,   tick: 1,    baseSize: 50,  levels: 8 },
-  2: { symbol: 'BTC',  seed: 74500, tick: 10,   baseSize: 2,   levels: 8 },
-  3: { symbol: 'ETH',  seed: 3730,  tick: 1,    baseSize: 8,   levels: 8 },
-  4: { symbol: 'SOL',  seed: 148,   tick: 1,    baseSize: 25,  levels: 8 },
-  5: { symbol: 'ARB',  seed: 100,   tick: 1,    baseSize: 500, levels: 8 },
+  1: { symbol: 'MRSN', seed: 115,   tick: 1,    baseSize: 50,  levels: 3 },
+  2: { symbol: 'BTC',  seed: 74500, tick: 10,   baseSize: 2,   levels: 3 },
+  3: { symbol: 'ETH',  seed: 3730,  tick: 1,    baseSize: 8,   levels: 3 },
+  4: { symbol: 'SOL',  seed: 148,   tick: 1,    baseSize: 25,  levels: 3 },
+  5: { symbol: 'ARB',  seed: 100,   tick: 1,    baseSize: 500, levels: 3 },
 };
 
 const CONFIG = {
