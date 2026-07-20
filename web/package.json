@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.21",
+    "@walletconnect/ethereum-provider": "^2.23.10",
     "clsx": "^2.1.1",
     "ethers": "^5.8.0",
     "lightweight-charts": "^5.1.0",

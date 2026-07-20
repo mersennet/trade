@@ -7,13 +7,14 @@ import { api } from '@/lib/api';
 import { shortenAddress, formatNumber } from '@/lib/utils';
 
 export default function WalletButton() {
-  const { address, balance, provider, isConnected, connect, connectWithEmail, disconnect } = useWallet();
+  const { address, balance, provider, isConnected, connect, connectWalletConnect, connectWithEmail, disconnect } = useWallet();
   const setWallet = useStore((s) => s.setWallet);
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [collateral, setCollateral] = useState<number>(0);
   const [usdcBalance, setUsdcBalance] = useState<number>(0);
   const [showEmailLogin, setShowEmailLogin] = useState(false);
+  const [showConnectMenu, setShowConnectMenu] = useState(false);
   const [email, setEmail] = useState('');
 
   const refreshTokens = useCallback(async () => {
@@ -55,15 +56,19 @@ export default function WalletButton() {
     return () => clearInterval(interval);
   }, [address, isConnected, setWallet, refreshTokens]);
 
-  const handleConnect = async () => {
+  const handleConnect = async (method: 'injected' | 'walletconnect') => {
+    setShowConnectMenu(false);
     setLoading(true);
     try {
-      await connect();
+      if (method === 'walletconnect') await connectWalletConnect();
+      else await connect();
     } catch (e) {
       const msg = (e as Error)?.message || '';
+      // The WC modal throws when the user just closes it — not an error worth toasting.
+      if (/connection request reset|user rejected|modal closed/i.test(msg)) return;
       toast(
         /no (injected )?(ethereum|wallet)|metamask|window\.ethereum/i.test(msg)
-          ? 'No browser wallet found. Install MetaMask (or a compatible wallet) to connect.'
+          ? 'No browser wallet found. Install MetaMask, or use WalletConnect to link a mobile wallet.'
           : `Connection failed: ${msg.replace(/^Error: /, '') || 'unknown error'}`,
         'error',
       );
@@ -123,13 +128,39 @@ export default function WalletButton() {
 
   return (
     <div className="flex items-center gap-1.5">
-      <button
-        onClick={handleConnect}
-        disabled={loading}
-        className="px-4 md:px-5 h-8 premium-gradient text-black rounded-lg text-[11.5px] font-semibold transition-all hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        {loading ? 'Connecting…' : 'Connect Wallet'}
-      </button>
+      <div className="relative">
+        <button
+          onClick={() => setShowConnectMenu(!showConnectMenu)}
+          disabled={loading}
+          className="px-4 md:px-5 h-8 premium-gradient text-black rounded-lg text-[11.5px] font-semibold transition-all hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {loading ? 'Connecting…' : 'Connect Wallet'}
+        </button>
+        {showConnectMenu && !loading && (
+          <div className="absolute right-0 top-full mt-1 w-56 bg-surface border border-border rounded-xl p-1.5 shadow-xl z-50">
+            <button
+              onClick={() => handleConnect('injected')}
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left text-xs text-foreground hover:bg-surface-2 transition-colors"
+            >
+              <span className="text-base leading-none">🦊</span>
+              <span>
+                <span className="block font-medium">Browser wallet</span>
+                <span className="block text-[10px] text-dim">MetaMask or any injected wallet</span>
+              </span>
+            </button>
+            <button
+              onClick={() => handleConnect('walletconnect')}
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left text-xs text-foreground hover:bg-surface-2 transition-colors"
+            >
+              <span className="text-base leading-none">🔗</span>
+              <span>
+                <span className="block font-medium">WalletConnect</span>
+                <span className="block text-[10px] text-dim">Scan a QR with a mobile wallet</span>
+              </span>
+            </button>
+          </div>
+        )}
+      </div>
       <div className="relative">
         <button
           onClick={() => setShowEmailLogin(!showEmailLogin)}
