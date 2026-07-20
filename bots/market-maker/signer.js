@@ -82,16 +82,19 @@ class BotWallet {
     // Queue behind any in-flight send so nonces stay strictly sequential.
     const run = this._chain.then(async () => {
       if (this._nonce == null) await this.syncNonce();
-      // Bounded in-flight: the local nonce increments on RPC-accept, but the
-      // chain includes only a few of this sender's txs per block. Left
-      // unchecked the local nonce races far ahead of the mined nonce, so every
-      // further tx is a "future nonce" that is silently dropped and the maker
-      // wedges. If the gap grows too large, resync to the chain's pending
-      // nonce and let the backlog clear before signing more.
+      // Bounded in-flight WITHOUT resetting the nonce. The local nonce
+      // increments on RPC-accept, but the chain includes only a few of this
+      // sender's txs per block. If we let it race ahead, later txs become
+      // future-nonce and are dropped; if we *reset* it to the mined nonce we
+      // re-send nonces that are already in flight/mined (a churn loop that
+      // wedges the wallet). Instead, back off: when too many txs are
+      // outstanding, skip this send and let the backlog drain.
       const minedHex = await this.rpc('eth_getTransactionCount', [this.address, 'latest']);
       const mined = Number(BigInt(minedHex));
       if (this._nonce - mined > MAX_INFLIGHT) {
-        this._nonce = mined;
+        // Drop this order silently; the caller treats a null hash as "not
+        // placed" and the next cycle retries once the chain catches up.
+        return null;
       }
       const gasPriceHex = await this.rpc('eth_gasPrice', []);
       const tx = {
