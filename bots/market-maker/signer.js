@@ -27,10 +27,13 @@ const IFACE = new ethers.utils.Interface([
 
 const TIF_CODE = { gtc: 0, ioc: 1, fok: 2, Gtc: 0, Ioc: 1, Fok: 2 };
 
-// Max unmined txs a single bot wallet keeps in flight before it resyncs to the
-// chain nonce. Prevents the local nonce racing ahead of block inclusion (which
-// turns every later tx into a silently-dropped future nonce).
-const MAX_INFLIGHT = Number(process.env.BOT_MAX_INFLIGHT || 8);
+// Max unmined txs a single bot wallet keeps in flight before it backs off.
+// Prevents the local nonce racing ahead of block inclusion (later txs would
+// become silently-dropped future nonces). The node also caps queued txs per
+// sender, so this only needs to cover one refresh cycle's worth of orders so
+// a full ladder lands rather than being mostly dropped. Takers do tiny waves
+// and never approach it.
+const MAX_INFLIGHT = Number(process.env.BOT_MAX_INFLIGHT || 40);
 
 /** Deterministic bot private key for a labelled slot (e.g. "maker", "taker-3"). */
 function deriveKey(label) {
