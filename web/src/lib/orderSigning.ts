@@ -93,9 +93,13 @@ export async function placeOrderOnChain(
     TIF_CODE[tif],
   ]);
 
+  // Explicit gas: the precompile call would otherwise rely on eth_estimateGas,
+  // which reverts (and fails the order) when the account has no collateral yet.
+  // placeOrder needs ~50k precompile gas + intrinsic; 300k is a safe ceiling.
   const tx = await signer.sendTransaction({
     to: MERSENNET_ORDERS_PRECOMPILE,
     data,
+    gasLimit: 300_000,
   });
   await tx.wait(1);
 
@@ -128,6 +132,7 @@ export async function cancelOrderOnChain(
   const tx = await signer.sendTransaction({
     to: MERSENNET_ORDERS_PRECOMPILE,
     data,
+    gasLimit: 200_000,
   });
   await tx.wait(1);
   return tx.hash;

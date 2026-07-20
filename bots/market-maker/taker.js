@@ -22,13 +22,18 @@ const MARKETS = {
 const liveMid = {};
 function hexToNum(h) { return h ? Number(BigInt(h)) : 0; }
 
-// System-range addresses (0x…0b-0x…1e) — inside the 0x0000… prefix that the
-// leaderboard/points queries filter out, so bot flow never pollutes human
-// rankings. Starts at 0x0b to skip the standard EVM precompile addresses
-// (0x01-0x0a), which cannot receive plain value transfers for gas.
-const TAKERS = Array.from({ length: 20 }, (_, i) =>
-  '0x' + (i + 11).toString(16).padStart(40, '0')
+const { BotWallet } = require('./signer');
+
+// Each taker is a real, genesis-funded keypair that signs its own orders
+// (caller = the taker). Their addresses are deterministic (see bot-addresses.js)
+// so genesis funds them and the indexer excludes them from human leaderboards
+// via the configured BOT_ADDRESSES list.
+const NUM_TAKERS = Number(process.env.NUM_TAKERS || 20);
+const TAKER_WALLETS = Array.from({ length: NUM_TAKERS }, (_, i) =>
+  new BotWallet(process.env.RPC_URL || 'https://rpc.mersennet.com', `taker-${i}`)
 );
+const TAKERS = TAKER_WALLETS.map((w) => w.address);
+const walletByAddress = Object.fromEntries(TAKER_WALLETS.map((w) => [w.address, w]));
 
 // Ambient cadence: a small wave every few seconds ≈ 0.5-1 order/s. Orders are
 // consensus txs (mined over ~1s blocks), so this stays well under chain
@@ -175,15 +180,10 @@ function generateTrade() {
 // there is no direct fill reporting here.
 async function submitTrade(trade) {
   try {
-    const result = await rpcCall('mersennet_orders_submitOrder', [{
-      owner: trade.taker,
-      market_id: trade.marketId,
-      side: trade.side,
-      price: toHex(trade.price),
-      size: toHex(trade.size),
-      tif: 'gtc',
-    }]);
-    return { accepted: !!(result?.accepted || result?.txHash) };
+    const wallet = walletByAddress[trade.taker];
+    if (!wallet) return { accepted: false };
+    const txHash = await wallet.placeOrder(trade.marketId, trade.side, trade.price, trade.size, 'gtc');
+    return { accepted: !!txHash };
   } catch (e) {
     if (!submitErrLogged) {
       console.error(`[taker] submitOrder failed: ${e.message}`);
@@ -219,12 +219,12 @@ async function main() {
   console.log(`[taker] RPC: ${RPC_URL}`);
   console.log(`[taker] ${TAKERS.length} addresses | waves: ${CONFIG.waveSizeMin}-${CONFIG.waveSizeMax} orders`);
 
-  // Each taker wallet needs collateral to place crossing orders (submitOrder
-  // enforces margin). deposit_collateral just credits the integer amount.
-  console.log(`[taker] Depositing collateral for ${TAKERS.length} taker wallets...`);
-  await Promise.all(TAKERS.map(t =>
-    rpcCall('mersennet_orders_depositCollateral', [t, '0x' + (10n ** 12n).toString(16)])
-      .catch(e => console.error(`[taker] deposit ${t} failed: ${e.message}`))
+  // Each taker signs a depositCollateral tx (requires genesis native-MRSN
+  // funding). Margin is enforced on-chain before crossing orders can fill.
+  console.log(`[taker] Depositing collateral for ${TAKER_WALLETS.length} taker wallets...`);
+  await Promise.all(TAKER_WALLETS.map(w =>
+    w.depositCollateral(10n ** 12n)
+      .catch(e => console.error(`[taker] deposit ${w.address} failed: ${e.message}`))
   ));
 
   console.log('[taker] Waiting 15s for maker to seed orderbooks...');

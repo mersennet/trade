@@ -4,10 +4,16 @@
  * Run once: node drain-orders.js
  */
 
+const { BotWallet } = require('./signer');
+
 const RPC_URL = process.env.RPC_URL || 'https://rpc.mersennet.com';
-const OWNER = process.env.MM_WALLET || '0x0000000000000000000000000000000000000001';
-const BATCH_SIZE = 200;
+const BATCH_SIZE = 100;
 const BATCH_PAUSE = 100;
+
+// Cancels are signed by the maker wallet (the chain enforces order ownership),
+// so this drains the maker's own orders only.
+const maker = new BotWallet(RPC_URL, 'maker', process.env.MM_PRIVATE_KEY);
+const OWNER = maker.address;
 
 let rpcId = 1;
 
@@ -40,7 +46,7 @@ async function main() {
   for (let i = 0; i < ids.length; i += BATCH_SIZE) {
     const batch = ids.slice(i, i + BATCH_SIZE);
     const results = await Promise.allSettled(
-      batch.map(id => rpc('mersennet_orders_cancelOrder', [id]))
+      batch.map(id => maker.cancelOrder(id))
     );
 
     for (const r of results) {

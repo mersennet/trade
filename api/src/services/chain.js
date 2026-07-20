@@ -260,9 +260,11 @@ function reportFills(result, marketIdFallback, sideFallback) {
   }));
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 3000);
+  const headers = { 'Content-Type': 'application/json' };
+  if (process.env.REPORT_SECRET) headers['X-Report-Secret'] = process.env.REPORT_SECRET;
   fetch(INDEXER_REPORT_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(payload),
     signal: ctrl.signal,
   }).catch(() => {}).finally(() => clearTimeout(timer));

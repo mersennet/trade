@@ -8,6 +8,20 @@ const RPC_URL = process.env.RPC_URL || 'https://rpc.mersennet.com';
 const WS_URL = process.env.WS_URL || 'wss://rpc.mersennet.com';
 const DB_URL = process.env.DATABASE_URL || 'postgresql://mersennet:m3rs3nn3t_db_2026@127.0.0.1:5432/mersennet_trade';
 const REPORT_PORT = process.env.REPORT_PORT || 4010;
+
+// Shared secret required to POST trades to the internal report endpoint. The
+// endpoint writes straight into the trades/leaderboard tables, so leaving it
+// open lets anything on the network forge volume/PnL. Set REPORT_SECRET on the
+// indexer and the same value on the api/bots that report fills.
+const REPORT_SECRET = process.env.REPORT_SECRET || '';
+
+// Market-maker/taker bot addresses to exclude from the leaderboard and points
+// (comma-separated, any case). Bots now use real keypairs (not 0x0000-prefixed
+// system addresses), so the old prefix heuristic no longer catches them.
+const BOT_ADDRESSES = (process.env.BOT_ADDRESSES || '')
+  .split(',')
+  .map((a) => a.trim().toLowerCase())
+  .filter((a) => /^0x[0-9a-f]{40}$/.test(a));
 // Bind host for the internal trade-report server. Defaults to loopback (safe on
 // a bare host); set REPORT_HOST=0.0.0.0 in docker so the api container can reach
 // it over the internal network (the port is not published externally).
@@ -512,12 +526,11 @@ async function updateLeaderboard() {
            FROM trades
            WHERE block_timestamp IS NOT NULL
              AND block_timestamp > NOW() - $2::interval
-             -- Exclude system / market-maker bot accounts (addresses whose
-             -- first 19 bytes are zero, e.g. 0x0000..0001/000c/000d/0015).
-             -- These self-trade for liquidity and would otherwise dominate
-             -- the board with identical billion-dollar stats. Real wallets
-             -- never fall in this range.
+             -- Exclude legacy zero-prefixed system accounts AND the configured
+             -- market-maker/taker bot wallets. Bots self-trade for liquidity
+             -- and would otherwise dominate the board; real wallets are kept.
              AND taker NOT LIKE '0x00000000000000000000000000000000000000%'
+             AND LOWER(taker) <> ALL($4::text[])
            GROUP BY taker, market_id
          ),
          agg AS (
@@ -548,7 +561,7 @@ async function updateLeaderboard() {
            best_trade  = EXCLUDED.best_trade,
            worst_trade = EXCLUDED.worst_trade,
            updated_at  = NOW()`,
-        [period.name, period.interval, TRADE_USD_SCALE]
+        [period.name, period.interval, TRADE_USD_SCALE, BOT_ADDRESSES]
       );
       // Purge any previously-stored bot/system rows so the board reflects
       // only real traders going forward.
@@ -583,10 +596,12 @@ async function awardPoints() {
       `SELECT LOWER(taker) AS address, SUM(price * size)::numeric AS volume
        FROM trades
        WHERE taker IS NOT NULL AND block_timestamp IS NOT NULL
-         -- Exclude system / market-maker bot accounts (first 19 bytes zero)
+         -- Exclude legacy zero-prefixed accounts AND configured bot wallets
          -- so points reflect real traders only, matching the leaderboard.
          AND LOWER(taker) NOT LIKE '0x00000000000000000000000000000000000000%'
-       GROUP BY LOWER(taker)`
+         AND LOWER(taker) <> ALL($1::text[])
+       GROUP BY LOWER(taker)`,
+      [BOT_ADDRESSES]
     );
     let updated = 0;
     for (const row of vol.rows) {
@@ -735,6 +750,14 @@ let tradeReportCount = 0;
 function startTradeReportServer() {
   const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && req.url === '/trades') {
+      // Require the shared secret when one is configured — this endpoint writes
+      // directly into trades/leaderboard, so an open one lets anything forge
+      // volume/PnL. (Empty secret = disabled, for local dev only.)
+      if (REPORT_SECRET && req.headers['x-report-secret'] !== REPORT_SECRET) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'unauthorized' }));
+        return;
+      }
       let body = '';
       req.on('data', c => body += c);
       req.on('end', async () => {

@@ -52,7 +52,7 @@ export async function depositToVault(
   const amount = toChainAmount(humanAmount);
   const iface = new e.utils.Interface(PRECOMPILE_ABI);
   const data = iface.encodeFunctionData('depositCollateral', [amount]);
-  const tx = await signer.sendTransaction({ to: MERSENNET_ORDERS_PRECOMPILE, data });
+  const tx = await signer.sendTransaction({ to: MERSENNET_ORDERS_PRECOMPILE, data, gasLimit: 200_000 });
   await tx.wait(1);
   return { vaultTx: tx.hash };
 }
@@ -71,7 +71,7 @@ export async function withdrawFromVault(
   const amount = toChainAmount(humanAmount);
   const iface = new e.utils.Interface(PRECOMPILE_ABI);
   const data = iface.encodeFunctionData('withdrawCollateral', [amount]);
-  const tx = await signer.sendTransaction({ to: MERSENNET_ORDERS_PRECOMPILE, data });
+  const tx = await signer.sendTransaction({ to: MERSENNET_ORDERS_PRECOMPILE, data, gasLimit: 200_000 });
   await tx.wait(1);
   return { vaultTx: tx.hash };
 }

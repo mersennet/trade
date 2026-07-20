@@ -133,6 +133,19 @@ router.post('/', strictLimiter, async (req, res) => {
       return res.json({ conditionalOrder: result.rows[0], timestamp: Date.now() });
     }
 
+    // Limit / market orders are NO LONGER placed by the API. Doing so required
+    // trusting an unsigned `owner`, which let anyone trade as anyone. Clients
+    // must sign a placeOrder transaction to the CLOB precompile (0x…0100) and
+    // submit it via eth_sendRawTransaction — the chain executes it with
+    // caller = the verified signer. Conditional/TWAP metadata is still stored
+    // below; only the immediate limit/market placement is rejected here.
+    if (order_type === 'limit' || order_type === 'market' || (!order_type && (price || size) && !trigger_price)) {
+      return res.status(400).json({
+        error: 'Limit and market orders must be wallet-signed. Send a signed placeOrder tx to the CLOB precompile (0x0000000000000000000000000000000000000100) via eth_sendRawTransaction.',
+        code: 'SIGNED_ORDER_REQUIRED',
+      });
+    }
+
     if (!size) {
       return res.status(400).json({ error: 'Missing required field: size' });
     }
@@ -140,8 +153,8 @@ router.post('/', strictLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Missing required field: price (for limit/market orders)' });
     }
 
-    // limit / market: submit straight to the on-chain CLOB. Matching is
-    // atomic inside the chain engine — no off-chain sequencer.
+    // Legacy fallback retained only for internal/authorized flows; unsigned
+    // order placement is rejected by the node unless explicitly enabled.
     const chainPrice = toChainHex(price);
     const chainSize = toChainHex(size);
     if (!chainPrice) {

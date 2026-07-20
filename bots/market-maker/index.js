@@ -10,8 +10,14 @@
  * deposits collateral for the maker wallet so submitOrder passes margin checks.
  */
 
+const { BotWallet } = require('./signer');
+
 const RPC_URL = process.env.RPC_URL || 'https://rpc.mersennet.com';
 const INDEXER_URL = process.env.INDEXER_URL || 'http://127.0.0.1:4010/trades';
+
+// The maker signs every order/cancel/deposit with its own funded keypair
+// (native MRSN allocated at genesis). Orders execute with caller = this wallet.
+const maker = new BotWallet(RPC_URL, 'maker', process.env.MM_PRIVATE_KEY);
 
 // Orders now settle as consensus transactions (one tx per order, mined
 // over blocks). 30 levels x 2 sides x 5 markets = 300 tx/cycle saturated
@@ -28,7 +34,7 @@ const MARKETS = {
 };
 
 const CONFIG = {
-  owner: process.env.MM_WALLET || '0x0000000000000000000000000000000000000001',
+  owner: maker.address,
   markets: [1, 2, 3, 4, 5],
   // Slower cadence so each cycle's order txs fully mine (drain the
   // per-sender mempool) before the next batch — prevents the backlog that
@@ -107,17 +113,13 @@ let submitErrLogged = false;
 let marketMissing = false; // set when the chain reports "unknown market" (markets wiped by a state reset)
 async function submitOrder(marketId, side, price, size) {
   try {
-    return await rpcCall('mersennet_orders_submitOrder', [{
-      owner: CONFIG.owner,
-      market_id: marketId,
-      side,
-      price: toHex(price),
-      size: toHex(size),
-      tif: 'gtc',
-    }]);
+    // Signed placeOrder tx to the CLOB precompile. It gossips to the leader,
+    // mines in a block, and executes with caller = the maker wallet. Fills are
+    // read from the resulting order book / reported by the taker path, so we
+    // return the tx hash for logging rather than a synchronous outcome.
+    const txHash = await maker.placeOrder(marketId, side, price, size, 'gtc');
+    return { txHash, trades: [] };
   } catch (e) {
-    // Log once per cycle so a real failure (bad method/margin/market) is
-    // visible instead of silently producing an empty book.
     if (e.message && e.message.includes('unknown market')) marketMissing = true;
     if (!submitErrLogged) {
       console.error(`[mm] submitOrder(m${marketId} ${side} ${price}x${size}) failed: ${e.message}`);
@@ -168,12 +170,12 @@ async function cancelAllOrders() {
     const ids = openOrders.map(o => o.order_id || o.id).filter(Boolean).slice(0, 3000);
     if (ids.length === 0) return 0;
 
-    const batchSize = 500;
+    const batchSize = 200;
     let cancelled = 0;
     for (let i = 0; i < ids.length; i += batchSize) {
       const batch = ids.slice(i, i + batchSize);
       const results = await Promise.allSettled(
-        batch.map(id => rpcCall('mersennet_orders_cancelOrder', [id]))
+        batch.map(id => maker.cancelOrder(id))
       );
       cancelled += results.filter(r => r.status === 'fulfilled').length;
     }
@@ -190,9 +192,11 @@ async function flushReports() {
   if (pendingReports.length === 0) return;
   const batch = pendingReports.splice(0, pendingReports.length);
   try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (process.env.REPORT_SECRET) headers['X-Report-Secret'] = process.env.REPORT_SECRET;
     await fetch(INDEXER_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(batch),
     });
   } catch {}
@@ -200,10 +204,10 @@ async function flushReports() {
 
 // --- Startup bootstrap -----------------------------------------------------
 
-// Seed the 5 markets only when the chain has none yet. add_market assigns
-// sequential ids (markets.len()+1), so on a fresh chain MRSN,BTC,ETH,SOL,ARB
-// map to ids 1..5 — matching the api/web MARKETS table. If any market already
-// exists we skip, to avoid creating duplicates with shifted ids.
+// Markets are seeded deterministically from the genesis config on every node
+// (the unsigned addMarket RPC is disabled — it only mutated one node). The bot
+// just verifies they exist; if not, the chain wasn't started with the expected
+// genesis markets and there is nothing the bot can (or should) do about it.
 async function ensureMarkets() {
   const existing = await Promise.all(
     CONFIG.markets.map(async (id) => {
@@ -211,22 +215,23 @@ async function ensureMarkets() {
       catch { return false; }
     })
   );
-  if (existing.some(Boolean)) {
-    console.log(`[mm] markets already present (${existing.filter(Boolean).length}/${CONFIG.markets.length}) — skipping seed`);
-    return;
-  }
-  console.log('[mm] no markets found — seeding 1..5 (MRSN,BTC,ETH,SOL,ARB)');
-  for (const id of CONFIG.markets) {
-    const m = MARKETS[id];
-    const assigned = await rpcCall('mersennet_orders_addMarket', [m.symbol, toHex(m.tick), '0x1']);
-    console.log(`[mm]   addMarket ${m.symbol} -> id ${hexToNum(assigned)}`);
+  const present = existing.filter(Boolean).length;
+  if (present === CONFIG.markets.length) {
+    console.log(`[mm] all ${present} genesis markets present`);
+  } else {
+    console.warn(`[mm] only ${present}/${CONFIG.markets.length} markets present — check the node's genesis.markets config`);
   }
 }
 
-// Deposit collateral for the maker wallet so submitOrder passes margin checks.
+// Deposit collateral for the maker wallet (signed tx) so its orders pass the
+// margin check. Requires the wallet to be genesis-funded with native MRSN.
 async function ensureCollateral() {
-  await rpcCall('mersennet_orders_depositCollateral', [CONFIG.owner, toHex(Number(CONFIG.seedCollateral))]);
-  console.log(`[mm] deposited ${CONFIG.seedCollateral} collateral for ${CONFIG.owner}`);
+  try {
+    const txHash = await maker.depositCollateral(BigInt(CONFIG.seedCollateral));
+    console.log(`[mm] deposited ${CONFIG.seedCollateral} collateral for ${CONFIG.owner} (tx ${txHash})`);
+  } catch (e) {
+    console.error(`[mm] depositCollateral failed for ${CONFIG.owner}: ${e.message} — is the wallet funded with native MRSN at genesis?`);
+  }
 }
 
 async function refreshQuotes() {

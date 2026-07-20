@@ -11,7 +11,9 @@ services:
     environment:
       POSTGRES_DB: mersennet_trade
       POSTGRES_USER: mersennet
-      POSTGRES_PASSWORD: m3rs3nn3t_db_2026
+      # From the host .env (POSTGRES_PASSWORD=…). No default: never bake a DB
+      # password into the image/compose.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
@@ -29,12 +31,13 @@ services:
     restart: unless-stopped
     environment:
       PORT: "4005"
-      DATABASE_URL: postgresql://mersennet:m3rs3nn3t_db_2026@postgres:5432/mersennet_trade
+      DATABASE_URL: postgresql://mersennet:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/mersennet_trade
       RPC_URL: ${RPC_URL:-https://rpc.mersennet.com}
       WS_URL: ${WS_URL:-wss://rpc.mersennet.com}
       # Report user-order fills to the indexer (the node emits no WS trade event
       # for submitOrder RPC fills) so trades/volume/charts populate.
       INDEXER_REPORT_URL: http://indexer:4010/trades
+      REPORT_SECRET: ${REPORT_SECRET:?REPORT_SECRET must be set in .env}
     ports:
       - "127.0.0.1:4005:4005"
     depends_on:
@@ -47,12 +50,16 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://mersennet:m3rs3nn3t_db_2026@postgres:5432/mersennet_trade
+      DATABASE_URL: postgresql://mersennet:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/mersennet_trade
       RPC_URL: ${RPC_URL:-https://rpc.mersennet.com}
       WS_URL: ${WS_URL:-wss://rpc.mersennet.com}
       API_BASE: http://api:4005/api/v1
-      # Accept fill reports from the api container over the internal network.
+      # Accept fill reports from the api/bots over the internal network, gated by
+      # a shared secret so the write endpoint can't be used to forge volume/PnL.
       REPORT_HOST: 0.0.0.0
+      REPORT_SECRET: ${REPORT_SECRET:?REPORT_SECRET must be set in .env}
+      # Exclude the deterministic bot wallets from leaderboard/points.
+      BOT_ADDRESSES: ${BOT_ADDRESSES:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -82,7 +89,12 @@ services:
     environment:
       RPC_URL: ${RPC_URL:-https://rpc.mersennet.com}
       INDEXER_URL: http://indexer:4010/trades
-      MM_WALLET: ${MM_WALLET:-0x0000000000000000000000000000000000000001}
+      REPORT_SECRET: ${REPORT_SECRET:?REPORT_SECRET must be set in .env}
+      # Deterministic signing seed for the maker/taker wallets. The derived
+      # addresses must be funded with native MRSN at genesis (bot-addresses.js).
+      BOT_SEED: ${BOT_SEED:-mersennet-bot-v1}
+      CHAIN_ID: ${CHAIN_ID:-131071}
+      MM_PRIVATE_KEY: ${MM_PRIVATE_KEY:-}
     depends_on:
       - indexer
     profiles: ["bots"]
@@ -96,6 +108,10 @@ services:
     environment:
       RPC_URL: ${RPC_URL:-https://rpc.mersennet.com}
       INDEXER_URL: http://indexer:4010/trades
+      REPORT_SECRET: ${REPORT_SECRET:?REPORT_SECRET must be set in .env}
+      BOT_SEED: ${BOT_SEED:-mersennet-bot-v1}
+      CHAIN_ID: ${CHAIN_ID:-131071}
+      NUM_TAKERS: ${NUM_TAKERS:-20}
     depends_on:
       - market-maker
     profiles: ["bots"]
