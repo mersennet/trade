@@ -27,6 +27,11 @@ const IFACE = new ethers.utils.Interface([
 
 const TIF_CODE = { gtc: 0, ioc: 1, fok: 2, Gtc: 0, Ioc: 1, Fok: 2 };
 
+// Max unmined txs a single bot wallet keeps in flight before it resyncs to the
+// chain nonce. Prevents the local nonce racing ahead of block inclusion (which
+// turns every later tx into a silently-dropped future nonce).
+const MAX_INFLIGHT = Number(process.env.BOT_MAX_INFLIGHT || 8);
+
 /** Deterministic bot private key for a labelled slot (e.g. "maker", "taker-3"). */
 function deriveKey(label) {
   return ethers.utils.keccak256(ethers.utils.toUtf8Bytes(`${BOT_SEED}:${label}`));
@@ -77,6 +82,17 @@ class BotWallet {
     // Queue behind any in-flight send so nonces stay strictly sequential.
     const run = this._chain.then(async () => {
       if (this._nonce == null) await this.syncNonce();
+      // Bounded in-flight: the local nonce increments on RPC-accept, but the
+      // chain includes only a few of this sender's txs per block. Left
+      // unchecked the local nonce races far ahead of the mined nonce, so every
+      // further tx is a "future nonce" that is silently dropped and the maker
+      // wedges. If the gap grows too large, resync to the chain's pending
+      // nonce and let the backlog clear before signing more.
+      const minedHex = await this.rpc('eth_getTransactionCount', [this.address, 'latest']);
+      const mined = Number(BigInt(minedHex));
+      if (this._nonce - mined > MAX_INFLIGHT) {
+        this._nonce = mined;
+      }
       const gasPriceHex = await this.rpc('eth_gasPrice', []);
       const tx = {
         to: PRECOMPILE,
