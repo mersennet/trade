@@ -187,37 +187,35 @@ export default function TradeForm() {
         });
         toast(`${trade.orderType.toUpperCase()} trigger order armed`, 'success');
       } else {
-        // Limit / market orders are submitted straight to Mersennet's native
-        // on-chain CLOB — the API forwards to the chain, which matches
-        // atomically inside the protocol (no off-chain sequencer).
+        // Limit / market orders are signed by the wallet and sent straight to
+        // Mersennet's native on-chain CLOB precompile (0x…0100), where the
+        // matching engine runs atomically and the order owner IS the verified
+        // transaction signer. The API no longer places orders on a caller's
+        // behalf (that trusted an unsigned `owner` field — account takeover).
         const ticker = tickers[market.id];
-        // Market orders need a hard price cap — use mark price + the user's
-        // slippage cushion as the on-chain limit price, sent as IOC.
         const slippagePct = (useStore.getState().slippage || 1) / 100;
         let priceForOrder = trade.price;
         if (trade.orderType === 'market') {
           const m = ticker?.markPrice || 0;
           if (!m) throw new Error('No mark price available. Try again in a moment.');
+          // Fixed-decimal, never scientific notation (toString() emits "1e-8"
+          // for small numbers, which does not parse as a base-10 amount).
           priceForOrder = trade.side === 'buy'
-            ? (m * (1 + slippagePct)).toString()
-            : (m * (1 - slippagePct)).toString();
+            ? (m * (1 + slippagePct)).toFixed(8)
+            : (m * (1 - slippagePct)).toFixed(8);
         }
-
-        await api.submitOrder({
-          owner: orderOwner,
-          market_id: market.id,
-          side: trade.side === 'buy' ? 'Buy' : 'Sell',
-          price: priceForOrder,
-          size: trade.size,
-          tif: trade.orderType === 'market'
-            ? 'Ioc'
-            : trade.tif === 'gtc' ? 'Gtc' : trade.tif === 'ioc' ? 'Ioc' : 'Fok',
-          leverage: trade.leverage,
-          order_type: trade.orderType,
-          tp_price: trade.tpEnabled && trade.tpPrice ? trade.tpPrice : undefined,
-          sl_price: trade.slPrice ? trade.slPrice : undefined,
-          reduce_only: trade.reduceOnly,
-          builder_code: builderCode,
+        const { placeOrderOnChain } = await import('@/lib/orderSigning');
+        const tif = trade.orderType === 'market'
+          ? 'Ioc'
+          : trade.tif === 'gtc' ? 'Gtc' : trade.tif === 'ioc' ? 'Ioc' : 'Fok';
+        void builderCode; // referral credit now derives from on-chain fills, not an API hint
+        await placeOrderOnChain(provider, {
+          marketId: market.id,
+          isBuy: trade.side === 'buy',
+          priceUsd: priceForOrder,
+          sizeBase: trade.size,
+          tif,
+          sessionKey: useOneClick ? sessionKey || undefined : undefined,
         });
         toast(`${trade.side === 'buy' ? 'Buy' : 'Sell'} ${trade.orderType} order placed`, 'success');
       }

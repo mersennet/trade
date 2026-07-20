@@ -13,7 +13,7 @@ type Tab = 'positions' | 'orders' | 'trades' | 'funding' | 'history';
 
 export default function PositionsTable() {
   const { market, positions, orders, setPositions, setOrders, tickers } = useStore();
-  const { address, isConnected, connect } = useWallet();
+  const { address, isConnected, connect, provider } = useWallet();
   const { toast } = useToast();
   const [tab, setTab] = useState<Tab>('positions');
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -57,7 +57,10 @@ export default function PositionsTable() {
   const handleCancel = async (orderId: number) => {
     setCancellingId(orderId);
     try {
-      await api.cancelOrder(orderId);
+      // Cancels are wallet-signed txs to the CLOB precompile; the chain
+      // enforces that the signer owns the order (no server-side owner trust).
+      const { cancelOrderOnChain } = await import('@/lib/orderSigning');
+      await cancelOrderOnChain(provider, orderId);
       toast('Order cancelled', 'success');
       if (useAppStore.getState().soundEnabled) playSound('cancel');
       if (address) {
@@ -74,9 +77,20 @@ export default function PositionsTable() {
   const handleCancelAll = async () => {
     if (!address) return;
     try {
-      await api.cancelAllOrders(address);
-      toast('All orders cancelled', 'success');
-      if (useAppStore.getState().soundEnabled) playSound('cancel');
+      // Each cancel is a wallet-signed tx (the chain checks ownership), so
+      // cancel-all signs every open order in turn rather than asking the API
+      // to cancel on the user's behalf.
+      const { cancelOrderOnChain } = await import('@/lib/orderSigning');
+      const open = (await api.getOrders(address)).orders || [];
+      if (open.length === 0) { toast('No open orders', 'info'); return; }
+      let ok = 0;
+      for (const o of open) {
+        const oid = (o as { order_id?: number; id?: number }).order_id ?? (o as { id?: number }).id;
+        if (oid == null) continue;
+        try { await cancelOrderOnChain(provider, oid); ok++; } catch { /* skip failures */ }
+      }
+      toast(`Cancelled ${ok} of ${open.length} orders`, ok > 0 ? 'success' : 'error');
+      if (ok > 0 && useAppStore.getState().soundEnabled) playSound('cancel');
       const res = await api.getOrders(address);
       setOrders(res.orders);
     } catch (e) {
@@ -97,19 +111,20 @@ export default function PositionsTable() {
       return;
     }
     const slippagePct = (useAppStore.getState().slippage || 1) / 100;
+    // Fixed-decimal (never scientific notation) IOC limit price.
     const priceForClose = side === 'Buy'
-      ? (mark * (1 + slippagePct)).toString()
-      : (mark * (1 - slippagePct)).toString();
+      ? (mark * (1 + slippagePct)).toFixed(8)
+      : (mark * (1 - slippagePct)).toFixed(8);
     try {
-      await api.submitOrder({
-        owner: address,
-        market_id: pos.marketId,
-        side,
-        price: priceForClose,
-        size: size.toString(),
-        order_type: 'market',
+      // Signed IOC order to the precompile closes the position (reduce-only is
+      // implicit: an opposing IOC order nets the existing position down).
+      const { placeOrderOnChain } = await import('@/lib/orderSigning');
+      await placeOrderOnChain(provider, {
+        marketId: pos.marketId,
+        isBuy: side === 'Buy',
+        priceUsd: priceForClose,
+        sizeBase: size.toString(),
         tif: 'Ioc',
-        reduce_only: true,
       });
       toast(`Closing ${pos.symbol} position`, 'success');
       if (useAppStore.getState().soundEnabled) playSound('fill');

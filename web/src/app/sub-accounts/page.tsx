@@ -1,128 +1,76 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useWallet } from '@/hooks/useWallet';
-import { useToast } from '@/components/shared/Toast';
 import { useStore } from '@/stores/useStore';
 import { shortenAddress, cn } from '@/lib/utils';
 
-interface SubAccount {
+/**
+ * Sub-accounts.
+ *
+ * Mersennet orders are now wallet-signed transactions to the CLOB precompile —
+ * the trading identity IS the connected wallet (msg.sender). A separate
+ * "sub-account" is therefore just another wallet address you connect.
+ *
+ * We deliberately do NOT generate or store private keys in the browser: a prior
+ * version wrote raw `ethers.Wallet.createRandom()` keys into localStorage, which
+ * any XSS or malicious extension could exfiltrate to drain funds. Keys must live
+ * in a real wallet (MetaMask account, hardware wallet, etc.), never in web
+ * storage.
+ */
+
+// Only non-sensitive labels are persisted — addresses the user wants to track.
+interface SubAccountLabel {
   name: string;
   address: string;
-  privateKey: string;
 }
+
+const LABELS_KEY = 'pt_sub_account_labels';
 
 export default function SubAccountsPage() {
   const { address, isConnected } = useWallet();
-  const { toast } = useToast();
-  const { sessionKey, setSessionKey, setOneClick, setWallet: setWalletStore } = useStore();
-  const [accounts, setAccounts] = useState<SubAccount[]>([]);
-  const [activeIdx, setActiveIdx] = useState(-1);
+  const { sessionKey } = useStore();
+  const [labels, setLabels] = useState<SubAccountLabel[]>([]);
   const [newName, setNewName] = useState('');
-  const [sessionAddress, setSessionAddress] = useState<string | null>(null);
+  const [newAddress, setNewAddress] = useState('');
 
   useEffect(() => {
-    const saved = localStorage.getItem('pt_sub_accounts');
-    if (saved) try { setAccounts(JSON.parse(saved)); } catch {}
-    setActiveIdx(parseInt(localStorage.getItem('pt_active_sub') || '-1'));
+    // One-time cleanup: purge any plaintext keys written by the old version.
+    localStorage.removeItem('pt_sub_accounts');
+    localStorage.removeItem('pt_active_sub');
+    const saved = localStorage.getItem(LABELS_KEY);
+    if (saved) { try { setLabels(JSON.parse(saved)); } catch { /* ignore */ } }
   }, []);
 
-  useEffect(() => {
-    if (!sessionKey) { setSessionAddress(null); return; }
-    (async () => {
-      try {
-        const { ethers } = await import('ethers');
-        const wallet = new ethers.Wallet(sessionKey);
-        setSessionAddress(wallet.address);
-      } catch {
-        setSessionAddress(null);
-      }
-    })();
-  }, [sessionKey]);
-
-  const save = (accs: SubAccount[]) => {
-    setAccounts(accs);
-    localStorage.setItem('pt_sub_accounts', JSON.stringify(accs));
+  const save = (next: SubAccountLabel[]) => {
+    setLabels(next);
+    localStorage.setItem(LABELS_KEY, JSON.stringify(next));
   };
 
-  const create = async () => {
-    if (!newName.trim()) { toast('Enter a name', 'error'); return; }
-    const { ethers } = await import('ethers');
-    const wallet = ethers.Wallet.createRandom();
-    const acc: SubAccount = { name: newName.trim(), address: wallet.address, privateKey: wallet.privateKey };
-    save([...accounts, acc]);
+  const add = () => {
+    const name = newName.trim();
+    const addr = newAddress.trim();
+    if (!name || !/^0x[0-9a-fA-F]{40}$/.test(addr)) return;
+    save([...labels, { name, address: addr }]);
     setNewName('');
-    toast(`Sub-account "${acc.name}" created`, 'success');
+    setNewAddress('');
   };
 
-  const switchTo = async (idx: number) => {
-    setActiveIdx(idx);
-    localStorage.setItem('pt_active_sub', idx.toString());
-    if (idx === -1) {
-      try {
-        if (typeof window !== 'undefined' && window.ethereum) {
-          const accs = (await window.ethereum.request({ method: 'eth_accounts' })) as string[];
-          if (accs[0]) setWalletStore({ address: accs[0] });
-        }
-      } catch {}
-      toast('Switched to main account', 'info');
-    } else {
-      const acc = accounts[idx];
-      // On Mersennet's testnet, orders and collateral deposits are keyed by the
-      // `owner` address (no wallet signature), so switching the active address
-      // makes this sub-account the trading identity: its own collateral, its own
-      // positions and orders. Fund it from the faucet + deposit like any account.
-      // The generated key is kept locally so the sub-account can also be imported
-      // into an external wallet.
-      setWalletStore({ address: acc.address });
-      toast(`Switched to ${acc.name} — now trading as this account (fund it via the faucet)`, 'info');
-    }
-  };
-
-  const remove = (idx: number) => {
-    if (activeIdx === idx) switchTo(-1);
-    const next = accounts.filter((_, i) => i !== idx);
-    save(next);
-    toast('Sub-account removed', 'info');
-  };
-
-  const copyKey = (key: string) => {
-    navigator.clipboard.writeText(key);
-    toast('Private key copied to clipboard', 'info');
-  };
-
-  const generateSessionKey = async () => {
-    const { ethers } = await import('ethers');
-    const wallet = ethers.Wallet.createRandom();
-    setSessionKey(wallet.privateKey);
-    toast('Session key generated', 'success');
-  };
-
-  // NOTE: Mersennet has no on-chain session-key delegation yet — orders are
-  // plain msg.sender txs. A generated session key cannot trade the main
-  // account's collateral, so we do NOT pretend to "approve" one for trading.
-  // The Approve button is disabled until real delegation ships.
-
-  const revokeSessionKey = () => {
-    setSessionKey(null);
-    setOneClick(false);
-    toast('Session key revoked', 'info');
-  };
+  const remove = (idx: number) => save(labels.filter((_, i) => i !== idx));
 
   if (!isConnected) {
     return (
       <div className="p-4 max-w-full space-y-6">
         <div className="text-center mb-8">
-          <h2 className="text-2xl font-bold text-foreground mb-2">Sub-Accounts & Session Keys</h2>
-          <p className="text-dim text-sm">Isolated strategies and one-click trading</p>
+          <h2 className="text-2xl font-bold text-foreground mb-2">Sub-Accounts</h2>
+          <p className="text-dim text-sm">Track and switch between your wallet accounts</p>
         </div>
         <div className="bg-surface border border-border rounded-xl p-10 text-center">
-          <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-primary/8 flex items-center justify-center">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-primary/50">
-              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
-            </svg>
-          </div>
           <h3 className="text-sm font-medium text-foreground mb-1">Connect Wallet</h3>
-          <p className="text-xs text-dim max-w-md mx-auto">Connect your wallet to create testnet sub-accounts, each an independent trading identity you fund from the faucet. One-click session-key delegation (trading without a wallet popup) is previewed below and not live yet.</p>
+          <p className="text-xs text-dim max-w-md mx-auto">
+            Orders on Mersennet are signed by your connected wallet, so each wallet account is its own
+            trading identity. Connect a wallet to get started, then add labels for any other accounts
+            you want to track here.
+          </p>
         </div>
       </div>
     );
@@ -131,141 +79,75 @@ export default function SubAccountsPage() {
   return (
     <div className="p-4 max-w-full space-y-6">
       <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-foreground mb-2">Sub-Accounts & Session Keys</h2>
-        <p className="text-dim text-sm">Independent testnet trading accounts, plus a session-key preview</p>
+        <h2 className="text-2xl font-bold text-foreground mb-2">Sub-Accounts</h2>
+        <p className="text-dim text-sm">Each wallet account is an independent trading identity</p>
       </div>
 
-      {/* One-Click Trading / Session Keys */}
-      <div className="bg-surface border border-primary/30 rounded-xl p-5 shadow-[0_0_24px_rgba(139,92,246,0.06)]">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-3 h-3 rounded-full bg-dim/30 transition-colors" />
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">One-Click Trading</h3>
-            <span className="px-1.5 py-0.5 bg-yellow/10 text-yellow rounded text-[9px] font-semibold uppercase tracking-wider">Preview · not yet on-chain</span>
-          </div>
-        </div>
-
-        <div className="bg-surface-2 rounded-lg p-3 mb-4 text-xs text-dim leading-relaxed">
-          <p className="mb-2">
-            <span className="text-foreground font-medium">How it will work:</span> Once on-chain session-key delegation
-            ships, you will be able to register a temporary key that signs orders on your behalf, enabling instant
-            execution without a MetaMask popup for every trade.
-          </p>
-          <p>
-            <span className="text-yellow font-medium">Not active yet.</span> Mersennet orders are plain wallet
-            transactions today, and a generated key holds no collateral and is not authorized to trade your account.
-            You can generate and store a key locally now, but it cannot place orders for you until delegation is live.
-          </p>
-        </div>
-
-        {!sessionKey ? (
-          <button
-            onClick={generateSessionKey}
-            className="w-full py-2.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium hover:shadow-[0_0_16px_rgba(139,92,246,0.15)] transition-all duration-200"
-          >
-            Generate Session Key
-          </button>
-        ) : (
-          <div className="space-y-3">
-            <div className="flex items-center gap-3 bg-surface-2 rounded-lg p-3">
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] text-dim uppercase tracking-wider font-medium mb-0.5">Session Key Address</p>
-                <p className="text-foreground font-mono text-xs truncate">{sessionAddress || 'Deriving...'}</p>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="px-2 py-0.5 bg-surface text-dim rounded text-[10px] font-medium whitespace-nowrap">
-                  Stored locally
-                </span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                disabled
-                title="On-chain session-key delegation is not available yet"
-                className="py-2 bg-surface-2 text-dim rounded-lg text-sm font-medium cursor-not-allowed"
-              >
-                Approve for Trading (coming soon)
-              </button>
-              <button
-                onClick={revokeSessionKey}
-                className="py-2 bg-red/10 text-red rounded-lg text-sm font-medium hover:bg-red/20 transition-colors duration-200"
-              >
-                Delete Key
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* How switching works on the testnet */}
       <div className="bg-surface-2 border border-border rounded-lg p-3 text-[11.5px] text-dim leading-relaxed">
-        <span className="text-foreground font-medium">How this works on testnet.</span> Mersennet keys orders and
-        collateral by the <span className="text-foreground">owner address</span> (no wallet signature required), so
-        switching to a sub-account makes it your active trading identity: its own collateral, positions and orders.
-        Fund each one from the faucet and deposit like any account. Signature-gated delegation (one signer controlling
-        many accounts, as with on-chain account abstraction) is not live yet.
+        <span className="text-foreground font-medium">How this works.</span> Orders are wallet-signed
+        transactions to the on-chain order book, so the account you trade as is whichever wallet is
+        connected. To trade as a different account, switch accounts in your wallet (e.g. MetaMask) and
+        reconnect. For security we never generate or store private keys in the browser — add other
+        accounts below only as labels to keep an eye on their balances and positions.
+        {sessionKey ? ' A session key is set locally but on-chain delegation is not live yet, so it cannot sign orders.' : ''}
       </div>
 
-      {/* Main Account */}
-      <div
-        className={cn(
-          'bg-surface border rounded-xl p-4 cursor-pointer hover-lift transition-all duration-200',
-          activeIdx === -1 ? 'border-primary' : 'border-border'
-        )}
-        onClick={() => switchTo(-1)}
-      >
+      {/* Connected (active) account */}
+      <div className="bg-surface border border-primary rounded-xl p-4">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs font-medium text-foreground uppercase tracking-wider">Main Account</p>
+            <p className="text-xs font-medium text-foreground uppercase tracking-wider">Connected Account</p>
             <p className="text-xs text-dim font-mono">{shortenAddress(address || '', 8)}</p>
           </div>
-          {activeIdx === -1 && <span className="px-2 py-0.5 bg-green/20 text-green rounded text-xs">Active</span>}
+          <span className="px-2 py-0.5 bg-green/20 text-green rounded text-xs">Active</span>
         </div>
       </div>
 
-      {/* Sub-Accounts */}
-      {accounts.map((acc, i) => (
+      {/* Tracked labels */}
+      {labels.map((acc, i) => (
         <div
-          key={i}
+          key={acc.address}
           className={cn(
-            'bg-surface border rounded-xl p-4 hover-lift transition-all duration-200',
-            activeIdx === i ? 'border-primary' : 'border-border'
+            'bg-surface border rounded-xl p-4 transition-all duration-200',
+            acc.address.toLowerCase() === (address || '').toLowerCase() ? 'border-primary' : 'border-border'
           )}
         >
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-medium text-foreground uppercase tracking-wider">{acc.name}</p>
               <p className="text-xs text-dim font-mono">{shortenAddress(acc.address, 8)}</p>
             </div>
-            {activeIdx === i && <span className="px-2 py-0.5 bg-cyan/20 text-cyan rounded text-xs">Active</span>}
-          </div>
-          <div className="flex gap-2">
-            <button onClick={() => switchTo(i)} className="px-3 py-1 bg-primary/10 text-primary rounded text-xs hover:bg-primary/20 transition-colors duration-200">
-              Trade as this
-            </button>
-            <button onClick={() => copyKey(acc.privateKey)} className="px-3 py-1 bg-surface-2 text-dim hover:text-muted rounded text-xs transition-colors duration-200">
-              Export Key
-            </button>
-            <button onClick={() => remove(i)} className="px-3 py-1 bg-red/10 text-red rounded text-xs hover:bg-red/20 transition-colors duration-200">
-              Delete
+            <button
+              onClick={() => remove(i)}
+              className="px-3 py-1 bg-red/10 text-red rounded text-xs hover:bg-red/20 transition-colors duration-200"
+            >
+              Remove
             </button>
           </div>
         </div>
       ))}
 
-      {/* Create Sub-Account */}
+      {/* Add a tracked account (address only) */}
       <div className="bg-surface border border-border rounded-xl p-4">
-        <h3 className="text-xs font-medium text-foreground uppercase tracking-wider mb-3">Create Sub-Account</h3>
-        <div className="flex gap-2">
+        <h3 className="text-xs font-medium text-foreground uppercase tracking-wider mb-3">Track an Account</h3>
+        <div className="flex flex-col gap-2 sm:flex-row">
           <input
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            placeholder="Account name (e.g. Scalping)"
+            placeholder="Label (e.g. Scalping)"
             className="flex-1 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary transition-colors duration-200"
           />
-          <button onClick={create} className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium hover:shadow-[0_0_16px_rgba(139,92,246,0.15)] transition-all duration-200">
-            Create
+          <input
+            value={newAddress}
+            onChange={(e) => setNewAddress(e.target.value)}
+            placeholder="0x… address"
+            className="flex-[2] bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-foreground font-mono outline-none focus:border-primary transition-colors duration-200"
+          />
+          <button
+            onClick={add}
+            className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium transition-all duration-200"
+          >
+            Add
           </button>
         </div>
       </div>
