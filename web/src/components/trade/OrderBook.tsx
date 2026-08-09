@@ -24,6 +24,18 @@ export default function OrderBook() {
   const [tradeFilter, setTradeFilter] = useState<'all' | 'buy' | 'sell'>('all');
   // Size column units: base asset or USD notional (CEX-standard toggle).
   const [sizeUnit, setSizeUnit] = useState<'base' | 'usd'>('base');
+  const [showGrouping, setShowGrouping] = useState(false);
+  const groupingRef = useRef<HTMLDivElement>(null);
+
+  // Close the grouping dropdown on outside click.
+  useEffect(() => {
+    if (!showGrouping) return;
+    const handler = (e: MouseEvent) => {
+      if (groupingRef.current && !groupingRef.current.contains(e.target as Node)) setShowGrouping(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showGrouping]);
   // VWAP hover preview: hovering a book level shows the average fill price,
   // cumulative size and price impact of sweeping the book up to that level.
   const [hoverPreview, setHoverPreview] = useState<{
@@ -215,18 +227,33 @@ export default function OrderBook() {
               title="Toggle size units: base asset vs USD notional"
               className="bg-surface-2 text-dim hover:text-foreground text-[10px] px-1.5 py-0.5 rounded border border-border transition-colors font-mono"
             >{sizeUnit === 'base' ? market.base : 'USD'}</button>
-            <select
-              value={grouping}
-              onChange={(e) => setGrouping(Number(e.target.value))}
-              aria-label="Price grouping"
-              className="bg-surface-2 text-foreground text-[11px] px-2 py-0.5 rounded border border-border cursor-pointer focus:border-primary/40"
-            >
-              <option value={1}>1</option>
-              <option value={10}>10</option>
-              <option value={50}>50</option>
-              <option value={100}>100</option>
-              <option value={500}>500</option>
-            </select>
+            {/* Styled grouping dropdown (the native <select> rendered with
+                dated OS chrome, ugliest on Windows) */}
+            <div className="relative" ref={groupingRef}>
+              <button
+                onClick={() => setShowGrouping((v) => !v)}
+                aria-label="Price grouping"
+                aria-expanded={showGrouping}
+                className="bg-surface-2 text-foreground text-[11px] px-2 py-0.5 rounded border border-border hover:border-primary/40 transition-colors font-mono flex items-center gap-1"
+              >
+                {grouping}
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className={cn('text-dim transition-transform', showGrouping && 'rotate-180')}><polyline points="6 9 12 15 18 9" /></svg>
+              </button>
+              {showGrouping && (
+                <div className="absolute right-0 top-full mt-1 bg-surface border border-border rounded-lg shadow-xl z-50 py-1 min-w-[72px]">
+                  {[1, 10, 50, 100, 500].map((g) => (
+                    <button
+                      key={g}
+                      onClick={() => { setGrouping(g); setShowGrouping(false); }}
+                      className={cn(
+                        'block w-full text-right px-3 py-1.5 text-[11px] font-mono transition-colors',
+                        g === grouping ? 'text-primary bg-primary/10' : 'text-foreground hover:bg-surface-2'
+                      )}
+                    >{g}</button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

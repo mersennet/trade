@@ -580,24 +580,9 @@ export default function TradeForm() {
       <div>
         <div className="flex items-center justify-between mb-1.5">
           <label className="text-[11px] text-muted font-medium">{t('trade.size', 'Size')} ({market.base})</label>
-          <div className="flex items-center gap-2">
-            {isConnected && (
-              <span className="text-[10px] text-dim font-mono">
-                Avail <span className="text-foreground/80">{formatNumber(collateral, 2)}</span>
-              </span>
-            )}
-            <button
-              onClick={() => {
-                const markPrice = tickers[market.id]?.markPrice || 0;
-                if (!markPrice || !collateral) return;
-                setTrade({ size: ((collateral * trade.leverage) / markPrice).toFixed(4) });
-              }}
-              className="text-[10px] text-primary hover:text-primary-hover font-medium"
-            >Max</button>
-            <button onClick={() => setShowCalc(!showCalc)} className="text-[10px] text-primary hover:text-primary-hover font-medium">
-              {showCalc ? 'Hide Calc' : 'Size Calc'}
-            </button>
-          </div>
+          <button onClick={() => setShowCalc(!showCalc)} className="text-[10px] text-primary hover:text-primary-hover font-medium">
+            {showCalc ? 'Hide Calc' : 'Size Calc'}
+          </button>
         </div>
         <input
           type="number" value={trade.size}
@@ -606,6 +591,22 @@ export default function TradeForm() {
           placeholder="0.00"
           className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-dim font-mono outline-none focus:border-primary/60 focus:bg-surface-3 transition-all"
         />
+        {/* Available balance + Max, on their own row so the label never wraps */}
+        {isConnected && (
+          <div className="flex items-center justify-between mt-1">
+            <span className="text-[10px] text-dim font-mono">
+              Avail <span className="text-foreground/80">{formatNumber(collateral, 2)} MRSN</span>
+            </span>
+            <button
+              onClick={() => {
+                const markPrice = tickers[market.id]?.markPrice || 0;
+                if (!markPrice || !collateral) return;
+                setTrade({ size: ((collateral * trade.leverage) / markPrice).toFixed(4) });
+              }}
+              className="text-[10px] text-primary hover:text-primary-hover font-medium"
+            >Max</button>
+          </div>
+        )}
         {/* Size % presets */}
         <div className="flex gap-px bg-background rounded-md border border-border overflow-hidden mt-1.5">
           {SIZE_PRESETS.map((pct) => {
