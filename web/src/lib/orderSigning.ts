@@ -45,6 +45,58 @@ export function toChainUnits(human: string | number): string {
 }
 
 /**
+ * Compute an IOC limit price that actually crosses the *live* order book for a
+ * "market" order, bounded by the caller's slippage tolerance.
+ *
+ * The CLOB uses integer price ticks. Pricing a market order off mark × (1 ±
+ * slippage) and rounding to the nearest integer silently fails to cross on
+ * markets where one tick is larger than the slippage cushion (e.g. MRSN ≈ 98):
+ * the order is accepted, costs gas, and fills nothing. Here we read the current
+ * best bid/ask from the chain and price *through* it by at least one tick, in
+ * the correct rounding direction (buy → up, sell → down), then widen by the
+ * slippage tolerance so a market order sweeps available liquidity.
+ */
+export async function marketableLimitPrice(
+  marketId: number,
+  isBuy: boolean,
+  slippagePct: number,
+  markFallback = 0,
+): Promise<string> {
+  const rpcUrl = getDefaultChain().rpcUrls[0];
+  const toInt = (v: unknown): number =>
+    typeof v === 'string' && v.startsWith('0x') ? parseInt(v, 16) : Number(v);
+
+  let bestBid = 0;
+  let bestAsk = 0;
+  try {
+    const res = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'mersennet_orders_getOrderBook', params: [marketId] }),
+    });
+    const { result } = await res.json();
+    const bidPrices = (result?.bids || []).map((b: { price: unknown }) => toInt(b.price)).filter((n: number) => n > 0);
+    const askPrices = (result?.asks || []).map((a: { price: unknown }) => toInt(a.price)).filter((n: number) => n > 0);
+    bestBid = bidPrices.length ? Math.max(...bidPrices) : 0;
+    bestAsk = askPrices.length ? Math.min(...askPrices) : 0;
+  } catch {
+    // fall through to mark-price fallback below
+  }
+
+  const slip = Math.max(0, slippagePct) / 100;
+  if (isBuy) {
+    const ref = bestAsk || markFallback;
+    if (!ref) throw new Error('No ask-side liquidity or mark price — cannot place a market buy right now.');
+    // Cross the best ask by at least one tick, then widen by slippage.
+    return String(Math.max(Math.ceil(ref * (1 + slip)), Math.ceil(ref) + 1));
+  }
+  const ref = bestBid || markFallback;
+  if (!ref) throw new Error('No bid-side liquidity or mark price — cannot place a market sell right now.');
+  // Cross the best bid by at least one tick (floor to 1), then widen by slippage.
+  return String(Math.max(1, Math.min(Math.floor(ref * (1 - slip)), Math.floor(ref) - 1)));
+}
+
+/**
  * Place an order directly on the on-chain CLOB via a wallet transaction.
  *
  * @param signerSource  ethers Web3Provider, OR ignored when `sessionKey` set

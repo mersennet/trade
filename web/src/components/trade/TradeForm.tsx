@@ -25,7 +25,7 @@ const SPOT_ORDER_TYPES = [
 ] as const;
 
 export default function TradeForm() {
-  const { market, trade, setTrade, skipConfirm, marginMode, setMarginMode, tickers, positions, oneClickEnabled, sessionKey, gaslessEnabled, setGasless } = useStore();
+  const { market, trade, setTrade, skipConfirm, marginMode, setMarginMode, tickers, positions, oneClickEnabled, sessionKey } = useStore();
   const tradeMode = useStore((s) => s.tradeMode);
   const isSpot = tradeMode === 'spot';
   const privateMode = useStore((s) => s.privateMode);
@@ -193,18 +193,19 @@ export default function TradeForm() {
         // transaction signer. The API no longer places orders on a caller's
         // behalf (that trusted an unsigned `owner` field — account takeover).
         const ticker = tickers[market.id];
-        const slippagePct = (useStore.getState().slippage || 1) / 100;
         let priceForOrder = trade.price;
+        const { placeOrderOnChain, marketableLimitPrice } = await import('@/lib/orderSigning');
         if (trade.orderType === 'market') {
-          const m = ticker?.markPrice || 0;
-          if (!m) throw new Error('No mark price available. Try again in a moment.');
-          // Fixed-decimal, never scientific notation (toString() emits "1e-8"
-          // for small numbers, which does not parse as a base-10 amount).
-          priceForOrder = trade.side === 'buy'
-            ? (m * (1 + slippagePct)).toFixed(8)
-            : (m * (1 - slippagePct)).toFixed(8);
+          // Price *through* the live book by ≥1 tick, bounded by slippage, so a
+          // market order actually crosses on integer-tick markets (mark ±
+          // slippage rounded to an int silently no-fills on e.g. MRSN ≈ 98).
+          priceForOrder = await marketableLimitPrice(
+            market.id,
+            trade.side === 'buy',
+            useStore.getState().slippage || 1,
+            ticker?.markPrice || 0,
+          );
         }
-        const { placeOrderOnChain } = await import('@/lib/orderSigning');
         const tif = trade.orderType === 'market'
           ? 'Ioc'
           : trade.tif === 'gtc' ? 'Gtc' : trade.tif === 'ioc' ? 'Ioc' : 'Fok';
@@ -561,12 +562,6 @@ export default function TradeForm() {
             {t('trade.reduceOnly', 'Reduce Only')}
           </label>
         )}
-        <label className="flex items-center gap-2 text-[11px] text-muted cursor-pointer select-none"
-          title="Submit orders without a wallet signature or gas — Mersennet relays them for free">
-          <input type="checkbox" checked={gaslessEnabled}
-            onChange={(e) => setGasless(e.target.checked)} className="accent-cyan w-3.5 h-3.5 rounded" />
-          {t('trade.gasless', 'Gasless')}
-        </label>
       </div>
 
       {/* TP/SL */}

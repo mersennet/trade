@@ -164,27 +164,46 @@ export function useWallet() {
     throw new Error('Email login is coming soon — please connect a browser wallet for now.');
   }, []);
 
-  // Restore a persisted WalletConnect session on page load (the relay keeps
-  // sessions alive across reloads; injected wallets re-prompt instead).
+  // Restore a persisted session on page load. WalletConnect sessions are kept
+  // alive by the relay; injected wallets are re-attached silently via
+  // eth_accounts (no popup) when the wallet still has this site authorized —
+  // otherwise a hard refresh would drop a connected wallet on every reload.
   const restoredRef = useRef(false);
   useEffect(() => {
     if (restoredRef.current || wallet.address) return;
     restoredRef.current = true;
     if (typeof window === 'undefined') return;
-    if (localStorage.getItem(WALLET_TYPE_KEY) !== 'walletconnect') return;
-    (async () => {
-      try {
-        const wc = await getWalletConnectProvider();
-        if (!wc.session || !wc.accounts?.[0]) {
+    const type = localStorage.getItem(WALLET_TYPE_KEY);
+    if (type === 'walletconnect') {
+      (async () => {
+        try {
+          const wc = await getWalletConnectProvider();
+          if (!wc.session || !wc.accounts?.[0]) {
+            localStorage.removeItem(WALLET_TYPE_KEY);
+            return;
+          }
+          wcRef.current = wc;
+          await finishConnect(wc, wc.accounts[0]);
+        } catch {
           localStorage.removeItem(WALLET_TYPE_KEY);
-          return;
         }
-        wcRef.current = wc;
-        await finishConnect(wc, wc.accounts[0]);
-      } catch {
-        localStorage.removeItem(WALLET_TYPE_KEY);
-      }
-    })();
+      })();
+    } else if (type === 'injected' && window.ethereum) {
+      (async () => {
+        try {
+          // eth_accounts is non-interactive: it returns the already-authorized
+          // account(s) without prompting, or [] if the user disconnected.
+          const accounts = (await window.ethereum!.request({ method: 'eth_accounts' })) as string[];
+          if (!accounts?.[0]) {
+            localStorage.removeItem(WALLET_TYPE_KEY);
+            return;
+          }
+          await finishConnect(window.ethereum!, accounts[0]);
+        } catch {
+          localStorage.removeItem(WALLET_TYPE_KEY);
+        }
+      })();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

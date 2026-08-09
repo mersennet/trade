@@ -102,23 +102,20 @@ export default function PositionsTable() {
     if (!address) return;
     const size = Math.abs(Number(pos.size));
     const side = Number(pos.size) > 0 ? 'Sell' : 'Buy';
-    // Market close needs a hard limit price (a price of 0 can never fill a buy
-    // and gives a sell zero slippage protection). Use mark price ± the user's
-    // slippage cushion as the IOC limit, mirroring TradeForm's market orders.
     const mark = tickers[pos.marketId]?.markPrice || 0;
-    if (!mark) {
-      toast('No mark price available. Try again in a moment.', 'error');
-      return;
-    }
-    const slippagePct = (useAppStore.getState().slippage || 1) / 100;
-    // Fixed-decimal (never scientific notation) IOC limit price.
-    const priceForClose = side === 'Buy'
-      ? (mark * (1 + slippagePct)).toFixed(8)
-      : (mark * (1 - slippagePct)).toFixed(8);
     try {
       // Signed IOC order to the precompile closes the position (reduce-only is
-      // implicit: an opposing IOC order nets the existing position down).
-      const { placeOrderOnChain } = await import('@/lib/orderSigning');
+      // implicit: an opposing IOC order nets the existing position down). Price
+      // it *through* the live book by ≥1 tick, bounded by slippage — pricing off
+      // mark ± slippage and rounding to an integer tick silently no-fills on
+      // integer-tick markets, leaving the position open despite a success toast.
+      const { placeOrderOnChain, marketableLimitPrice } = await import('@/lib/orderSigning');
+      const priceForClose = await marketableLimitPrice(
+        pos.marketId,
+        side === 'Buy',
+        useAppStore.getState().slippage || 1,
+        mark,
+      );
       await placeOrderOnChain(provider, {
         marketId: pos.marketId,
         isBuy: side === 'Buy',
