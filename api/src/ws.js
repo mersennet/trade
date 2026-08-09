@@ -10,6 +10,47 @@ const VALID_CHANNELS = /^(blocks|ticker:\d+|orderbook:\d+|trades:\d+|trades:foll
 
 const lastTradeIds = new Map();
 
+// OI + long/short account ratios are aggregated from full trade history —
+// too heavy for the 5s refresh, so they are recomputed on a 30s cadence and
+// merged into every ticker broadcast in between.
+const OI_CACHE_MS = 30_000;
+const oiCache = new Map(); // marketId -> { openInterest, longAccounts, shortAccounts, ts }
+
+async function getOiStats(marketId, markPrice) {
+  const cached = oiCache.get(marketId);
+  if (cached && Date.now() - cached.ts < OI_CACHE_MS) return cached;
+  try {
+    const r = await pool.query(
+      `WITH fills AS (
+         SELECT taker AS account, CASE WHEN side = 'buy' THEN size ELSE -size END AS signed
+         FROM trades WHERE market_id = $1
+         UNION ALL
+         SELECT maker AS account, CASE WHEN side = 'buy' THEN -size ELSE size END AS signed
+         FROM trades WHERE market_id = $1
+       ), net AS (
+         SELECT account, SUM(signed)::float8 AS net_size FROM fills GROUP BY account
+       )
+       SELECT
+         COALESCE(SUM(GREATEST(net_size, 0)), 0)::float8 AS long_size,
+         COUNT(*) FILTER (WHERE net_size > 0) AS longs,
+         COUNT(*) FILTER (WHERE net_size < 0) AS shorts
+       FROM net`,
+      [marketId]
+    );
+    const row = r.rows[0] || {};
+    const out = {
+      openInterest: Math.round(Number(row.long_size || 0) * (markPrice || 0)),
+      longAccounts: Number(row.longs || 0),
+      shortAccounts: Number(row.shorts || 0),
+      ts: Date.now(),
+    };
+    oiCache.set(marketId, out);
+    return out;
+  } catch {
+    return cached || { openInterest: 0, longAccounts: 0, shortAccounts: 0, ts: 0 };
+  }
+}
+
 // Shared cache that REST endpoints can also import
 const dataCache = {
   tickers: new Map(),
@@ -146,9 +187,14 @@ function setupWebSocket(server) {
             }
           }
 
+          const oi = await getOiStats(m.id, markPrice);
           const ticker = {
             type: 'ticker', marketId: m.id, bestBid: bid, bestAsk: ask,
             markPrice, volume24h, trades24h, change24h,
+            oracleMarkUsd: oracleUsd, oracleAgeSec: oraclePx.age,
+            openInterest: oi.openInterest,
+            longAccounts: oi.longAccounts,
+            shortAccounts: oi.shortAccounts,
             timestamp: Date.now(),
           };
           dataCache.tickers.set(m.id, ticker);

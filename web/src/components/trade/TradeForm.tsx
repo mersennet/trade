@@ -113,19 +113,27 @@ export default function TradeForm() {
    * the book, partially filled, or — for market orders — no fill at all.
    * Polls briefly because the API indexer trails the chain by a block or two.
    */
-  const reportOutcome = async (owner: string, isBuy: boolean, price: string) => {
+  /** Snapshot open-order ids + position size BEFORE sending the tx — the
+   * outcome diff is only meaningful against a pre-trade baseline. */
+  const snapshotAccount = async (owner: string) => {
+    const posSize = (list: { marketId: number; size: number | string }[]) =>
+      Number(list.find((p) => p.marketId === market.id)?.size ?? 0);
+    const orderKey = (o: { id?: unknown; orderId?: unknown }) => String(o.id ?? o.orderId);
+    try {
+      const [o, p] = await Promise.all([api.getOrders(owner), api.getPositions(owner)]);
+      return { ids: new Set((o.orders || []).map(orderKey)), size: posSize(p.positions || []) };
+    } catch {
+      return { ids: new Set<string>(), size: 0 };
+    }
+  };
+
+  const reportOutcome = async (owner: string, isBuy: boolean, price: string, before: { ids: Set<string>; size: number }) => {
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     const posSize = (list: { marketId: number; size: number | string }[]) =>
       Number(list.find((p) => p.marketId === market.id)?.size ?? 0);
     const orderKey = (o: { id?: unknown; orderId?: unknown }) => String(o.id ?? o.orderId);
-
-    let beforeIds = new Set<string>();
-    let beforeSize = 0;
-    try {
-      const [o, p] = await Promise.all([api.getOrders(owner), api.getPositions(owner)]);
-      beforeIds = new Set((o.orders || []).map(orderKey));
-      beforeSize = posSize(p.positions || []);
-    } catch { /* best-effort; fall through to generic toast */ }
+    const beforeIds = before.ids;
+    const beforeSize = before.size;
 
     for (let i = 0; i < 6; i++) {
       await sleep(1500);
@@ -265,18 +273,13 @@ export default function TradeForm() {
           ? 'Ioc'
           : trade.tif === 'gtc' ? 'Gtc' : trade.tif === 'ioc' ? 'Ioc' : 'Fok';
         void builderCode; // referral credit now derives from on-chain fills, not an API hint
-        const placed = await placeOrderOnChain(provider, {
-          marketId: market.id,
-          isBuy: trade.side === 'buy',
-          priceUsd: priceForOrder,
-          sizeBase: trade.size,
-          tif,
-          sessionKey: useOneClick ? sessionKey || undefined : undefined,
-        });
+        // Snapshot BEFORE sending — the outcome diff needs a pre-trade baseline.
+        const before = await snapshotAccount(orderOwner);
         // Optimistic pending order: the Orders tab shows it instantly (marked
-        // pending) instead of staying silent until the next API poll.
+        // pending) for the whole wallet-sign → mine window, not just after.
+        const tempId = `pending-${Date.now()}`;
         useStore.getState().addPendingOrder({
-          tempId: placed.txHash,
+          tempId,
           owner: orderOwner,
           market_id: market.id,
           side: trade.side,
@@ -285,9 +288,22 @@ export default function TradeForm() {
           tif,
           ts: Date.now(),
         });
+        try {
+          await placeOrderOnChain(provider, {
+            marketId: market.id,
+            isBuy: trade.side === 'buy',
+            priceUsd: priceForOrder,
+            sizeBase: trade.size,
+            tif,
+            sessionKey: useOneClick ? sessionKey || undefined : undefined,
+          });
+        } catch (e) {
+          useStore.getState().removePendingOrder(tempId);
+          throw e;
+        }
         // Report the real outcome (filled / resting / partial / no fill) instead
         // of a blind "placed" — the tx mining only proves inclusion, not a fill.
-        void reportOutcome(orderOwner, trade.side === 'buy', String(priceForOrder));
+        void reportOutcome(orderOwner, trade.side === 'buy', String(priceForOrder), before);
       }
       if (useStore.getState().soundEnabled) playSound('fill');
       setTrade({ size: '' });
