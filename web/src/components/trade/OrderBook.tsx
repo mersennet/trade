@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useStore } from '@/stores/useStore';
 import { api, type Trade } from '@/lib/api';
 import { formatPrice, formatNumber, cn } from '@/lib/utils';
@@ -13,26 +13,35 @@ export default function OrderBook() {
   const { market } = useStore();
   const setTrade = useStore((s) => s.setTrade);
   const { subscribe } = useWebSocket();
-  const [bids, setBids] = useState<BookLevel[]>([]);
-  const [asks, setAsks] = useState<BookLevel[]>([]);
+  // Raw (ungrouped) best bid/ask drive the mid-price and spread readout, so
+  // those stay truthful no matter what display grouping is selected.
+  const [rawBids, setRawBids] = useState<[number, number][]>([]);
+  const [rawAsks, setRawAsks] = useState<[number, number][]>([]);
   const [grouping, setGrouping] = useState(1);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<BookTab>('book');
   const [recentTrades, setRecentTrades] = useState<Trade[]>([]);
+  // Monotonic clock for snapshot ordering: the 3s REST poll and the WS
+  // broadcast are independent snapshots of the same book, and without an
+  // ordering check a stale WS payload can overwrite a fresher REST one (or
+  // vice versa), briefly showing a crossed book (ask < bid) that never
+  // existed on chain.
+  const lastBookTs = useRef(0);
 
   useEffect(() => {
     let mounted = true;
     // Clear stale book so the previous market's prices don't briefly flash
     // on the new market while the new fetch is in flight.
     setLoading(true);
-    setBids([]);
-    setAsks([]);
+    setRawBids([]);
+    setRawAsks([]);
+    lastBookTs.current = 0;
 
     const fetchBook = async () => {
       try {
         const { orderbook } = await api.getOrderBook(market.id);
         if (!mounted) return;
-        processBook(orderbook?.bids || [], orderbook?.asks || []);
+        applyBook(orderbook?.bids || [], orderbook?.asks || [], Date.now());
       } catch (e) {
         console.error('[orderbook] fetch error:', e);
       } finally {
@@ -44,18 +53,35 @@ export default function OrderBook() {
     const interval = setInterval(fetchBook, 3000);
 
     const unsub = subscribe(`orderbook:${market.id}`, (data: unknown) => {
-      const d = data as { bids?: [number, number][]; asks?: [number, number][] };
-      if (d.bids || d.asks) processBook(d.bids || [], d.asks || []);
+      const d = data as { bids?: [number, number][]; asks?: [number, number][]; timestamp?: number };
+      if (!d.bids && !d.asks) return;
+      applyBook(d.bids, d.asks, d.timestamp || Date.now());
     });
 
     return () => { mounted = false; clearInterval(interval); unsub(); };
-  }, [market.id, subscribe, grouping]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [market.id, subscribe]);
 
-  function processBook(rawBids: [number, number][], rawAsks: [number, number][]) {
+  function applyBook(newBids: [number, number][] | undefined, newAsks: [number, number][] | undefined, ts: number) {
+    if (ts < lastBookTs.current) return; // stale snapshot — keep the fresher one
+    lastBookTs.current = ts;
+    // A payload carrying only one side merges with the current other side
+    // instead of wiping it.
+    if (newBids) setRawBids(newBids.filter(([p]) => p > 0));
+    if (newAsks) setRawAsks(newAsks.filter(([p]) => p > 0));
+  }
+
+  // Grouped display rows. Bids round DOWN into their bucket, asks round UP —
+  // the convention Hyperliquid/Binance use — so a coarse grouping can never
+  // render a locked or crossed book (floor/floor collapses both sides into
+  // the same bucket whenever the true spread is tighter than the grouping).
+  const { bids, asks } = useMemo(() => {
     const processLevels = (levels: [number, number][], isAsk: boolean): BookLevel[] => {
       const grouped = new Map<number, number>();
       for (const [p, s] of levels) {
-        const key = Math.floor(p / grouping) * grouping;
+        const key = isAsk
+          ? Math.ceil(p / grouping) * grouping
+          : Math.floor(p / grouping) * grouping;
         grouped.set(key, (grouped.get(key) || 0) + s);
       }
       const sorted = [...grouped.entries()]
@@ -70,10 +96,8 @@ export default function OrderBook() {
       const maxTotal = result[result.length - 1]?.total || 1;
       return result.map((l) => ({ ...l, pct: (l.total / maxTotal) * 100 }));
     };
-
-    setBids(processLevels(rawBids, false));
-    setAsks(processLevels(rawAsks, true));
-  }
+    return { bids: processLevels(rawBids, false), asks: processLevels(rawAsks, true) };
+  }, [rawBids, rawAsks, grouping]);
 
   useEffect(() => {
     api.getTrades(market.id, 50).then((r) => setRecentTrades(r.trades || [])).catch(() => {});
@@ -87,17 +111,20 @@ export default function OrderBook() {
     return unsub;
   }, [market.id, subscribe]);
 
+  // True best bid/ask from the ungrouped book (raw arrays arrive best-first
+  // from the API, but sort defensively since WS/REST snapshots may vary).
+  const bestBid = useMemo(() => rawBids.reduce<number>((m, [p]) => Math.max(m, p), 0), [rawBids]);
+  const bestAsk = useMemo(() => rawAsks.reduce<number>((m, [p]) => (m === 0 ? p : Math.min(m, p)), 0), [rawAsks]);
+
   const spread = useMemo(() => {
-    if (asks.length > 0 && bids.length > 0) return asks[0].price - bids[0].price;
+    if (bestBid > 0 && bestAsk > 0) return Math.max(0, bestAsk - bestBid);
     return 0;
-  }, [asks, bids]);
+  }, [bestBid, bestAsk]);
 
   const midPrice = useMemo(() => {
-    if (bids[0] && asks[0]) return (bids[0].price + asks[0].price) / 2;
-    if (bids[0]) return bids[0].price;
-    if (asks[0]) return asks[0].price;
-    return 0;
-  }, [asks, bids]);
+    if (bestBid > 0 && bestAsk > 0) return (bestBid + bestAsk) / 2;
+    return bestBid || bestAsk || 0;
+  }, [bestBid, bestAsk]);
 
   const buySellRatio = useMemo(() => {
     const totalBidSize = bids.reduce((sum, b) => sum + b.size, 0);
