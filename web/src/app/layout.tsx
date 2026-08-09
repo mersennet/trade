@@ -82,7 +82,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Providers>
           <div className="flex min-h-[100dvh]">
             <Sidebar />
-            <div className="flex-1 flex flex-col md:ml-[52px] xl:ml-[180px]">
+            <div className="flex-1 min-w-0 flex flex-col md:ml-[52px] xl:ml-[180px]">
               {/* Banners live INSIDE the offset content column — the sidebar is
                   fixed at the viewport's left edge and would otherwise cover
                   their left portion. */}
