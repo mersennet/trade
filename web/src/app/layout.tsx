@@ -22,6 +22,9 @@ export const metadata: Metadata = {
   applicationName: 'Mersennet Trade',
   keywords: ['Mersennet', 'MRSN', 'perpetuals', 'perps', 'DEX', 'DeFi', 'on-chain', 'derivatives', 'zero-knowledge', 'CLOB'],
   authors: [{ name: 'Mersennet' }],
+  alternates: {
+    canonical: SITE_URL,
+  },
   openGraph: {
     title: 'Mersennet Trade: Perpetuals on the Native On-Chain Order Book',
     description: 'Trade MRSN, BTC, ETH, SOL, ARB perps on Mersennet. Atomic on-chain matching, free testnet MRSN.',
@@ -38,7 +41,11 @@ export const metadata: Metadata = {
     images: [OG_IMAGE],
   },
   icons: {
-    icon: '/favicon.ico',
+    icon: [
+      { url: '/favicon.ico', sizes: '48x48' },
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
     apple: '/apple-touch-icon.png',
   },
   robots: {
