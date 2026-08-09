@@ -71,7 +71,10 @@
     "tp": "止盈",
     "sl": "止损",
     "close": "平仓",
-    "cancelAll": "全部取消"
+    "cancelAll": "全部取消",
+    "long": "做多",
+    "short": "做空",
+    "placing": "下单中…"
   },
   "common": {
     "loading": "加载中...",

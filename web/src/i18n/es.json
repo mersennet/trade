@@ -71,7 +71,10 @@
     "tp": "TP",
     "sl": "SL",
     "close": "Cerrar",
-    "cancelAll": "Cancelar Todo"
+    "cancelAll": "Cancelar Todo",
+    "long": "Largo",
+    "short": "Corto",
+    "placing": "Colocando…"
   },
   "common": {
     "loading": "Cargando...",

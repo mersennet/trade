@@ -71,7 +71,10 @@
     "tp": "TP",
     "sl": "SL",
     "close": "종료",
-    "cancelAll": "전체 취소"
+    "cancelAll": "전체 취소",
+    "long": "롱",
+    "short": "숏",
+    "placing": "주문 중…"
   },
   "common": {
     "loading": "로딩 중...",

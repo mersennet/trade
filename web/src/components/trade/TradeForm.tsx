@@ -370,6 +370,7 @@ export default function TradeForm() {
           <label className="text-[11px] text-muted mb-1.5 block font-medium">{t('trade.price', 'Price')} ({market.quote})</label>
           <input
             type="number" value={trade.price}
+            aria-label={`Price (${market.quote})`}
             onChange={(e) => setTrade({ price: e.target.value })}
             placeholder="0.00"
             className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-dim font-mono outline-none focus:border-primary/60 focus:bg-surface-3 transition-all"
@@ -435,6 +436,7 @@ export default function TradeForm() {
         </div>
         <input
           type="number" value={trade.size}
+          aria-label={`Size (${market.base})`}
           onChange={(e) => setTrade({ size: e.target.value })}
           placeholder="0.00"
           className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-dim font-mono outline-none focus:border-primary/60 focus:bg-surface-3 transition-all"
@@ -504,6 +506,7 @@ export default function TradeForm() {
           </div>
           <input
             type="range" min={1} max={market.maxLeverage} value={trade.leverage}
+            aria-label="Leverage"
             onChange={(e) => setTrade({ leverage: Number(e.target.value) })}
             className="range-fill w-full"
             style={{ ['--pct' as string]: `${((trade.leverage - 1) / Math.max(1, market.maxLeverage - 1)) * 100}%` }}

@@ -28,6 +28,9 @@
   "trade": {
     "buy": "Buy / Long",
     "sell": "Sell / Short",
+    "long": "Long",
+    "short": "Short",
+    "placing": "Placing…",
     "price": "Price",
     "size": "Size",
     "leverage": "Leverage",
