@@ -1,8 +1,8 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useStore } from '@/stores/useStore';
 import { useWallet } from '@/hooks/useWallet';
-import { api, type Trade, type Order, type FundingRate, type ConditionalOrder } from '@/lib/api';
+import { api, type Trade, type Order, type FundingRate } from '@/lib/api';
 import { formatPrice, formatNumber, cn } from '@/lib/utils';
 import { useToast } from '@/components/shared/Toast';
 import EmptyState, { SkeletonRows } from '@/components/shared/EmptyState';
@@ -22,23 +22,27 @@ export default function PositionsTable() {
   const [hideOtherSymbols, setHideOtherSymbols] = useState(false);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
-  // Inline TP/SL editor state: which position row is being edited, the draft
-  // prices, and the wallet's pending conditional orders (the stored brackets).
+  // Inline TP/SL editor state. Brackets are CLIENT-SIDE (local store) and
+  // executed by the useBrackets watcher while the session is open — the chain
+  // has no server-side auto-execution since the auth hardening.
   const [tpslEditFor, setTpslEditFor] = useState<number | null>(null);
   const [tpInput, setTpInput] = useState('');
   const [slInput, setSlInput] = useState('');
-  const [conditionalOrders, setConditionalOrders] = useState<ConditionalOrder[]>([]);
   const [tpslSaving, setTpslSaving] = useState(false);
+  const brackets = useStore((s) => s.brackets);
+  const setBracket = useStore((s) => s.setBracket);
+  const removeBracket = useStore((s) => s.removeBracket);
 
-  const refreshConditional = useCallback(() => {
-    if (!address) return;
-    api.getConditionalOrders(address).then((r) => setConditionalOrders(r.orders || [])).catch(() => {});
-  }, [address]);
-
-  useEffect(() => { refreshConditional(); }, [refreshConditional]);
+  // Reset the loading skeleton when the wallet disconnects (render-time
+  // adjust, not an effect setState).
+  const [prevConnected, setPrevConnected] = useState(isConnected);
+  if (prevConnected !== isConnected) {
+    setPrevConnected(isConnected);
+    if (!isConnected) setLoading(false);
+  }
 
   useEffect(() => {
-    if (!isConnected || !address) { setLoading(false); return; }
+    if (!isConnected || !address) return;
     const fetchData = async () => {
       try {
         const [posRes, ordRes] = await Promise.all([
@@ -88,9 +92,9 @@ export default function PositionsTable() {
     }
   };
 
-  // Brackets for a position = its pending reduce-only conditional orders.
-  const bracketsFor = (marketId: number) =>
-    conditionalOrders.filter((c) => c.market_id === marketId && c.reduce_only);
+  // The position's bracket = the local store entry for this wallet+market.
+  const bracketFor = (marketId: number) =>
+    address ? brackets.find((b) => b.owner.toLowerCase() === address.toLowerCase() && b.marketId === marketId) : undefined;
 
   const handleSetTpsl = async (pos: { marketId: number; symbol: string; size: number | string }) => {
     if (!address) return;
@@ -101,53 +105,35 @@ export default function PositionsTable() {
     if (!tp && !sl) { toast('Enter a TP or SL price', 'error'); return; }
     setTpslSaving(true);
     try {
-      // Each bracket is a reduce-only stop on the opposite side: it can only
-      // ever close the position, never open or extend one.
-      const side = isLong ? 'Sell' : 'Buy';
       const mark = tickers[pos.marketId]?.markPrice || 0;
-      for (const [kind, trigger] of [['TP', tp], ['SL', sl]] as const) {
-        if (!trigger) continue;
-        if (mark > 0) {
-          // Sanity-check the trigger side so a typo doesn't arm an
-          // instant-firing bracket.
-          const badTp = kind === 'TP' && (isLong ? trigger < mark : trigger > mark);
-          const badSl = kind === 'SL' && (isLong ? trigger > mark : trigger < mark);
-          if (badTp || badSl) {
-            toast(`${kind} ${trigger} is on the wrong side of mark (${formatPrice(mark)}) for a ${isLong ? 'long' : 'short'}`, 'error');
-            setTpslSaving(false);
-            return;
-          }
+      if (mark > 0) {
+        // Sanity-check trigger sides so a typo doesn't arm an instant-firing
+        // bracket. Long TP is above mark, SL below; short is the mirror.
+        if (tp && (isLong ? tp < mark : tp > mark)) {
+          toast(`TP ${tp} is on the wrong side of mark (${formatPrice(mark)}) for a ${isLong ? 'long' : 'short'}`, 'error');
+          return;
         }
-        await api.submitOrder({
-          owner: address,
-          market_id: pos.marketId,
-          side,
-          price: String(trigger),
-          size: String(size),
-          tif: 'Gtc',
-          order_type: 'stop',
-          trigger_price: String(trigger),
-          reduce_only: true,
-        });
+        if (sl && (isLong ? sl > mark : sl < mark)) {
+          toast(`SL ${sl} is on the wrong side of mark (${formatPrice(mark)}) for a ${isLong ? 'long' : 'short'}`, 'error');
+          return;
+        }
       }
-      toast(`Bracket set on ${pos.symbol}`, 'success');
+      setBracket({
+        id: `${address.toLowerCase()}-${pos.marketId}`,
+        owner: address,
+        marketId: pos.marketId,
+        isLong,
+        size: String(size),
+        tp: tp ? String(tp) : null,
+        sl: sl ? String(sl) : null,
+        ts: Date.now(),
+      });
+      toast(`Bracket set on ${pos.symbol} — executes while this session is open`, 'success');
       setTpslEditFor(null);
       setTpInput('');
       setSlInput('');
-      refreshConditional();
-    } catch (e) {
-      toast(`TP/SL failed: ${(e as Error).message}`, 'error');
     } finally {
       setTpslSaving(false);
-    }
-  };
-
-  const handleCancelBracket = async (id: number) => {
-    try {
-      await api.cancelConditional(id);
-      refreshConditional();
-    } catch (e) {
-      toast(`Cancel failed: ${(e as Error).message}`, 'error');
     }
   };
 
@@ -326,8 +312,8 @@ export default function PositionsTable() {
                       </td>
                       <td className="px-2 py-2.5 text-right">
                         {(() => {
-                          const brackets = bracketsFor(p.marketId);
-                          if (brackets.length === 0) {
+                          const br = bracketFor(p.marketId);
+                          if (!br) {
                             return (
                               <button
                                 onClick={() => { setTpslEditFor(tpslEditFor === p.marketId ? null : p.marketId); setTpInput(''); setSlInput(''); }}
@@ -337,27 +323,25 @@ export default function PositionsTable() {
                           }
                           return (
                             <div className="flex items-center gap-1 justify-end flex-wrap">
-                              {brackets.map((b) => {
-                                const trig = Number(b.trigger_price);
-                                const isTp = size > 0 ? trig > mark : trig < mark;
-                                return (
-                                  <span key={b.id} className={cn(
-                                    'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono',
-                                    isTp ? 'bg-green/10 text-green' : 'bg-red/10 text-red'
-                                  )}>
-                                    {isTp ? 'TP' : 'SL'} {formatPrice(trig)}
-                                    <button
-                                      onClick={() => handleCancelBracket(b.id)}
-                                      aria-label={`Cancel ${isTp ? 'take-profit' : 'stop-loss'} bracket`}
-                                      className="hover:text-foreground"
-                                    >×</button>
-                                  </span>
-                                );
-                              })}
+                              {br.tp && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-green/10 text-green">
+                                  TP {formatPrice(Number(br.tp))}
+                                </span>
+                              )}
+                              {br.sl && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-red/10 text-red">
+                                  SL {formatPrice(Number(br.sl))}
+                                </span>
+                              )}
                               <button
-                                onClick={() => { setTpslEditFor(tpslEditFor === p.marketId ? null : p.marketId); setTpInput(''); setSlInput(''); }}
+                                onClick={() => { setTpslEditFor(tpslEditFor === p.marketId ? null : p.marketId); setTpInput(br.tp || ''); setSlInput(br.sl || ''); }}
                                 className="px-1.5 py-0.5 text-[10px] text-dim hover:text-primary transition-colors"
                               >Edit</button>
+                              <button
+                                onClick={() => removeBracket(br.id)}
+                                aria-label="Remove bracket"
+                                className="px-1 py-0.5 text-[10px] text-dim hover:text-red transition-colors"
+                              >×</button>
                             </div>
                           );
                         })()}
@@ -409,7 +393,7 @@ export default function PositionsTable() {
                               onClick={() => setTpslEditFor(null)}
                               className="px-2 py-1.5 text-[11px] text-dim hover:text-foreground transition-colors"
                             >Cancel</button>
-                            <span className="text-[9.5px] text-dim">Reduce-only stops — they can only close this position.</span>
+                            <span className="text-[9.5px] text-dim">Closing orders only — fires while this session is open (instant with one-click trading).</span>
                           </div>
                         </td>
                       </tr>

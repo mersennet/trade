@@ -9,6 +9,7 @@ import PositionsTable from '@/components/trade/PositionsTable';
 import FundingChart from '@/components/trade/FundingChart';
 import AccountPanel from '@/components/trade/AccountPanel';
 import PrivacyPanel from '@/components/trade/PrivacyPanel';
+import { useBrackets } from '@/hooks/useBrackets';
 import { cn, formatPrice } from '@/lib/utils';
 import { useStore } from '@/stores/useStore';
 
@@ -58,6 +59,8 @@ export default function TradePage() {
   const { market, tickers } = useStore();
   const tradeMode = useStore((s) => s.tradeMode);
   const isSpot = tradeMode === 'spot';
+  // Watch TP/SL brackets and fire signed closing orders when triggers cross.
+  useBrackets();
 
   useEffect(() => {
     const ticker = tickers[market.id];

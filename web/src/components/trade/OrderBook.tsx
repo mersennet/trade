@@ -44,13 +44,28 @@ export default function OrderBook() {
   // existed on chain.
   const lastBookTs = useRef(0);
 
-  useEffect(() => {
-    let mounted = true;
-    // Clear stale book so the previous market's prices don't briefly flash
-    // on the new market while the new fetch is in flight.
+  function applyBook(newBids: [number, number][] | undefined, newAsks: [number, number][] | undefined, ts: number) {
+    if (ts < lastBookTs.current) return; // stale snapshot — keep the fresher one
+    lastBookTs.current = ts;
+    // A payload carrying only one side merges with the current other side
+    // instead of wiping it.
+    if (newBids) setRawBids(newBids.filter(([p]) => p > 0));
+    if (newAsks) setRawAsks(newAsks.filter(([p]) => p > 0));
+  }
+
+  // Reset on market switch during render (the React-endorsed adjust-state-
+  // during-render pattern) so the previous market's prices never flash.
+  const [prevMarketId, setPrevMarketId] = useState(market.id);
+  if (prevMarketId !== market.id) {
+    setPrevMarketId(market.id);
     setLoading(true);
     setRawBids([]);
     setRawAsks([]);
+  }
+
+  useEffect(() => {
+    let mounted = true;
+    // Fresh market => accept the next snapshot regardless of its timestamp.
     lastBookTs.current = 0;
 
     const fetchBook = async () => {
@@ -78,17 +93,8 @@ export default function OrderBook() {
     });
 
     return () => { mounted = false; if (interval) clearInterval(interval); unsub(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [market.id, subscribe, connected]);
-
-  function applyBook(newBids: [number, number][] | undefined, newAsks: [number, number][] | undefined, ts: number) {
-    if (ts < lastBookTs.current) return; // stale snapshot — keep the fresher one
-    lastBookTs.current = ts;
-    // A payload carrying only one side merges with the current other side
-    // instead of wiping it.
-    if (newBids) setRawBids(newBids.filter(([p]) => p > 0));
-    if (newAsks) setRawAsks(newAsks.filter(([p]) => p > 0));
-  }
 
   // Grouped display rows. Bids round DOWN into their bucket, asks round UP —
   // the convention Hyperliquid/Binance use — so a coarse grouping can never

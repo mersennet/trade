@@ -38,6 +38,21 @@ export interface PendingOrder {
   ts: number;
 }
 
+/** A TP/SL bracket on an open position. Brackets are watched and executed
+ * CLIENT-SIDE (the chain has no server-side auto-execution since the auth
+ * hardening): while the user's session is open, the app watches the mark
+ * price and submits a signed reduce-only IOC when a trigger crosses. */
+export interface Bracket {
+  id: string;
+  owner: string;
+  marketId: number;
+  isLong: boolean;
+  size: string;
+  tp: string | null;
+  sl: string | null;
+  ts: number;
+}
+
 interface AppState {
   theme: 'dark' | 'light';
   market: Market;
@@ -66,6 +81,8 @@ interface AppState {
   /** Timestamp of the last "Deposit" request from the header — AccountPanel
    * watches it and opens its transfer panel in deposit mode. */
   depositRequestTs: number;
+  /** Client-side TP/SL brackets (persisted per wallet). */
+  brackets: Bracket[];
 
   setTheme: (t: 'dark' | 'light') => void;
   setMarket: (m: Market) => void;
@@ -91,6 +108,8 @@ interface AppState {
   setPrivateMode: (v: boolean) => void;
   setPrivacyForkActive: (v: boolean) => void;
   requestDeposit: () => void;
+  setBracket: (b: Bracket) => void;
+  removeBracket: (id: string) => void;
 }
 
 // Must match API market id 1 (chain.js MARKETS[0]) — MRSN/USD, 50x. A mismatch
@@ -126,6 +145,7 @@ export const useStore = create<AppState>()(
       privateMode: false,
       privacyForkActive: false,
       depositRequestTs: 0,
+      brackets: [],
 
       setTheme: (theme) => {
         document.documentElement.setAttribute('data-theme', theme);
@@ -160,6 +180,14 @@ export const useStore = create<AppState>()(
         privateMode: privacyForkActive ? s.privateMode : false,
       })),
       requestDeposit: () => set({ depositRequestTs: Date.now() }),
+      // One bracket per wallet+market: setting replaces any previous one.
+      setBracket: (b) => set((s) => ({
+        brackets: [
+          ...s.brackets.filter((x) => !(x.owner === b.owner && x.marketId === b.marketId)),
+          b,
+        ],
+      })),
+      removeBracket: (id) => set((s) => ({ brackets: s.brackets.filter((x) => x.id !== id) })),
     }),
     {
       name: 'mersennet-trade-store',
@@ -174,6 +202,7 @@ export const useStore = create<AppState>()(
         slippage: state.slippage,
         gaslessEnabled: state.gaslessEnabled,
         paperMode: state.paperMode,
+        brackets: state.brackets,
       }),
     }
   )
