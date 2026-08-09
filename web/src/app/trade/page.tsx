@@ -132,7 +132,7 @@ export default function TradePage() {
       </div>
 
       {/* Desktop layout - seamless grid with 1px shared borders, no rounded corners on inner panels */}
-      <div className="hidden md:grid flex-1 min-h-0 border-t border-border gap-px bg-border" style={{ gridTemplateColumns: '1fr 220px 250px' }}>
+      <div className="hidden md:grid flex-1 min-h-0 border-t border-border gap-px bg-border" style={{ gridTemplateColumns: 'minmax(0, 1fr) 220px 250px' }}>
         <div className="flex flex-col gap-px min-h-0 min-w-0">
           <div className="flex-1 min-h-[200px] bg-surface">
             <Chart />
