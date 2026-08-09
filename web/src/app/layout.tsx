@@ -6,6 +6,7 @@ import Header from '@/components/layout/Header';
 import BottomBar from '@/components/layout/BottomBar';
 import ErrorBoundary from '@/components/shared/ErrorBoundary';
 import BetaBanner from '@/components/beta/BetaBanner';
+import AnnouncementBar from '@/components/layout/AnnouncementBar';
 import WelcomeModal from '@/components/beta/WelcomeModal';
 import Footer from '@/components/beta/Footer';
 
@@ -84,6 +85,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Sidebar />
             <div className="flex-1 flex flex-col md:ml-[52px] xl:ml-[180px]">
               <Header />
+              <AnnouncementBar />
               <main className="flex-1 flex flex-col pb-[52px] md:pb-0">
                 <ErrorBoundary>{children}</ErrorBoundary>
                 <Footer />

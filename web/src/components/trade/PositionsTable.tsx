@@ -161,9 +161,13 @@ export default function PositionsTable() {
     }
   };
 
-  const handleClosePosition = async (pos: typeof positions[0]) => {
+  const handleClosePosition = async (pos: typeof positions[0], fraction = 1) => {
     if (!address) return;
-    const size = Math.abs(Number(pos.size));
+    const fullSize = Math.abs(Number(pos.size));
+    // Integer chain units: a fractional close rounds down and must leave at
+    // least 1 unit behind (or close fully instead).
+    const size = fraction >= 1 ? fullSize : Math.max(0, Math.floor(fullSize * fraction));
+    if (size <= 0) { toast('Position too small to partially close', 'info'); return; }
     const side = Number(pos.size) > 0 ? 'Sell' : 'Buy';
     const mark = tickers[pos.marketId]?.markPrice || 0;
     try {
@@ -186,7 +190,7 @@ export default function PositionsTable() {
         sizeBase: size.toString(),
         tif: 'Ioc',
       });
-      toast(`Closing ${pos.symbol} position`, 'success');
+      toast(fraction >= 1 ? `Closing ${pos.symbol} position` : `Closing ${Math.round(fraction * 100)}% of ${pos.symbol}`, 'success');
       if (useAppStore.getState().soundEnabled) playSound('fill');
     } catch (e) {
       toast(`Close failed: ${(e as Error).message}`, 'error');
@@ -360,6 +364,16 @@ export default function PositionsTable() {
                           >
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
                           </button>
+                          <div className="flex items-center gap-0.5 justify-end">
+                            {[0.25, 0.5, 1].map((f) => (
+                              <button
+                                key={f}
+                                onClick={() => handleClosePosition(p, f)}
+                                title={f === 1 ? 'Close entire position' : `Close ${f * 100}% of the position`}
+                                className="px-1.5 py-1 text-[9px] font-medium text-dim hover:text-foreground bg-surface-2 rounded border border-border hover:border-foreground/20 transition-colors"
+                              >{f === 1 ? '100' : `${f * 100}`}%</button>
+                            ))}
+                          </div>
                           <button
                             onClick={() => handleClosePosition(p)}
                             className="px-2.5 py-1 text-[10px] font-medium bg-red/10 text-red rounded-md hover:bg-red/20 transition-colors"

@@ -22,6 +22,8 @@ export default function OrderBook() {
   const [activeTab, setActiveTab] = useState<BookTab>('book');
   const [recentTrades, setRecentTrades] = useState<Trade[]>([]);
   const [tradeFilter, setTradeFilter] = useState<'all' | 'buy' | 'sell'>('all');
+  // Size column units: base asset or USD notional (CEX-standard toggle).
+  const [sizeUnit, setSizeUnit] = useState<'base' | 'usd'>('base');
   // VWAP hover preview: hovering a book level shows the average fill price,
   // cumulative size and price impact of sweeping the book up to that level.
   const [hoverPreview, setHoverPreview] = useState<{
@@ -207,18 +209,25 @@ export default function OrderBook() {
           )}>Trades</button>
         </div>
         {activeTab === 'book' && (
-          <select
-            value={grouping}
-            onChange={(e) => setGrouping(Number(e.target.value))}
-            aria-label="Price grouping"
-            className="bg-surface-2 text-foreground text-[11px] px-2 py-0.5 rounded border border-border cursor-pointer focus:border-primary/40"
-          >
-            <option value={1}>1</option>
-            <option value={10}>10</option>
-            <option value={50}>50</option>
-            <option value={100}>100</option>
-            <option value={500}>500</option>
-          </select>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setSizeUnit((u) => (u === 'base' ? 'usd' : 'base'))}
+              title="Toggle size units: base asset vs USD notional"
+              className="bg-surface-2 text-dim hover:text-foreground text-[10px] px-1.5 py-0.5 rounded border border-border transition-colors font-mono"
+            >{sizeUnit === 'base' ? market.base : 'USD'}</button>
+            <select
+              value={grouping}
+              onChange={(e) => setGrouping(Number(e.target.value))}
+              aria-label="Price grouping"
+              className="bg-surface-2 text-foreground text-[11px] px-2 py-0.5 rounded border border-border cursor-pointer focus:border-primary/40"
+            >
+              <option value={1}>1</option>
+              <option value={10}>10</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value={500}>500</option>
+            </select>
+          </div>
         )}
       </div>
 
@@ -226,8 +235,8 @@ export default function OrderBook() {
         <>
           <div className="grid grid-cols-3 px-3 py-1.5 text-[10px] text-dim uppercase tracking-wider border-b border-border shrink-0">
             <span>Price</span>
-            <span className="text-right">Size</span>
-            <span className="text-right">Total</span>
+            <span className="text-right">Size{sizeUnit === 'usd' ? ' $' : ''}</span>
+            <span className="text-right">Total{sizeUnit === 'usd' ? ' $' : ''}</span>
           </div>
 
           {loading && bids.length === 0 && asks.length === 0 ? (
@@ -258,8 +267,8 @@ export default function OrderBook() {
                   >
                     <div className="absolute inset-y-0 right-0 bg-red/[0.10]" style={{ width: `${level.pct}%` }} />
                     <span className="relative text-red font-semibold tabular-nums">{formatPrice(level.price)}</span>
-                    <span className="relative text-right text-foreground/70 tabular-nums">{formatNumber(level.size, 0)}</span>
-                    <span className="relative text-right text-dim/70 tabular-nums">{formatNumber(level.total, 0)}</span>
+                    <span className="relative text-right text-foreground/70 tabular-nums">{sizeUnit === 'usd' ? formatNumber(level.size * level.price, 0) : formatNumber(level.size, 0)}</span>
+                    <span className="relative text-right text-dim/70 tabular-nums">{sizeUnit === 'usd' ? formatNumber(level.total * level.price, 0) : formatNumber(level.total, 0)}</span>
                   </div>
                 ))}
               </div>
@@ -291,8 +300,8 @@ export default function OrderBook() {
                   >
                     <div className="absolute inset-y-0 right-0 bg-green/[0.10]" style={{ width: `${level.pct}%` }} />
                     <span className="relative text-green font-semibold tabular-nums">{formatPrice(level.price)}</span>
-                    <span className="relative text-right text-foreground/70 tabular-nums">{formatNumber(level.size, 0)}</span>
-                    <span className="relative text-right text-dim/70 tabular-nums">{formatNumber(level.total, 0)}</span>
+                    <span className="relative text-right text-foreground/70 tabular-nums">{sizeUnit === 'usd' ? formatNumber(level.size * level.price, 0) : formatNumber(level.size, 0)}</span>
+                    <span className="relative text-right text-dim/70 tabular-nums">{sizeUnit === 'usd' ? formatNumber(level.total * level.price, 0) : formatNumber(level.total, 0)}</span>
                   </div>
                 ))}
               </div>

@@ -1,9 +1,108 @@
 'use client';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useStore } from '@/stores/useStore';
+import { useWallet } from '@/hooks/useWallet';
+import { api, type ApiKey } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 const SLIPPAGE_PRESETS = [0.1, 0.5, 1.0, 2.0];
+
+/** API key management: list / create / revoke scoped keys for the connected
+ * wallet. The raw key is shown exactly once at creation (only its hash is
+ * stored server-side). */
+function ApiKeysSection() {
+  const { address, isConnected } = useWallet();
+  const [keys, setKeys] = useState<ApiKey[]>([]);
+  const [label, setLabel] = useState('');
+  const [newKey, setNewKey] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const refresh = () => {
+    if (!address) return;
+    api.getApiKeys(address).then((r) => setKeys(r.keys || [])).catch(() => {});
+  };
+  useEffect(refresh, [address]);
+
+  if (!isConnected) {
+    return (
+      <div className="space-y-3">
+        <h3 className="text-xs font-medium text-foreground">API Keys</h3>
+        <p className="text-[10px] text-dim">Connect a wallet to manage API keys for bots and scripts.</p>
+      </div>
+    );
+  }
+
+  const create = async () => {
+    if (!address || busy) return;
+    setBusy(true);
+    try {
+      const r = await api.createApiKey(address, label || undefined);
+      setNewKey(r.key);
+      setLabel('');
+      refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const revoke = async (id: number) => {
+    await api.deleteApiKey(id).catch(() => {});
+    refresh();
+  };
+
+  return (
+    <div className="space-y-3">
+      <h3 className="text-xs font-medium text-foreground">API Keys</h3>
+      {newKey && (
+        <div className="p-2.5 bg-green/5 border border-green/25 rounded-lg">
+          <p className="text-[10px] text-green font-medium mb-1.5">Key created — copy it now, it won&apos;t be shown again</p>
+          <div className="flex items-center gap-1.5">
+            <code className="flex-1 text-[10px] font-mono text-foreground bg-surface-2 rounded px-2 py-1.5 truncate">{newKey}</code>
+            <button
+              onClick={() => { navigator.clipboard.writeText(newKey); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
+              className="px-2 py-1.5 text-[10px] font-medium text-primary hover:underline shrink-0"
+            >{copied ? 'Copied' : 'Copy'}</button>
+            <button onClick={() => setNewKey(null)} aria-label="Dismiss new key" className="text-dim hover:text-foreground text-xs px-1 shrink-0">×</button>
+          </div>
+        </div>
+      )}
+      <div className="flex gap-1.5">
+        <input
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          placeholder="Label (e.g. market-maker bot)"
+          aria-label="New API key label"
+          className="flex-1 bg-surface-2 border border-border rounded-lg px-2.5 py-1.5 text-[11px] text-foreground outline-none focus:border-primary/40"
+        />
+        <button
+          onClick={create}
+          disabled={busy}
+          className="px-3 py-1.5 bg-primary/10 text-primary border border-primary/25 rounded-lg text-[11px] font-semibold hover:bg-primary/20 disabled:opacity-40 transition-colors"
+        >Create</button>
+      </div>
+      {keys.length > 0 ? (
+        <div className="space-y-1">
+          {keys.map((k) => (
+            <div key={k.id} className="flex items-center justify-between text-[11px] py-1">
+              <div className="min-w-0">
+                <span className="text-foreground font-medium">{k.label || 'Untitled'}</span>
+                <span className="text-dim ml-2 font-mono text-[9.5px]">
+                  {(k.permissions || []).join(', ')} · {k.active ? 'active' : 'revoked'}
+                </span>
+              </div>
+              {k.active && (
+                <button onClick={() => revoke(k.id)} className="text-[10px] text-dim hover:text-red transition-colors shrink-0 ml-2">Revoke</button>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-[10px] text-dim">No keys yet. Keys authenticate the REST API with read/trade scope.</p>
+      )}
+    </div>
+  );
+}
 
 export default function SettingsModal() {
   const {
@@ -121,6 +220,12 @@ export default function SettingsModal() {
               onChange={setSoundEnabled}
             />
           </div>
+
+          <div className="h-px bg-border" />
+
+          {/* API keys — scoped keys for programmatic access (bots, scripts).
+              The raw key is shown once at creation; only its hash is stored. */}
+          <ApiKeysSection />
 
           <div className="h-px bg-border" />
 

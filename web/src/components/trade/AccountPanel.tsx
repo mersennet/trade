@@ -1,5 +1,6 @@
 'use client';
 import { useMemo, useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { useStore } from '@/stores/useStore';
 import { useWallet } from '@/hooks/useWallet';
 import { useToast } from '@/components/shared/Toast';
@@ -21,6 +22,15 @@ export default function AccountPanel() {
   const [transferring, setTransferring] = useState(false);
   const [usdcWalletBalance, setUsdcWalletBalance] = useState(0);
   const [feeTier, setFeeTier] = useState<{ name: string; makerFee: number; takerFee: number } | null>(null);
+  const [points, setPoints] = useState<{ total: number; tier: string } | null>(null);
+
+  // Points balance chip (Paradex keeps XP visible while trading).
+  useEffect(() => {
+    if (!address) return;
+    api.getPoints(address)
+      .then((r) => setPoints({ total: r.totalPoints, tier: r.tier }))
+      .catch(() => {});
+  }, [address]);
 
   // Fee tier from 30d volume (protocol tiers come from /api/v1/stats).
   useEffect(() => {
@@ -159,6 +169,14 @@ export default function AccountPanel() {
             <span className="text-xs font-mono font-medium text-primary">
               {feeTier.name} · {(feeTier.makerFee * 100).toFixed(3)}%/{(feeTier.takerFee * 100).toFixed(3)}%
             </span>
+          </div>
+        )}
+        {points && points.total > 0 && (
+          <div className="flex items-center justify-between" title="Mersennet points balance">
+            <span className="text-[11px] text-dim">Points</span>
+            <Link href="/points" className="text-xs font-mono font-medium text-yellow hover:underline">
+              {formatNumber(points.total, 0)} · {points.tier}
+            </Link>
           </div>
         )}
       </div>
