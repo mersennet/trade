@@ -38,6 +38,28 @@ export interface PendingOrder {
   ts: number;
 }
 
+/** Notification-center entry. Lives in the store (not a per-component hook)
+ * so order fills, bracket fires and transfer results can all publish to the
+ * same feed the bell reads. */
+export interface AppNotification {
+  id: string;
+  type: 'fill' | 'liquidation' | 'info' | 'warning';
+  title: string;
+  message: string;
+  timestamp: number;
+  read: boolean;
+}
+
+/** A client-side price alert: fires a browser + in-app notification when the
+ * mark crosses the target, then removes itself. */
+export interface PriceAlert {
+  id: string;
+  marketId: number;
+  direction: 'above' | 'below';
+  price: number;
+  created: number;
+}
+
 /** A TP/SL bracket on an open position. Brackets are watched and executed
  * CLIENT-SIDE (the chain has no server-side auto-execution since the auth
  * hardening): while the user's session is open, the app watches the mark
@@ -83,6 +105,10 @@ interface AppState {
   depositRequestTs: number;
   /** Client-side TP/SL brackets (persisted per wallet). */
   brackets: Bracket[];
+  /** Notification center feed (persisted, capped at 50). */
+  notifications: AppNotification[];
+  /** Client-side price alerts (persisted). */
+  priceAlerts: PriceAlert[];
 
   setTheme: (t: 'dark' | 'light') => void;
   setMarket: (m: Market) => void;
@@ -110,6 +136,11 @@ interface AppState {
   requestDeposit: () => void;
   setBracket: (b: Bracket) => void;
   removeBracket: (id: string) => void;
+  addNotification: (type: AppNotification['type'], title: string, message: string) => void;
+  markAllRead: () => void;
+  clearAllNotifications: () => void;
+  addPriceAlert: (a: PriceAlert) => void;
+  removePriceAlert: (id: string) => void;
 }
 
 // Must match API market id 1 (chain.js MARKETS[0]) — MRSN/USD, 50x. A mismatch
@@ -146,6 +177,8 @@ export const useStore = create<AppState>()(
       privacyForkActive: false,
       depositRequestTs: 0,
       brackets: [],
+      notifications: [],
+      priceAlerts: [],
 
       setTheme: (theme) => {
         document.documentElement.setAttribute('data-theme', theme);
@@ -188,6 +221,16 @@ export const useStore = create<AppState>()(
         ],
       })),
       removeBracket: (id) => set((s) => ({ brackets: s.brackets.filter((x) => x.id !== id) })),
+      addNotification: (type, title, message) => set((s) => ({
+        notifications: [
+          { id: `${Date.now()}-${Math.random()}`, type, title, message, timestamp: Date.now(), read: false },
+          ...s.notifications,
+        ].slice(0, 50),
+      })),
+      markAllRead: () => set((s) => ({ notifications: s.notifications.map((n) => ({ ...n, read: true })) })),
+      clearAllNotifications: () => set({ notifications: [] }),
+      addPriceAlert: (a) => set((s) => ({ priceAlerts: [...s.priceAlerts, a] })),
+      removePriceAlert: (id) => set((s) => ({ priceAlerts: s.priceAlerts.filter((x) => x.id !== id) })),
     }),
     {
       name: 'mersennet-trade-store',
@@ -203,6 +246,8 @@ export const useStore = create<AppState>()(
         gaslessEnabled: state.gaslessEnabled,
         paperMode: state.paperMode,
         brackets: state.brackets,
+        notifications: state.notifications,
+        priceAlerts: state.priceAlerts,
       }),
     }
   )

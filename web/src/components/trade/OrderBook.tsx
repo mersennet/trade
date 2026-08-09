@@ -328,10 +328,16 @@ export default function OrderBook() {
               const prev = recentTrades[i + 1];
               const priceUp = prev ? t.price >= prev.price : true;
               const color = isBuy || priceUp ? 'text-green' : 'text-red';
+              // Whale flash: large-notional fills stand out in the tape.
+              const isWhale = Number(t.price) * Number(t.size) >= 25_000;
               return (
-                <div key={t.id || i} className="grid grid-cols-3 px-3 py-[3px] text-[11px] font-mono hover:bg-surface-2/50 transition-colors group">
-                  <span className={cn('tabular-nums', color)}>
+                <div key={t.id || i} className={cn(
+                  'grid grid-cols-3 px-3 py-[3px] text-[11px] font-mono hover:bg-surface-2/50 transition-colors group',
+                  isWhale && 'bg-yellow/[0.06] border-l-2 border-yellow/50'
+                )}>
+                  <span className={cn('tabular-nums flex items-center gap-1', color)}>
                     {formatPrice(t.price)}
+                    {isWhale && <span className="text-[8px] font-bold text-yellow uppercase tracking-wide">whale</span>}
                   </span>
                   <span className="text-right text-foreground/60 tabular-nums">{formatNumber(t.size, 5)}</span>
                   <span className="text-right text-dim tabular-nums flex items-center justify-end gap-1">

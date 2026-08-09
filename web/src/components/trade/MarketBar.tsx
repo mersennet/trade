@@ -5,6 +5,7 @@ import { useWebSocket } from '@/hooks/useWebSocket';
 import { api, type Market } from '@/lib/api';
 import { formatPrice, formatNumber, cn } from '@/lib/utils';
 import TokenLogo from '@/components/TokenLogo';
+import PriceAlertBell from '@/components/trade/PriceAlertBell';
 
 function formatCompact(n: number): string {
   if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
@@ -314,6 +315,7 @@ export default function MarketBar() {
               )}>
                 {isPositive ? '+' : ''}{formatNumber(change24h, 2)}%
               </span>
+              <PriceAlertBell marketId={market.id} />
             </div>
           </div>
 

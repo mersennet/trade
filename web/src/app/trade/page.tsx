@@ -9,7 +9,9 @@ import PositionsTable from '@/components/trade/PositionsTable';
 import FundingChart from '@/components/trade/FundingChart';
 import AccountPanel from '@/components/trade/AccountPanel';
 import PrivacyPanel from '@/components/trade/PrivacyPanel';
+import GettingStarted from '@/components/trade/GettingStarted';
 import { useBrackets } from '@/hooks/useBrackets';
+import { usePriceAlerts } from '@/hooks/usePriceAlerts';
 import { cn, formatPrice } from '@/lib/utils';
 import { useStore } from '@/stores/useStore';
 
@@ -61,6 +63,8 @@ export default function TradePage() {
   const isSpot = tradeMode === 'spot';
   // Watch TP/SL brackets and fire signed closing orders when triggers cross.
   useBrackets();
+  // Watch price alerts and notify on crossings.
+  usePriceAlerts();
 
   useEffect(() => {
     const ticker = tickers[market.id];
@@ -105,7 +109,7 @@ export default function TradePage() {
           <div className="h-full overflow-hidden"><OrderBook /></div>
         )}
         {mobileTab === 'trade' && (
-          <div className="h-full overflow-y-auto"><TradeForm /><PrivacyPanel /></div>
+          <div className="h-full overflow-y-auto"><GettingStarted /><TradeForm /><PrivacyPanel /></div>
         )}
         {mobileTab === 'positions' && (
           <div className="h-full overflow-hidden"><PositionsTable /></div>
@@ -131,6 +135,7 @@ export default function TradePage() {
           <OrderBook />
         </div>
         <div className="min-h-0 min-w-0 overflow-y-auto bg-surface flex flex-col gap-px">
+          <GettingStarted />
           <TradeForm />
           <AccountPanel />
           <PrivacyPanel />

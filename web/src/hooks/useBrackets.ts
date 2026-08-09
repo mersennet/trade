@@ -48,8 +48,10 @@ export function useBrackets() {
         sessionKey: oneClickEnabled ? sessionKey || undefined : undefined,
       });
       toast(`${label} triggered — closing ${b.size} (market ${b.marketId})`, 'success');
+      useStore.getState().addNotification('fill', `${label} triggered`, `Closed ${b.size} on market ${b.marketId} @ ${tickers[b.marketId]?.markPrice ?? '—'}`);
     } catch (e) {
       toast(`${label} trigger failed: ${(e as Error).message}`, 'error');
+      useStore.getState().addNotification('warning', `${label} failed`, (e as Error).message);
     } finally {
       // Either way the bracket is spent — a failed fire must not loop.
       removeBracket(b.id);

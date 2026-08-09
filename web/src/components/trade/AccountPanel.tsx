@@ -20,6 +20,20 @@ export default function AccountPanel() {
   const [transferAmount, setTransferAmount] = useState('');
   const [transferring, setTransferring] = useState(false);
   const [usdcWalletBalance, setUsdcWalletBalance] = useState(0);
+  const [feeTier, setFeeTier] = useState<{ name: string; makerFee: number; takerFee: number } | null>(null);
+
+  // Fee tier from 30d volume (protocol tiers come from /api/v1/stats).
+  useEffect(() => {
+    if (!address) return;
+    Promise.all([api.getStats(), api.getTraderProfile(address)])
+      .then(([stats, profile]) => {
+        const tiers = (stats.feeTiers || []) as { name: string; minVolume: number; makerFee: number; takerFee: number }[];
+        const vol = Number(profile?.stats?.['30d']?.volume ?? profile?.stats?.['all']?.volume ?? 0);
+        const tier = [...tiers].sort((a, b) => b.minVolume - a.minVolume).find((t) => vol >= t.minVolume) || tiers[0];
+        if (tier) setFeeTier(tier);
+      })
+      .catch(() => {});
+  }, [address]);
 
   // The header's Deposit button navigates here and bumps this timestamp —
   // open the transfer panel in deposit mode when it fires.
@@ -111,6 +125,16 @@ export default function AccountPanel() {
             {formatNumber(stats.marginRatio, 1)}%
           </span>
         </div>
+        {/* Margin usage bar — HL-style color states so risk is glanceable */}
+        <div className="h-1 bg-surface-2 rounded-full overflow-hidden" title="Margin usage: notional / collateral">
+          <div
+            className={cn(
+              'h-full rounded-full transition-all duration-500',
+              stats.marginRatio > 80 ? 'bg-red' : stats.marginRatio > 50 ? 'bg-yellow' : 'bg-green'
+            )}
+            style={{ width: `${Math.min(100, stats.marginRatio)}%` }}
+          />
+        </div>
         <div className="flex items-center justify-between">
           <span className="text-[11px] text-dim">Open Notional</span>
           <span className="text-xs font-mono font-medium text-foreground/70">{formatNumber(stats.totalNotional, 2)} MRSN</span>
@@ -129,6 +153,14 @@ export default function AccountPanel() {
           <span className="text-[11px] text-dim">MRSN (wallet)</span>
           <span className="text-xs font-mono font-medium text-foreground">{formatNumber(usdcWalletBalance, 2)} MRSN</span>
         </div>
+        {feeTier && (
+          <div className="flex items-center justify-between" title="Your fee tier from 30d trading volume">
+            <span className="text-[11px] text-dim">Fee Tier</span>
+            <span className="text-xs font-mono font-medium text-primary">
+              {feeTier.name} · {(feeTier.makerFee * 100).toFixed(3)}%/{(feeTier.takerFee * 100).toFixed(3)}%
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Deposit/Withdraw — neutral pair with visible 1px divider */}
@@ -180,9 +212,11 @@ export default function AccountPanel() {
                 if (transferMode === 'deposit') {
                   res = await depositToVault(provider, address, transferAmount);
                   toast(`Deposited ${transferAmount} MRSN`, 'success');
+                  useStore.getState().addNotification('info', 'Deposit confirmed', `${transferAmount} MRSN added to trading collateral`);
                 } else {
                   res = await withdrawFromVault(provider, address, transferAmount);
                   toast(`Withdrew ${transferAmount} MRSN`, 'success');
+                  useStore.getState().addNotification('info', 'Withdrawal confirmed', `${transferAmount} MRSN returned to your wallet`);
                 }
                 if (typeof window !== 'undefined' && res?.vaultTx) {
                   console.log('[collateral] tx:', explorerTx(res.vaultTx));

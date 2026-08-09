@@ -142,13 +142,18 @@ export default function TradeForm() {
         const afterSize = posSize(p.positions || []);
         const filled = Math.max(0, isBuy ? afterSize - beforeSize : beforeSize - afterSize);
         const resting = (o.orders || []).filter((ro) => !beforeIds.has(orderKey(ro)));
+        const notify = useStore.getState().addNotification;
         if (filled > 0 && resting.length > 0) {
-          toast(`Partially filled ${formatNumber(filled, 4)} ${market.base} — remainder resting @ ${price}`, 'success');
+          const msg = `Partially filled ${formatNumber(filled, 4)} ${market.base} — remainder resting @ ${price}`;
+          toast(msg, 'success');
+          notify('fill', 'Partial fill', `${market.symbol}: ${msg}`);
           return;
         }
         if (filled > 0) {
           const entry = (p.positions || []).find((x) => x.marketId === market.id)?.entryPrice;
-          toast(`Filled ${formatNumber(filled, 4)} ${market.base}${entry ? ` @ ${formatPrice(Number(entry))}` : ''}`, 'success');
+          const msg = `Filled ${formatNumber(filled, 4)} ${market.base}${entry ? ` @ ${formatPrice(Number(entry))}` : ''}`;
+          toast(msg, 'success');
+          notify('fill', `${isBuy ? 'Bought' : 'Sold'} ${market.base}`, `${market.symbol}: ${msg}`);
           return;
         }
         if (resting.length > 0) {
@@ -159,6 +164,7 @@ export default function TradeForm() {
     }
     // Nothing changed after polling: an IOC/market order that crossed nothing.
     toast('No fill — no liquidity within your slippage tolerance', 'warning');
+    useStore.getState().addNotification('warning', 'No fill', `${market.symbol}: order crossed nothing within your slippage tolerance`);
   };
 
   const executeOrder = async (useOneClick: boolean) => {

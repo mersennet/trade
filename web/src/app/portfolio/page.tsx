@@ -3,10 +3,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { cn, formatNumber, formatPrice } from '@/lib/utils';
 import { useToast } from '@/components/shared/Toast';
 import { useWallet } from '@/hooks/useWallet';
-import { api, type PortfolioMarginData } from '@/lib/api';
+import { api, type PortfolioMarginData, type TraderProfile } from '@/lib/api';
 import { useStore } from '@/stores/useStore';
 import TokenLogo from '@/components/TokenLogo';
 import EmptyState, { SkeletonRows } from '@/components/shared/EmptyState';
+import EquityCurve from '@/components/shared/EquityCurve';
+import { buildEquityCurve } from '@/lib/pnl';
 
 type MarginMode = 'cross' | 'isolated' | 'portfolio';
 
@@ -63,6 +65,7 @@ export default function PortfolioPage() {
   const { toast } = useToast();
   const [data, setData] = useState<PortfolioMarginData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<TraderProfile | null>(null);
   const marginMode = useStore((s) => s.marginMode);
   const setMarginMode = useStore((s) => s.setMarginMode);
 
@@ -81,6 +84,7 @@ export default function PortfolioPage() {
   useEffect(() => {
     refresh();
     if (address) {
+      api.getTraderProfile(address).then(setProfile).catch(() => {});
       const interval = setInterval(refresh, 10000);
       return () => clearInterval(interval);
     }
@@ -178,6 +182,33 @@ export default function PortfolioPage() {
               <HealthGauge factor={data.healthFactor ?? 0} />
             </div>
           </div>
+
+          {/* Trading performance: realized cash-flow PnL curve + headline stats
+              from the indexer leaderboard (same model as the analytics page) */}
+          {profile && (profile.recentTrades?.length ?? 0) > 0 && (
+            <div className="bg-surface border border-border rounded-xl p-4">
+              <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                <h3 className="text-[11px] font-semibold text-foreground uppercase tracking-wider">Trading Performance</h3>
+                <div className="flex items-center gap-4 text-[11px] font-mono">
+                  {(() => {
+                    const all = profile.stats?.['all'] || {};
+                    const pnl = Number(all.pnl ?? 0);
+                    const wins = Number(all.win_count ?? 0);
+                    const losses = Number(all.loss_count ?? 0);
+                    const decided = wins + losses;
+                    return (
+                      <>
+                        <span className="text-dim">Realized PnL <span className={cn('font-semibold', pnl >= 0 ? 'text-green' : 'text-red')}>{pnl >= 0 ? '+' : ''}{formatNumber(pnl, 2)}</span></span>
+                        <span className="text-dim">Win rate <span className="text-foreground">{decided > 0 ? `${Math.round((wins / decided) * 100)}%` : '—'}</span></span>
+                        <span className="text-dim">Volume <span className="text-foreground">{formatNumber(Number(all.volume ?? 0), 0)}</span></span>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+              <EquityCurve data={buildEquityCurve(profile.recentTrades || [])} height={160} />
+            </div>
+          )}
 
           {/* Collateral Breakdown */}
           <div className="bg-surface border border-border rounded-xl overflow-hidden">

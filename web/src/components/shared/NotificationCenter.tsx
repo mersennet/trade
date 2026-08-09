@@ -1,69 +1,20 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import EmptyState from '@/components/shared/EmptyState';
+import { useStore, type AppNotification } from '@/stores/useStore';
 
-interface Notification {
-  id: string;
-  type: 'fill' | 'liquidation' | 'info' | 'warning';
-  title: string;
-  message: string;
-  timestamp: number;
-  read: boolean;
-}
+type Notification = AppNotification;
 
-const STORAGE_KEY = 'mersennet-trade_notifications';
-// Legacy predecessor-era key — read once and migrate to the new namespace.
-const LEGACY_STORAGE_KEY = 'pt_notifications';
-
-function loadNotifications(): Notification[] {
-  try {
-    let v = localStorage.getItem(STORAGE_KEY);
-    if (!v) {
-      const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
-      if (legacy) {
-        localStorage.setItem(STORAGE_KEY, legacy);
-        localStorage.removeItem(LEGACY_STORAGE_KEY);
-        v = legacy;
-      }
-    }
-    return v ? JSON.parse(v) : [];
-  } catch { return []; }
-}
-
-function saveNotifications(n: Notification[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(n.slice(0, 50)));
-}
-
+/** Shared notification feed backed by the global store — any part of the app
+ * (order fills, bracket fires, transfers) can publish via
+ * `useStore.getState().addNotification(...)` and the bell reflects it. */
 export function useNotifications() {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-
-  useEffect(() => { setNotifications(loadNotifications()); }, []);
-
-  const addNotification = useCallback((type: Notification['type'], title: string, message: string) => {
-    const n: Notification = { id: `${Date.now()}-${Math.random()}`, type, title, message, timestamp: Date.now(), read: false };
-    setNotifications((prev) => {
-      const next = [n, ...prev].slice(0, 50);
-      saveNotifications(next);
-      return next;
-    });
-  }, []);
-
-  const markAllRead = useCallback(() => {
-    setNotifications((prev) => {
-      const next = prev.map((n) => ({ ...n, read: true }));
-      saveNotifications(next);
-      return next;
-    });
-  }, []);
-
-  const clearAll = useCallback(() => {
-    setNotifications([]);
-    saveNotifications([]);
-  }, []);
-
+  const notifications = useStore((s) => s.notifications);
+  const addNotification = useStore((s) => s.addNotification);
+  const markAllRead = useStore((s) => s.markAllRead);
+  const clearAll = useStore((s) => s.clearAllNotifications);
   const unreadCount = notifications.filter((n) => !n.read).length;
-
   return { notifications, addNotification, markAllRead, clearAll, unreadCount };
 }
 
