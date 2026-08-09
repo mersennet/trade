@@ -143,10 +143,42 @@ router.get('/:marketId/ticker', async (req, res) => {
         : 0;
     }
 
+    // Per-market open interest + long/short account ratio, aggregated from the
+    // full trade history: a fill moves the taker and maker in opposite
+    // directions, so each account's net position is the sum of signed sizes.
+    // OI (one side, in USD at mark) = sum of positive net sizes x mark.
+    let openInterest = 0;
+    let longAccounts = 0;
+    let shortAccounts = 0;
+    try {
+      const oiRes = await pool.query(
+        `WITH fills AS (
+           SELECT taker AS account, CASE WHEN side = 'buy' THEN size ELSE -size END AS signed
+           FROM trades WHERE market_id = $1
+           UNION ALL
+           SELECT maker AS account, CASE WHEN side = 'buy' THEN -size ELSE size END AS signed
+           FROM trades WHERE market_id = $1
+         ), net AS (
+           SELECT account, SUM(signed)::float8 AS net_size FROM fills GROUP BY account
+         )
+         SELECT
+           COALESCE(SUM(GREATEST(net_size, 0)), 0)::float8 AS long_size,
+           COUNT(*) FILTER (WHERE net_size > 0) AS longs,
+           COUNT(*) FILTER (WHERE net_size < 0) AS shorts
+         FROM net`,
+        [marketId]
+      );
+      const row = oiRes.rows[0] || {};
+      openInterest = Math.round(Number(row.long_size || 0) * (markPrice || 0));
+      longAccounts = Number(row.longs || 0);
+      shortAccounts = Number(row.shorts || 0);
+    } catch (_) { /* OI is best-effort; never fail the ticker over it */ }
+
     res.json({
       marketId, bestBid, bestAsk, markPrice,
       oracleMarkUsd, oracleAgeSec: oraclePx.age,
       volume24h, trades24h,
+      openInterest, longAccounts, shortAccounts,
       change24h: Math.round(change24h * 100) / 100,
       timestamp: Date.now(),
     });

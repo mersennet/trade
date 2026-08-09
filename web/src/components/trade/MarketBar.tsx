@@ -103,12 +103,17 @@ export default function MarketBar() {
 
   const stats = useMemo(() => {
     if (!currentTicker) return null;
+    const longs = currentTicker.longAccounts ?? 0;
+    const shorts = currentTicker.shortAccounts ?? 0;
     return {
       markPrice: currentTicker.markPrice,
+      oraclePrice: currentTicker.oracleMarkUsd || 0,
       bestBid: currentTicker.bestBid,
       bestAsk: currentTicker.bestAsk,
       volume24h: currentTicker.volume24h || 0,
       trades24h: currentTicker.trades24h || 0,
+      openInterest: currentTicker.openInterest || 0,
+      longPct: longs + shorts > 0 ? Math.round((longs / (longs + shorts)) * 100) : null,
       fundingRate: market.fundingRate || 0,
     };
   }, [currentTicker, market.fundingRate]);
@@ -315,6 +320,9 @@ export default function MarketBar() {
           <div className="w-px h-7 bg-border shrink-0" />
 
           {/* Secondary stats — label-above-value, one column each */}
+          {stats.oraclePrice > 0 && stats.oraclePrice !== stats.markPrice && (
+            <Stat label="Oracle" value={formatPrice(stats.oraclePrice)} valueClass="text-dim" />
+          )}
           <Stat label="24h Volume" value={formatCompact(stats.volume24h)} />
           <Stat label="24h Trades" value={formatNumber(stats.trades24h, 0)} />
 
@@ -326,6 +334,16 @@ export default function MarketBar() {
                 valueClass={stats.fundingRate >= 0 ? 'text-green' : 'text-red'}
               />
               <Stat label="Next funding" value={<FundingCountdown />} valueClass="text-yellow" />
+              {stats.openInterest > 0 && (
+                <Stat label="Open Interest" value={formatCompact(stats.openInterest)} />
+              )}
+              {stats.longPct !== null && (
+                <Stat
+                  label="L/S Accounts"
+                  value={`${stats.longPct}% / ${100 - stats.longPct}%`}
+                  valueClass={stats.longPct >= 50 ? 'text-green' : 'text-red'}
+                />
+              )}
             </>
           )}
 

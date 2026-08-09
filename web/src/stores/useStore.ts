@@ -24,6 +24,20 @@ interface TradeState {
   slPrice: string;
 }
 
+/** An order the user just submitted that hasn't appeared in the API's order
+ * list yet — shown in the Orders tab immediately with a "Pending" marker so
+ * the terminal feels instant instead of silent until the next poll. */
+export interface PendingOrder {
+  tempId: string;
+  owner: string;
+  market_id: number;
+  side: 'buy' | 'sell';
+  price: string;
+  size: string;
+  tif: string;
+  ts: number;
+}
+
 interface AppState {
   theme: 'dark' | 'light';
   market: Market;
@@ -32,6 +46,7 @@ interface AppState {
   trade: TradeState;
   positions: Position[];
   orders: Order[];
+  pendingOrders: PendingOrder[];
   favorites: number[];
   soundEnabled: boolean;
   skipConfirm: boolean;
@@ -48,6 +63,9 @@ interface AppState {
    *  engageable once the privacy hard fork is active on the chain. */
   privateMode: boolean;
   privacyForkActive: boolean;
+  /** Timestamp of the last "Deposit" request from the header — AccountPanel
+   * watches it and opens its transfer panel in deposit mode. */
+  depositRequestTs: number;
 
   setTheme: (t: 'dark' | 'light') => void;
   setMarket: (m: Market) => void;
@@ -56,6 +74,8 @@ interface AppState {
   setTrade: (t: Partial<TradeState>) => void;
   setPositions: (p: Position[]) => void;
   setOrders: (o: Order[]) => void;
+  addPendingOrder: (o: PendingOrder) => void;
+  removePendingOrder: (tempId: string) => void;
   toggleFavorite: (id: number) => void;
   setSoundEnabled: (v: boolean) => void;
   setSkipConfirm: (v: boolean) => void;
@@ -70,6 +90,7 @@ interface AppState {
   setTradeMode: (m: 'perps' | 'spot') => void;
   setPrivateMode: (v: boolean) => void;
   setPrivacyForkActive: (v: boolean) => void;
+  requestDeposit: () => void;
 }
 
 // Must match API market id 1 (chain.js MARKETS[0]) — MRSN/USD, 50x. A mismatch
@@ -89,6 +110,7 @@ export const useStore = create<AppState>()(
       },
       positions: [],
       orders: [],
+      pendingOrders: [],
       favorites: [],
       soundEnabled: false,
       skipConfirm: false,
@@ -103,6 +125,7 @@ export const useStore = create<AppState>()(
       tradeMode: 'perps',
       privateMode: false,
       privacyForkActive: false,
+      depositRequestTs: 0,
 
       setTheme: (theme) => {
         document.documentElement.setAttribute('data-theme', theme);
@@ -114,6 +137,8 @@ export const useStore = create<AppState>()(
       setTrade: (t) => set((s) => ({ trade: { ...s.trade, ...t } })),
       setPositions: (positions) => set({ positions }),
       setOrders: (orders) => set({ orders }),
+      addPendingOrder: (o) => set((s) => ({ pendingOrders: [...s.pendingOrders, o] })),
+      removePendingOrder: (tempId) => set((s) => ({ pendingOrders: s.pendingOrders.filter((o) => o.tempId !== tempId) })),
       toggleFavorite: (id) => set((s) => ({
         favorites: s.favorites.includes(id) ? s.favorites.filter((f) => f !== id) : [...s.favorites, id],
       })),
@@ -134,6 +159,7 @@ export const useStore = create<AppState>()(
         // Never leave private mode engaged if the fork isn't live.
         privateMode: privacyForkActive ? s.privateMode : false,
       })),
+      requestDeposit: () => set({ depositRequestTs: Date.now() }),
     }),
     {
       name: 'mersennet-trade-store',

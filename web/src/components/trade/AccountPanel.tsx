@@ -21,6 +21,15 @@ export default function AccountPanel() {
   const [transferring, setTransferring] = useState(false);
   const [usdcWalletBalance, setUsdcWalletBalance] = useState(0);
 
+  // The header's Deposit button navigates here and bumps this timestamp —
+  // open the transfer panel in deposit mode when it fires.
+  const depositRequestTs = useStore((s) => s.depositRequestTs);
+  useEffect(() => {
+    if (!depositRequestTs) return;
+    setTransferMode('deposit');
+    setShowTransfer(true);
+  }, [depositRequestTs]);
+
   const refreshUsdc = useCallback(async () => {
     if (!address || !provider) { setUsdcWalletBalance(0); return; }
     try {

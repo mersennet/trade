@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import WalletButton from './WalletButton';
 import ThemeToggle from './ThemeToggle';
 import NotificationCenter from '../shared/NotificationCenter';
@@ -44,6 +44,7 @@ const PAGE_TITLE_KEYS: Record<string, { key: string; fallback: string }> = {
 
 export default function Header() {
   const pathname = usePathname();
+  const router = useRouter();
   const { t } = useTranslation();
   const locale = useLocale((s) => s.locale);
   const setLocale = useLocale((s) => s.setLocale);
@@ -51,6 +52,8 @@ export default function Header() {
   const title = entry ? t(entry.key, entry.fallback) : 'Mersennet Trade';
   const setShowSettings = useStore((s) => s.setShowSettings);
   const paperMode = useStore((s) => s.paperMode);
+  const isConnected = useStore((s) => !!s.wallet.address);
+  const requestDeposit = useStore((s) => s.requestDeposit);
   const [showLang, setShowLang] = useState(false);
 
   return (
@@ -74,6 +77,17 @@ export default function Header() {
         </button>
         {paperMode && (
           <span className="px-2 py-0.5 bg-cyan/10 text-cyan text-[10px] font-bold rounded-md border border-cyan/20">PAPER</span>
+        )}
+        {isConnected && (
+          <button
+            onClick={() => {
+              // Deposit lives in the trade page's AccountPanel — navigate there
+              // and signal it to open the transfer panel in deposit mode.
+              if (pathname !== '/trade') router.push('/trade');
+              requestDeposit();
+            }}
+            className="px-3 h-8 bg-primary/10 text-primary border border-primary/25 rounded-lg text-[11.5px] font-semibold hover:bg-primary/20 transition-colors"
+          >Deposit</button>
         )}
         <div className="relative">
           <button

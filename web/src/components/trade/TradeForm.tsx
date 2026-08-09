@@ -36,6 +36,7 @@ export default function TradeForm() {
   const { toast } = useToast();
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [showCalc, setShowCalc] = useState(false);
   const [riskPct, setRiskPct] = useState('2');
   const [calcEntry, setCalcEntry] = useState('');
@@ -98,13 +99,67 @@ export default function TradeForm() {
 
     const useOneClick = oneClickEnabled && !!sessionKey;
     if (!skipConfirm && !useOneClick) {
-      const priceLabel = trade.orderType === 'market' ? 'Market' : trade.price;
-      const confirmed = window.confirm(
-        `${trade.side.toUpperCase()} ${trade.size} ${market.base} @ ${priceLabel} (${trade.leverage}x)?`
-      );
-      if (!confirmed) return;
+      // Inline confirm sheet (see below) — never a native window.confirm popup.
+      setConfirming(true);
+      return;
     }
 
+    await executeOrder(useOneClick);
+  };
+
+  /**
+   * After a limit/market order mines, diff open orders + position size to
+   * report what actually happened: filled (and at what average), resting on
+   * the book, partially filled, or — for market orders — no fill at all.
+   * Polls briefly because the API indexer trails the chain by a block or two.
+   */
+  const reportOutcome = async (owner: string, isBuy: boolean, price: string) => {
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const posSize = (list: { marketId: number; size: number | string }[]) =>
+      Number(list.find((p) => p.marketId === market.id)?.size ?? 0);
+    const orderKey = (o: { id?: unknown; orderId?: unknown }) => String(o.id ?? o.orderId);
+
+    let beforeIds = new Set<string>();
+    let beforeSize = 0;
+    try {
+      const [o, p] = await Promise.all([api.getOrders(owner), api.getPositions(owner)]);
+      beforeIds = new Set((o.orders || []).map(orderKey));
+      beforeSize = posSize(p.positions || []);
+    } catch { /* best-effort; fall through to generic toast */ }
+
+    for (let i = 0; i < 6; i++) {
+      await sleep(1500);
+      try {
+        const [o, p] = await Promise.all([api.getOrders(owner), api.getPositions(owner)]);
+        const afterSize = posSize(p.positions || []);
+        const filled = Math.max(0, isBuy ? afterSize - beforeSize : beforeSize - afterSize);
+        const resting = (o.orders || []).filter((ro) => !beforeIds.has(orderKey(ro)));
+        if (filled > 0 && resting.length > 0) {
+          toast(`Partially filled ${formatNumber(filled, 4)} ${market.base} — remainder resting @ ${price}`, 'success');
+          return;
+        }
+        if (filled > 0) {
+          const entry = (p.positions || []).find((x) => x.marketId === market.id)?.entryPrice;
+          toast(`Filled ${formatNumber(filled, 4)} ${market.base}${entry ? ` @ ${formatPrice(Number(entry))}` : ''}`, 'success');
+          return;
+        }
+        if (resting.length > 0) {
+          toast(`Order resting on the book @ ${price}`, 'success');
+          return;
+        }
+      } catch { /* retry */ }
+    }
+    // Nothing changed after polling: an IOC/market order that crossed nothing.
+    toast('No fill — no liquidity within your slippage tolerance', 'warning');
+  };
+
+  const executeOrder = async (useOneClick: boolean) => {
+    setConfirming(false);
+    if (!address) {
+      toast('Connect wallet first', 'error');
+      return;
+    }
+    const walletAddress = address;
     setLoading(true);
     try {
       // Private mode: route through the shielded intent lane instead of the
@@ -139,14 +194,14 @@ export default function TradeForm() {
         return;
       }
 
-      let orderOwner = address;
+      let orderOwner = walletAddress;
       if (useOneClick) {
         try {
           const { ethers } = await import('ethers');
           const sessionWallet = new ethers.Wallet(sessionKey!);
           orderOwner = sessionWallet.address;
         } catch {
-          orderOwner = address;
+          orderOwner = walletAddress;
         }
       }
 
@@ -210,7 +265,7 @@ export default function TradeForm() {
           ? 'Ioc'
           : trade.tif === 'gtc' ? 'Gtc' : trade.tif === 'ioc' ? 'Ioc' : 'Fok';
         void builderCode; // referral credit now derives from on-chain fills, not an API hint
-        await placeOrderOnChain(provider, {
+        const placed = await placeOrderOnChain(provider, {
           marketId: market.id,
           isBuy: trade.side === 'buy',
           priceUsd: priceForOrder,
@@ -218,7 +273,21 @@ export default function TradeForm() {
           tif,
           sessionKey: useOneClick ? sessionKey || undefined : undefined,
         });
-        toast(`${trade.side === 'buy' ? 'Buy' : 'Sell'} ${trade.orderType} order placed`, 'success');
+        // Optimistic pending order: the Orders tab shows it instantly (marked
+        // pending) instead of staying silent until the next API poll.
+        useStore.getState().addPendingOrder({
+          tempId: placed.txHash,
+          owner: orderOwner,
+          market_id: market.id,
+          side: trade.side,
+          price: String(priceForOrder),
+          size: trade.size,
+          tif,
+          ts: Date.now(),
+        });
+        // Report the real outcome (filled / resting / partial / no fill) instead
+        // of a blind "placed" — the tx mining only proves inclusion, not a fill.
+        void reportOutcome(orderOwner, trade.side === 'buy', String(priceForOrder));
       }
       if (useStore.getState().soundEnabled) playSound('fill');
       setTrade({ size: '' });
@@ -231,7 +300,66 @@ export default function TradeForm() {
   };
 
   return (
-    <div className="bg-surface border border-border rounded-xl md:border-0 md:rounded-none p-2.5 md:p-3 xl:p-3.5 flex flex-col gap-2 overflow-hidden">
+    <div className="relative bg-surface border border-border rounded-xl md:border-0 md:rounded-none p-2.5 md:p-3 xl:p-3.5 flex flex-col gap-2 overflow-hidden">
+      {/* Inline order confirmation — replaces the native window.confirm popup.
+          Shows the full order ticket and keeps the user in the terminal. */}
+      {confirming && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/85 backdrop-blur-sm p-4">
+          <div className="w-full max-w-[260px] bg-surface border border-border rounded-xl p-4 shadow-2xl">
+            <p className="text-[13px] font-semibold text-foreground mb-3">Confirm Order</p>
+            <div className="space-y-1.5 text-[11px] font-mono">
+              <div className="flex justify-between">
+                <span className="text-dim">Side</span>
+                <span className={trade.side === 'buy' ? 'text-green font-semibold' : 'text-red font-semibold'}>
+                  {trade.side === 'buy' ? (isSpot ? 'Buy' : 'Long') : (isSpot ? 'Sell' : 'Short')}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-dim">Market</span>
+                <span className="text-foreground">{market.base}/{market.quote}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-dim">Type</span>
+                <span className="text-foreground capitalize">{trade.orderType}{trade.orderType !== 'market' ? ` · ${trade.tif.toUpperCase()}` : ' · IOC'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-dim">Price</span>
+                <span className="text-foreground">{trade.orderType === 'market' ? 'Market' : trade.price}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-dim">Size</span>
+                <span className="text-foreground">{trade.size} {market.base}</span>
+              </div>
+              {!isSpot && (
+                <div className="flex justify-between">
+                  <span className="text-dim">Leverage</span>
+                  <span className="text-foreground">{trade.leverage}×</span>
+                </div>
+              )}
+              {orderSummary && (
+                <div className="flex justify-between pt-1.5 border-t border-border/50">
+                  <span className="text-dim">Est. Fee</span>
+                  <span className="text-foreground">{formatNumber(orderSummary.fee, 4)} {market.quote}</span>
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={() => setConfirming(false)}
+                className="flex-1 py-2 rounded-md bg-surface-2 border border-border text-[12px] font-medium text-dim hover:text-foreground transition-colors"
+              >Cancel</button>
+              <button
+                onClick={() => void executeOrder(oneClickEnabled && !!sessionKey)}
+                className={cn(
+                  'flex-1 py-2 rounded-md text-[12px] font-semibold text-white transition-colors',
+                  trade.side === 'buy' ? 'bg-green hover:bg-green/90' : 'bg-red hover:bg-red/90'
+                )}
+              >Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Side toggle. Parent uses background color + gap-px so the 1px gap
           reads as a thin dark divider between cells. */}
       <div className="flex gap-px bg-background rounded-md overflow-hidden border border-border">
@@ -430,9 +558,24 @@ export default function TradeForm() {
       <div>
         <div className="flex items-center justify-between mb-1.5">
           <label className="text-[11px] text-muted font-medium">{t('trade.size', 'Size')} ({market.base})</label>
-          <button onClick={() => setShowCalc(!showCalc)} className="text-[10px] text-primary hover:text-primary-hover font-medium">
-            {showCalc ? 'Hide Calc' : 'Size Calc'}
-          </button>
+          <div className="flex items-center gap-2">
+            {isConnected && (
+              <span className="text-[10px] text-dim font-mono">
+                Avail <span className="text-foreground/80">{formatNumber(collateral, 2)}</span>
+              </span>
+            )}
+            <button
+              onClick={() => {
+                const markPrice = tickers[market.id]?.markPrice || 0;
+                if (!markPrice || !collateral) return;
+                setTrade({ size: ((collateral * trade.leverage) / markPrice).toFixed(4) });
+              }}
+              className="text-[10px] text-primary hover:text-primary-hover font-medium"
+            >Max</button>
+            <button onClick={() => setShowCalc(!showCalc)} className="text-[10px] text-primary hover:text-primary-hover font-medium">
+              {showCalc ? 'Hide Calc' : 'Size Calc'}
+            </button>
+          </div>
         </div>
         <input
           type="number" value={trade.size}
@@ -620,12 +763,15 @@ export default function TradeForm() {
             : t('trade.placeOrder', 'Place Order')}
       </button>
 
-      {/* Order Summary */}
+      {/* Order Summary — notional is the headline number (how traders actually
+          size), the rest stays small. */}
       {orderSummary && (
         <div className="space-y-1.5 pt-1">
-          <div className="flex items-center justify-between text-[10px]">
-            <span className="text-dim">Order Value</span>
-            <span className="font-mono text-foreground">{formatNumber(orderSummary.notional, 2)} MRSN</span>
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-muted font-medium">Order Value</span>
+            <span className="font-mono text-[15px] font-semibold text-foreground tabular-nums">
+              {formatNumber(orderSummary.notional, 2)} <span className="text-[10px] text-dim font-normal">{market.quote}</span>
+            </span>
           </div>
           {!isSpot && (
             <div className="flex items-center justify-between text-[10px]">

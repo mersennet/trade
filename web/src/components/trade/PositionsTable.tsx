@@ -12,7 +12,7 @@ import { useStore as useAppStore } from '@/stores/useStore';
 type Tab = 'positions' | 'orders' | 'trades' | 'funding' | 'history';
 
 export default function PositionsTable() {
-  const { market, positions, orders, setPositions, setOrders, tickers } = useStore();
+  const { market, positions, orders, setPositions, setOrders, tickers, pendingOrders, removePendingOrder } = useStore();
   const { address, isConnected, connect, provider } = useWallet();
   const { toast } = useToast();
   const [tab, setTab] = useState<Tab>('positions');
@@ -137,6 +137,25 @@ export default function PositionsTable() {
   const filteredOrders = hideOtherSymbols
     ? orders.filter((o) => o.market_id === market.id)
     : orders;
+
+  // Optimistic pending orders: show this wallet's just-submitted orders
+  // instantly; drop each once the API's real order list catches up (matched by
+  // market+side+price+size) or once it is stale beyond a block or two (filled,
+  // failed, or replaced — the truthful-outcome toast covers those cases).
+  useEffect(() => {
+    if (!address || pendingOrders.length === 0) return;
+    const realKeys = new Set(
+      orders.map((o) => `${o.market_id}|${(o.side || '').toLowerCase()}|${Number(o.price)}|${Number(o.size)}`)
+    );
+    for (const p of pendingOrders) {
+      const key = `${p.market_id}|${p.side}|${Number(p.price)}|${Number(p.size)}`;
+      if (realKeys.has(key) || Date.now() - p.ts > 45_000) removePendingOrder(p.tempId);
+    }
+  }, [orders, pendingOrders, address, removePendingOrder]);
+
+  const visiblePending = pendingOrders.filter(
+    (p) => address && p.owner.toLowerCase() === address.toLowerCase() && (!hideOtherSymbols || p.market_id === market.id)
+  );
 
   const TABS: { key: Tab; label: string; count?: number }[] = [
     { key: 'positions', label: 'Positions', count: filteredPositions.length },
@@ -268,7 +287,7 @@ export default function PositionsTable() {
         )}
 
         {tab === 'orders' && (
-          filteredOrders.length > 0 ? (
+          (filteredOrders.length > 0 || visiblePending.length > 0) ? (
             <table className="w-full text-xs">
               <thead><tr className="text-dim text-[10px] border-b border-border">
                 <th className="text-left px-3 py-2 font-medium">Side</th>
@@ -278,6 +297,22 @@ export default function PositionsTable() {
                 <th className="text-right px-2 py-2 font-medium"></th>
               </tr></thead>
               <tbody>
+                {visiblePending.map((p) => (
+                  <tr key={p.tempId} className="border-b border-border/30 bg-primary/[0.04]">
+                    <td className={cn('px-3 py-2.5 font-semibold', p.side === 'buy' ? 'text-green' : 'text-red')}>
+                      {p.side === 'buy' ? 'Buy' : 'Sell'}
+                    </td>
+                    <td className="px-2 py-2.5 text-right text-foreground/70 font-mono tabular-nums">{p.price}</td>
+                    <td className="px-2 py-2.5 text-right text-foreground/70 font-mono tabular-nums">{p.size}</td>
+                    <td className="px-2 py-2.5 text-right text-dim text-[10px]">{p.tif.toUpperCase()}</td>
+                    <td className="px-2 py-2.5 text-right">
+                      <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium bg-yellow/10 text-yellow rounded-md">
+                        <span className="w-1.5 h-1.5 rounded-full bg-yellow animate-pulse" />
+                        Pending
+                      </span>
+                    </td>
+                  </tr>
+                ))}
                 {filteredOrders.map((o, i) => {
                   const id = o.order_id || o.id || i;
                   return (

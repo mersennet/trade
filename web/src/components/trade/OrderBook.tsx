@@ -12,7 +12,7 @@ type BookTab = 'book' | 'trades';
 export default function OrderBook() {
   const { market } = useStore();
   const setTrade = useStore((s) => s.setTrade);
-  const { subscribe } = useWebSocket();
+  const { subscribe, connected } = useWebSocket();
   // Raw (ungrouped) best bid/ask drive the mid-price and spread readout, so
   // those stay truthful no matter what display grouping is selected.
   const [rawBids, setRawBids] = useState<[number, number][]>([]);
@@ -21,6 +21,7 @@ export default function OrderBook() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<BookTab>('book');
   const [recentTrades, setRecentTrades] = useState<Trade[]>([]);
+  const [tradeFilter, setTradeFilter] = useState<'all' | 'buy' | 'sell'>('all');
   // Monotonic clock for snapshot ordering: the 3s REST poll and the WS
   // broadcast are independent snapshots of the same book, and without an
   // ordering check a stale WS payload can overwrite a fresher REST one (or
@@ -50,7 +51,10 @@ export default function OrderBook() {
     };
 
     fetchBook();
-    const interval = setInterval(fetchBook, 3000);
+    // WS is the primary feed (snapshots are timestamp-ordered, so stale
+    // payloads are dropped). The 3s REST poll only runs as a fallback while
+    // the socket is down.
+    const interval = connected ? null : setInterval(fetchBook, 3000);
 
     const unsub = subscribe(`orderbook:${market.id}`, (data: unknown) => {
       const d = data as { bids?: [number, number][]; asks?: [number, number][]; timestamp?: number };
@@ -58,9 +62,9 @@ export default function OrderBook() {
       applyBook(d.bids, d.asks, d.timestamp || Date.now());
     });
 
-    return () => { mounted = false; clearInterval(interval); unsub(); };
+    return () => { mounted = false; if (interval) clearInterval(interval); unsub(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [market.id, subscribe]);
+  }, [market.id, subscribe, connected]);
 
   function applyBook(newBids: [number, number][] | undefined, newAsks: [number, number][] | undefined, ts: number) {
     if (ts < lastBookTs.current) return; // stale snapshot — keep the fresher one
@@ -125,6 +129,22 @@ export default function OrderBook() {
     if (bestBid > 0 && bestAsk > 0) return (bestBid + bestAsk) / 2;
     return bestBid || bestAsk || 0;
   }, [bestBid, bestAsk]);
+
+  // Tick-direction flash on the mid price (green uptick / red downtick),
+  // the standard pro-terminal cue that the market just moved.
+  const prevMidRef = useRef(0);
+  const [midDir, setMidDir] = useState<'up' | 'down' | null>(null);
+  useEffect(() => {
+    if (!midPrice) return;
+    const prev = prevMidRef.current;
+    prevMidRef.current = midPrice;
+    if (!prev || midPrice === prev) return;
+    setMidDir(midPrice > prev ? 'up' : 'down');
+    const timer = setTimeout(() => setMidDir(null), 700);
+    return () => clearTimeout(timer);
+  }, [midPrice]);
+
+  const spreadPct = midPrice > 0 ? (spread / midPrice) * 100 : 0;
 
   const buySellRatio = useMemo(() => {
     const totalBidSize = bids.reduce((sum, b) => sum + b.size, 0);
@@ -205,11 +225,14 @@ export default function OrderBook() {
               </div>
 
               <div className="px-3 py-2 border-y border-border bg-surface-2/60 flex items-center justify-between shrink-0">
-                <span className="text-[15px] font-bold text-foreground font-mono tabular-nums tracking-tight">
+                <span className={cn(
+                  'text-[15px] font-bold font-mono tabular-nums tracking-tight transition-colors duration-300',
+                  midDir === 'up' ? 'text-green' : midDir === 'down' ? 'text-red' : 'text-foreground'
+                )}>
                   {midPrice ? formatPrice(midPrice) : '—'}
                 </span>
                 <span className="text-[10px] text-muted font-mono px-1.5 py-0.5 rounded bg-surface-3/80 border border-border-subtle">
-                  spread {formatPrice(spread)}
+                  spread {formatPrice(spread)}{spreadPct > 0 ? ` · ${spreadPct < 0.01 ? '<0.01' : spreadPct.toFixed(2)}%` : ''}
                 </span>
               </div>
 
@@ -257,7 +280,8 @@ export default function OrderBook() {
             <span className="text-right">Time</span>
           </div>
           <div className="flex-1 overflow-y-auto min-h-0">
-            {recentTrades.length > 0 ? recentTrades.map((t, i) => {
+            {(tradeFilter === 'all' ? recentTrades : recentTrades.filter((tr) => tr.side === tradeFilter)).length > 0
+              ? (tradeFilter === 'all' ? recentTrades : recentTrades.filter((tr) => tr.side === tradeFilter)).map((t, i) => {
               const isBuy = t.side === 'buy';
               const prev = recentTrades[i + 1];
               const priceUp = prev ? t.price >= prev.price : true;
@@ -285,8 +309,15 @@ export default function OrderBook() {
             )}
           </div>
           <div className="px-3 py-1.5 border-t border-border shrink-0 flex items-center justify-end">
-            <button className="text-[10px] text-dim hover:text-muted transition-colors flex items-center gap-1">
-              Filter
+            <button
+              onClick={() => setTradeFilter((f) => (f === 'all' ? 'buy' : f === 'buy' ? 'sell' : 'all'))}
+              className={cn(
+                'text-[10px] transition-colors flex items-center gap-1 px-1.5 py-0.5 rounded',
+                tradeFilter === 'all' ? 'text-dim hover:text-muted' : tradeFilter === 'buy' ? 'text-green bg-green/10' : 'text-red bg-red/10'
+              )}
+              title="Cycle trade filter: all → buys → sells"
+            >
+              {tradeFilter === 'all' ? 'All trades' : tradeFilter === 'buy' ? 'Buys only' : 'Sells only'}
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="6 9 12 15 18 9" />
               </svg>
