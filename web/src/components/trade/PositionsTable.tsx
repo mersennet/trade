@@ -1,8 +1,8 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useStore } from '@/stores/useStore';
 import { useWallet } from '@/hooks/useWallet';
-import { api, type Trade, type Order, type FundingRate } from '@/lib/api';
+import { api, type Trade, type Order, type FundingRate, type ConditionalOrder } from '@/lib/api';
 import { formatPrice, formatNumber, cn } from '@/lib/utils';
 import { useToast } from '@/components/shared/Toast';
 import EmptyState, { SkeletonRows } from '@/components/shared/EmptyState';
@@ -22,6 +22,20 @@ export default function PositionsTable() {
   const [hideOtherSymbols, setHideOtherSymbols] = useState(false);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  // Inline TP/SL editor state: which position row is being edited, the draft
+  // prices, and the wallet's pending conditional orders (the stored brackets).
+  const [tpslEditFor, setTpslEditFor] = useState<number | null>(null);
+  const [tpInput, setTpInput] = useState('');
+  const [slInput, setSlInput] = useState('');
+  const [conditionalOrders, setConditionalOrders] = useState<ConditionalOrder[]>([]);
+  const [tpslSaving, setTpslSaving] = useState(false);
+
+  const refreshConditional = useCallback(() => {
+    if (!address) return;
+    api.getConditionalOrders(address).then((r) => setConditionalOrders(r.orders || [])).catch(() => {});
+  }, [address]);
+
+  useEffect(() => { refreshConditional(); }, [refreshConditional]);
 
   useEffect(() => {
     if (!isConnected || !address) { setLoading(false); return; }
@@ -71,6 +85,69 @@ export default function PositionsTable() {
       toast(`Cancel failed: ${(e as Error).message}`, 'error');
     } finally {
       setCancellingId(null);
+    }
+  };
+
+  // Brackets for a position = its pending reduce-only conditional orders.
+  const bracketsFor = (marketId: number) =>
+    conditionalOrders.filter((c) => c.market_id === marketId && c.reduce_only);
+
+  const handleSetTpsl = async (pos: { marketId: number; symbol: string; size: number | string }) => {
+    if (!address) return;
+    const size = Math.abs(Number(pos.size));
+    const isLong = Number(pos.size) > 0;
+    const tp = parseFloat(tpInput);
+    const sl = parseFloat(slInput);
+    if (!tp && !sl) { toast('Enter a TP or SL price', 'error'); return; }
+    setTpslSaving(true);
+    try {
+      // Each bracket is a reduce-only stop on the opposite side: it can only
+      // ever close the position, never open or extend one.
+      const side = isLong ? 'Sell' : 'Buy';
+      const mark = tickers[pos.marketId]?.markPrice || 0;
+      for (const [kind, trigger] of [['TP', tp], ['SL', sl]] as const) {
+        if (!trigger) continue;
+        if (mark > 0) {
+          // Sanity-check the trigger side so a typo doesn't arm an
+          // instant-firing bracket.
+          const badTp = kind === 'TP' && (isLong ? trigger < mark : trigger > mark);
+          const badSl = kind === 'SL' && (isLong ? trigger > mark : trigger < mark);
+          if (badTp || badSl) {
+            toast(`${kind} ${trigger} is on the wrong side of mark (${formatPrice(mark)}) for a ${isLong ? 'long' : 'short'}`, 'error');
+            setTpslSaving(false);
+            return;
+          }
+        }
+        await api.submitOrder({
+          owner: address,
+          market_id: pos.marketId,
+          side,
+          price: String(trigger),
+          size: String(size),
+          tif: 'Gtc',
+          order_type: 'stop',
+          trigger_price: String(trigger),
+          reduce_only: true,
+        });
+      }
+      toast(`Bracket set on ${pos.symbol}`, 'success');
+      setTpslEditFor(null);
+      setTpInput('');
+      setSlInput('');
+      refreshConditional();
+    } catch (e) {
+      toast(`TP/SL failed: ${(e as Error).message}`, 'error');
+    } finally {
+      setTpslSaving(false);
+    }
+  };
+
+  const handleCancelBracket = async (id: number) => {
+    try {
+      await api.cancelConditional(id);
+      refreshConditional();
+    } catch (e) {
+      toast(`Cancel failed: ${(e as Error).message}`, 'error');
     }
   };
 
@@ -216,6 +293,7 @@ export default function PositionsTable() {
                 <th className="text-right px-2 py-2 font-medium">Mark</th>
                 <th className="text-right px-2 py-2 font-medium">uPnL</th>
                 <th className="text-right px-2 py-2 font-medium">Liq.</th>
+                <th className="text-right px-2 py-2 font-medium">TP/SL</th>
                 <th className="text-right px-2 py-2 font-medium"></th>
               </tr></thead>
               <tbody>
@@ -226,6 +304,7 @@ export default function PositionsTable() {
                   const pnl = p.unrealizedPnl || 0;
                   const liq = p.liquidationPrice || 0;
                   return (
+                    <>
                     <tr key={i} className="border-b border-border/30 hover:bg-surface-2/50 transition-colors">
                       <td className="px-3 py-2.5">
                         <span className="text-foreground font-semibold">{p.symbol}</span>
@@ -244,6 +323,44 @@ export default function PositionsTable() {
                       </td>
                       <td className="px-2 py-2.5 text-right text-yellow/70 font-mono tabular-nums text-[11px]">
                         {liq > 0 ? formatPrice(liq) : '—'}
+                      </td>
+                      <td className="px-2 py-2.5 text-right">
+                        {(() => {
+                          const brackets = bracketsFor(p.marketId);
+                          if (brackets.length === 0) {
+                            return (
+                              <button
+                                onClick={() => { setTpslEditFor(tpslEditFor === p.marketId ? null : p.marketId); setTpInput(''); setSlInput(''); }}
+                                className="px-2 py-1 text-[10px] font-medium text-dim hover:text-primary border border-border rounded-md hover:border-primary/40 transition-colors"
+                              >+ Add</button>
+                            );
+                          }
+                          return (
+                            <div className="flex items-center gap-1 justify-end flex-wrap">
+                              {brackets.map((b) => {
+                                const trig = Number(b.trigger_price);
+                                const isTp = size > 0 ? trig > mark : trig < mark;
+                                return (
+                                  <span key={b.id} className={cn(
+                                    'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono',
+                                    isTp ? 'bg-green/10 text-green' : 'bg-red/10 text-red'
+                                  )}>
+                                    {isTp ? 'TP' : 'SL'} {formatPrice(trig)}
+                                    <button
+                                      onClick={() => handleCancelBracket(b.id)}
+                                      aria-label={`Cancel ${isTp ? 'take-profit' : 'stop-loss'} bracket`}
+                                      className="hover:text-foreground"
+                                    >×</button>
+                                  </span>
+                                );
+                              })}
+                              <button
+                                onClick={() => { setTpslEditFor(tpslEditFor === p.marketId ? null : p.marketId); setTpInput(''); setSlInput(''); }}
+                                className="px-1.5 py-0.5 text-[10px] text-dim hover:text-primary transition-colors"
+                              >Edit</button>
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="px-2 py-2.5 text-right">
                         <div className="flex items-center gap-1 justify-end">
@@ -266,6 +383,38 @@ export default function PositionsTable() {
                         </div>
                       </td>
                     </tr>
+                    {tpslEditFor === p.marketId && (
+                      <tr className="border-b border-border/30 bg-surface-2/40">
+                        <td colSpan={8} className="px-3 py-2.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[10px] text-dim uppercase tracking-wider font-medium">Bracket for {p.symbol}</span>
+                            <input
+                              type="number" value={tpInput} onChange={(e) => setTpInput(e.target.value)}
+                              placeholder={size > 0 ? 'TP above mark' : 'TP below mark'}
+                              aria-label="Take-profit trigger price"
+                              className="w-32 bg-surface border border-border rounded-md px-2 py-1.5 text-[11px] text-foreground font-mono outline-none focus:border-green/40"
+                            />
+                            <input
+                              type="number" value={slInput} onChange={(e) => setSlInput(e.target.value)}
+                              placeholder={size > 0 ? 'SL below mark' : 'SL above mark'}
+                              aria-label="Stop-loss trigger price"
+                              className="w-32 bg-surface border border-border rounded-md px-2 py-1.5 text-[11px] text-foreground font-mono outline-none focus:border-red/40"
+                            />
+                            <button
+                              onClick={() => handleSetTpsl(p)}
+                              disabled={tpslSaving}
+                              className="px-3 py-1.5 bg-primary text-black rounded-md text-[11px] font-semibold hover:brightness-110 disabled:opacity-50 transition-all"
+                            >{tpslSaving ? 'Saving…' : 'Set bracket'}</button>
+                            <button
+                              onClick={() => setTpslEditFor(null)}
+                              className="px-2 py-1.5 text-[11px] text-dim hover:text-foreground transition-colors"
+                            >Cancel</button>
+                            <span className="text-[9.5px] text-dim">Reduce-only stops — they can only close this position.</span>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </>
                   );
                 })}
               </tbody>

@@ -22,6 +22,21 @@ export default function OrderBook() {
   const [activeTab, setActiveTab] = useState<BookTab>('book');
   const [recentTrades, setRecentTrades] = useState<Trade[]>([]);
   const [tradeFilter, setTradeFilter] = useState<'all' | 'buy' | 'sell'>('all');
+  // VWAP hover preview: hovering a book level shows the average fill price,
+  // cumulative size and price impact of sweeping the book up to that level.
+  const [hoverPreview, setHoverPreview] = useState<{
+    top: number; side: 'buy' | 'sell'; size: number; vwap: number; impact: number;
+  } | null>(null);
+
+  const previewFor = (levels: BookLevel[], idx: number, side: 'buy' | 'sell', el: HTMLElement) => {
+    const slice = levels.slice(0, idx + 1);
+    const size = slice.reduce((s, l) => s + l.size, 0);
+    if (size <= 0) return;
+    const vwap = slice.reduce((s, l) => s + l.price * l.size, 0) / size;
+    const best = side === 'buy' ? asks[0]?.price : bids[0]?.price;
+    const impact = best ? (Math.abs(vwap - best) / best) * 100 : 0;
+    setHoverPreview({ top: el.offsetTop, side, size, vwap, impact });
+  };
   // Monotonic clock for snapshot ordering: the 3s REST poll and the WS
   // broadcast are independent snapshots of the same book, and without an
   // ordering check a stale WS payload can overwrite a fresher REST one (or
@@ -155,7 +170,24 @@ export default function OrderBook() {
   }, [bids, asks]);
 
   return (
-    <div className="bg-surface border border-border rounded-xl md:border-0 md:rounded-none overflow-hidden h-full flex flex-col">
+    <div className="relative bg-surface border border-border rounded-xl md:border-0 md:rounded-none overflow-hidden h-full flex flex-col">
+      {/* VWAP hover preview chip — floats at the right edge of the hovered row */}
+      {hoverPreview && activeTab === 'book' && (
+        <div
+          className="absolute right-2 z-20 pointer-events-none px-2 py-1 rounded-md bg-background/95 border border-border shadow-xl text-[10px] font-mono whitespace-nowrap"
+          style={{ top: hoverPreview.top }}
+        >
+          <span className={hoverPreview.side === 'buy' ? 'text-red' : 'text-green'}>
+            {hoverPreview.side === 'buy' ? 'Buy' : 'Sell'} {formatNumber(hoverPreview.size, 2)}
+          </span>
+          <span className="text-dim"> @ avg </span>
+          <span className="text-foreground">{formatPrice(hoverPreview.vwap)}</span>
+          <span className="text-dim"> · impact </span>
+          <span className={hoverPreview.impact > 1 ? 'text-yellow' : 'text-foreground'}>
+            {hoverPreview.impact < 0.01 ? '<0.01' : hoverPreview.impact.toFixed(2)}%
+          </span>
+        </div>
+      )}
       {/* Header: Book/Trades tabs + grouping */}
       <div className="flex items-center justify-between px-3 py-0 border-b border-border shrink-0">
         <div className="flex items-center gap-0">
@@ -213,6 +245,8 @@ export default function OrderBook() {
                     tabIndex={0}
                     aria-label={`Fill price ${formatPrice(level.price)} (buy)`}
                     className="relative grid grid-cols-3 px-3 py-[4px] text-xs cursor-pointer hover:bg-red/8 font-mono transition-colors outline-none focus-visible:bg-red/12"
+                    onMouseEnter={(e) => previewFor(asks, i, 'buy', e.currentTarget as HTMLElement)}
+                    onMouseLeave={() => setHoverPreview(null)}
                     onClick={() => setTrade({ price: level.price.toString(), side: 'buy' })}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setTrade({ price: level.price.toString(), side: 'buy' }); } }}
                   >
@@ -244,6 +278,8 @@ export default function OrderBook() {
                     tabIndex={0}
                     aria-label={`Fill price ${formatPrice(level.price)} (sell)`}
                     className="relative grid grid-cols-3 px-3 py-[4px] text-xs cursor-pointer hover:bg-green/8 font-mono transition-colors outline-none focus-visible:bg-green/12"
+                    onMouseEnter={(e) => previewFor(bids, i, 'sell', e.currentTarget as HTMLElement)}
+                    onMouseLeave={() => setHoverPreview(null)}
                     onClick={() => setTrade({ price: level.price.toString(), side: 'sell' })}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setTrade({ price: level.price.toString(), side: 'sell' }); } }}
                   >

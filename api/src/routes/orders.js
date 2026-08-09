@@ -57,6 +57,23 @@ router.get('/:address', async (req, res) => {
   }
 });
 
+// Pending conditional (stop/trailing) orders for an address — powers the
+// inline TP/SL editor on open positions.
+router.get('/:address/conditional', async (req, res) => {
+  try {
+    const addr = req.params.address.toLowerCase();
+    const result = await pool.query(
+      `SELECT * FROM conditional_orders
+       WHERE owner = $1 AND status = 'pending'
+       ORDER BY created_at DESC LIMIT 100`,
+      [addr]
+    );
+    res.json({ orders: result.rows, timestamp: Date.now() });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.get('/:address/history', async (req, res) => {
   try {
     const addr = req.params.address.toLowerCase();

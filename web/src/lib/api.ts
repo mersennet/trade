@@ -82,6 +82,8 @@ export const api = {
     }>('/collateral/withdraw', { method: 'POST', body: JSON.stringify({ owner, amount }) }),
   cancelAllOrders: (address: string) =>
     apiFetch<{ result: unknown }>(`/orders/cancel-all/${address}`, { method: 'POST' }),
+  getConditionalOrders: (addr: string) =>
+    apiFetch<{ orders: ConditionalOrder[] }>(`/orders/${addr}/conditional`),
   cancelConditional: (orderId: number) =>
     apiFetch<{ result: unknown }>(`/orders/${orderId}/cancel-conditional`, { method: 'POST' }),
   getFundingHistory: (marketId: number) =>
@@ -264,6 +266,12 @@ export interface Position {
   notional?: number;
 }
 export interface Order { id?: number; order_id?: number; owner?: string; market_id?: number; side: string; price: string; size: string; status?: string; tif?: string; }
+export interface ConditionalOrder {
+  id: number; owner: string; market_id: number; side: string; size: string;
+  order_type: string; trigger_price: string | null; limit_price: string | null;
+  trailing_pct: number | null; tp_price: string | null; sl_price: string | null;
+  leverage: number; reduce_only: boolean; status: string; created_at: string;
+}
 export interface OrderSubmit {
   owner: string;
   market_id: number;
