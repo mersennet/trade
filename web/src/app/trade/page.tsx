@@ -10,6 +10,7 @@ import FundingChart from '@/components/trade/FundingChart';
 import AccountPanel from '@/components/trade/AccountPanel';
 import PrivacyPanel from '@/components/trade/PrivacyPanel';
 import GettingStarted from '@/components/trade/GettingStarted';
+import OnboardingTour from '@/components/trade/OnboardingTour';
 import { useBrackets } from '@/hooks/useBrackets';
 import { usePriceAlerts } from '@/hooks/usePriceAlerts';
 import { cn, formatPrice } from '@/lib/utils';
@@ -79,7 +80,10 @@ export default function TradePage() {
   return (
     <div className="relative flex flex-col h-[calc(100dvh-2.75rem-3.25rem)] md:h-[calc(100vh-3rem)] overflow-hidden">
       <MarketLoader />
-      <MarketBar />
+      <OnboardingTour />
+      <div data-tour="market-bar">
+        <MarketBar />
+      </div>
 
       {/* Mobile tab bar */}
       <div className="flex md:hidden bg-surface border-b border-border shrink-0">
@@ -100,19 +104,30 @@ export default function TradePage() {
         ))}
       </div>
 
-      {/* Mobile layout */}
-      <div className="flex-1 md:hidden min-h-0 overflow-hidden">
+      {/* Mobile layout — chart/book/positions swap; the Trade tab opens as a
+          bottom sheet OVER the chart (HL-style) so market context stays visible */}
+      <div className="flex-1 md:hidden min-h-0 overflow-hidden relative">
         {mobileTab === 'chart' && (
           <div className="h-full"><Chart /></div>
         )}
         {mobileTab === 'book' && (
           <div className="h-full overflow-hidden"><OrderBook /></div>
         )}
-        {mobileTab === 'trade' && (
-          <div className="h-full overflow-y-auto"><GettingStarted /><TradeForm /><PrivacyPanel /></div>
-        )}
         {mobileTab === 'positions' && (
           <div className="h-full overflow-hidden"><PositionsTable /></div>
+        )}
+        {mobileTab === 'trade' && (
+          <>
+            <div className="h-full"><Chart /></div>
+            <div className="absolute inset-x-0 bottom-0 top-[15%] z-30 flex flex-col bg-surface border-t border-border rounded-t-2xl shadow-2xl animate-[slideUp_0.25s_ease-out]">
+              <div className="flex items-center justify-center py-2 shrink-0 border-b border-border/50">
+                <div className="w-9 h-1 rounded-full bg-border" />
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                <GettingStarted /><TradeForm /><PrivacyPanel />
+              </div>
+            </div>
+          </>
         )}
       </div>
 
@@ -127,7 +142,7 @@ export default function TradePage() {
               <FundingChart />
             </div>
           )}
-          <div className="h-[200px] lg:h-[240px] bg-surface shrink-0">
+          <div className="h-[200px] lg:h-[240px] bg-surface shrink-0" data-tour="positions">
             <PositionsTable />
           </div>
         </div>

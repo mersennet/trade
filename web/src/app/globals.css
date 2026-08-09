@@ -63,7 +63,7 @@
   --yellow: #c2710c;
   --cyan: #2563eb;
   --muted: #71717a;
-  --dim: #a1a1aa;
+  --dim: #6b6b76;
   color-scheme: light;
 }
 
@@ -164,6 +164,11 @@ input[type="number"] {
 [data-theme="light"] .skeleton {
   background: rgba(0, 0, 0, 0.05);
 }
+@keyframes slideUp {
+  from { transform: translateY(24px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
 @keyframes skeleton-shimmer {
   100% { transform: translateX(100%); }
 }

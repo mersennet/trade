@@ -11,6 +11,7 @@ const SHORTCUTS = [
   { keys: ['S'], description: 'Sell / Short' },
   { keys: ['L'], description: 'Limit order' },
   { keys: ['M'], description: 'Market order' },
+  { keys: ['Enter'], description: 'Submit order (when the order form has focus)' },
   { keys: ['T'], description: 'Go to Trade' },
   { keys: ['P'], description: 'Go to Portfolio' },
   { keys: ['V'], description: 'Go to Vault' },
@@ -33,6 +34,18 @@ export default function ShortcutHelp() {
         return;
       }
       if (e.key === 'Escape') { setOpen(false); return; }
+
+      // Enter submits the order when focus is anywhere inside the trade form
+      // (the form root carries data-trade-form).
+      if (e.key === 'Enter') {
+        const form = (e.target as HTMLElement)?.closest?.('[data-trade-form]');
+        if (form) {
+          e.preventDefault();
+          const submit = form.querySelector<HTMLButtonElement>('[data-submit-order]');
+          submit?.click();
+        }
+        return;
+      }
 
       const key = e.key.toLowerCase();
       if (e.ctrlKey || e.metaKey || e.altKey) return;

@@ -322,7 +322,7 @@ export default function TradeForm() {
   };
 
   return (
-    <div className="relative bg-surface border border-border rounded-xl md:border-0 md:rounded-none p-2.5 md:p-3 xl:p-3.5 flex flex-col gap-2 overflow-hidden">
+    <div data-trade-form className="relative bg-surface border border-border rounded-xl md:border-0 md:rounded-none p-2.5 md:p-3 xl:p-3.5 flex flex-col gap-2 overflow-hidden">
       {/* Inline order confirmation — replaces the native window.confirm popup.
           Shows the full order ticket and keeps the user in the terminal. */}
       {confirming && (
@@ -767,6 +767,7 @@ export default function TradeForm() {
           ("Place Order" / "Connect Wallet") since the directional intent is
           already shown by the Long/Short toggle and the button color. */}
       <button
+        data-submit-order
         onClick={handleSubmit}
         disabled={loading || !isConnected}
         className={cn(

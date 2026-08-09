@@ -1,6 +1,7 @@
 'use client';
 import Link from 'next/link';
 import Image from 'next/image';
+import ChainStatusChip from './ChainStatusChip';
 
 const FOOTER_LINKS = [
   {
@@ -87,6 +88,9 @@ export default function Footer() {
             <span className="px-1.5 py-0.5 rounded bg-yellow/10 border border-yellow/30 text-yellow text-[10px] uppercase font-semibold tracking-wider">
               Beta
             </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <ChainStatusChip />
           </div>
           <div className="text-[11px] text-dim">
             © {new Date().getFullYear()} Mersennet Trade ·{' '}

@@ -40,7 +40,7 @@ function FundingCountdown() {
 }
 
 export default function MarketBar() {
-  const { market, tickers, setMarket, updateTicker, favorites, toggleFavorite } = useStore();
+  const { market, tickers, setMarket, updateTicker, favorites, toggleFavorite, recentMarkets } = useStore();
   const { subscribe } = useWebSocket();
   const [markets, setMarkets] = useState<Market[]>([]);
   const [spotMarkets, setSpotMarkets] = useState<Market[]>([]);
@@ -181,6 +181,23 @@ export default function MarketBar() {
               </div>
             </div>
             <div className="overflow-y-auto flex-1">
+              {/* Recently viewed markets — quick switch-back row */}
+              {!searchQuery && recentMarkets.length > 1 && (
+                <div className="px-3 py-1.5 border-b border-border/50 flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[9px] text-dim uppercase tracking-wider font-medium">Recent</span>
+                  {recentMarkets.filter((id) => id !== market.id).slice(0, 4).map((id) => {
+                    const m = activeMarkets.find((x) => x.id === id) || markets.find((x) => x.id === id);
+                    if (!m) return null;
+                    return (
+                      <button
+                        key={id}
+                        onClick={() => { setMarket(m); setShowSelector(false); setSearchQuery(''); }}
+                        className="px-1.5 py-0.5 text-[10px] font-medium text-dim hover:text-foreground bg-surface-2 rounded border border-border transition-colors"
+                      >{m.base}</button>
+                    );
+                  })}
+                </div>
+              )}
               {filteredMarkets.map((m) => {
                 const t = tickers[m.id];
                 const active = market.id === m.id;

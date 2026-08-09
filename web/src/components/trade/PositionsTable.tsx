@@ -267,6 +267,11 @@ export default function PositionsTable() {
               Export
             </button>
           )}
+          {tab === 'history' && address && (
+            <button onClick={() => api.exportOrders(address)} className="text-[10px] text-primary hover:text-primary-hover font-medium transition-colors whitespace-nowrap">
+              Export
+            </button>
+          )}
         </div>
       </div>
 
@@ -353,14 +358,32 @@ export default function PositionsTable() {
                       <td className="px-2 py-2.5 text-right">
                         <div className="flex items-center gap-1 justify-end">
                           <button
-                            onClick={() => {
-                              const text = `${size >= 0 ? 'Long' : 'Short'} ${p.symbol} | Entry: $${formatPrice(entry)} | PnL: ${pnl >= 0 ? '+' : ''}${formatNumber(pnl, 2)} | Mersennet Trade`;
-                              navigator.clipboard.writeText(text);
-                              toast('Trade copied to clipboard!', 'info');
+                            onClick={async () => {
+                              // Branded PnL card (PNG download) — every shared
+                              // screenshot carries Mersennet branding.
+                              try {
+                                const { downloadShareCard } = await import('@/lib/shareCard');
+                                const pnlPct = entry > 0 ? ((mark - entry) / entry) * 100 * (size >= 0 ? 1 : -1) * (p.leverage || 1) : 0;
+                                await downloadShareCard({
+                                  symbol: p.symbol,
+                                  isLong: size >= 0,
+                                  leverage: p.leverage,
+                                  entryPrice: entry,
+                                  markPrice: mark,
+                                  pnl,
+                                  pnlPct,
+                                });
+                                toast('Share card downloaded', 'success');
+                              } catch {
+                                // Fallback: plain text to clipboard.
+                                const text = `${size >= 0 ? 'Long' : 'Short'} ${p.symbol} | Entry: $${formatPrice(entry)} | PnL: ${pnl >= 0 ? '+' : ''}${formatNumber(pnl, 2)} | Mersennet Trade`;
+                                navigator.clipboard.writeText(text);
+                                toast('Trade copied to clipboard', 'info');
+                              }
                             }}
                             className="px-1.5 py-1 text-[10px] text-dim hover:text-primary transition-colors rounded"
-                            title="Share trade"
-                            aria-label={`Copy ${p.symbol} trade to clipboard`}
+                            title="Download shareable PnL card"
+                            aria-label={`Share ${p.symbol} trade as image`}
                           >
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
                           </button>
@@ -554,31 +577,50 @@ export default function PositionsTable() {
           orderHistory.length > 0 ? (
             <table className="w-full text-xs">
               <thead><tr className="text-dim text-[10px] border-b border-border">
-                <th className="text-left px-3 py-2 font-medium">Side</th>
+                <th className="text-left px-3 py-2 font-medium">Time</th>
+                <th className="text-left px-2 py-2 font-medium">Side</th>
                 <th className="text-right px-2 py-2 font-medium">Price</th>
                 <th className="text-right px-2 py-2 font-medium">Size</th>
                 <th className="text-right px-2 py-2 font-medium">Status</th>
+                <th className="text-right px-2 py-2 font-medium">Block</th>
               </tr></thead>
               <tbody>
-                {orderHistory.map((o, i) => (
-                  <tr key={i} className="border-b border-border/30 hover:bg-surface-2/50 transition-colors">
-                    <td className={cn('px-3 py-2 font-semibold', o.side?.toLowerCase() === 'buy' ? 'text-green' : 'text-red')}>
-                      {o.side}
-                    </td>
-                    <td className="px-2 py-2 text-right text-foreground/70 font-mono tabular-nums">{o.price}</td>
-                    <td className="px-2 py-2 text-right text-foreground/70 font-mono tabular-nums">{o.size}</td>
-                    <td className="px-2 py-2 text-right">
-                      <span className={cn(
-                        'text-[10px] px-1.5 py-0.5 rounded font-medium',
-                        o.status === 'filled' ? 'bg-green/10 text-green' :
-                        o.status === 'cancelled' ? 'bg-red/10 text-red' :
-                        'bg-yellow/10 text-yellow'
-                      )}>
-                        {o.status || 'unknown'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {orderHistory.map((o, i) => {
+                  const rec = o as Order & { created_at?: string; block_number?: number };
+                  const when = rec.created_at ? new Date(rec.created_at) : null;
+                  return (
+                    <tr key={i} className="border-b border-border/30 hover:bg-surface-2/50 transition-colors">
+                      <td className="px-3 py-2 text-dim font-mono text-[10px] whitespace-nowrap" title={when ? when.toLocaleString() : ''}>
+                        {when ? when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'}
+                      </td>
+                      <td className={cn('px-2 py-2 font-semibold', o.side?.toLowerCase() === 'buy' ? 'text-green' : 'text-red')}>
+                        {o.side}
+                      </td>
+                      <td className="px-2 py-2 text-right text-foreground/70 font-mono tabular-nums">{o.price}</td>
+                      <td className="px-2 py-2 text-right text-foreground/70 font-mono tabular-nums">{o.size}</td>
+                      <td className="px-2 py-2 text-right">
+                        <span className={cn(
+                          'text-[10px] px-1.5 py-0.5 rounded font-medium',
+                          o.status === 'filled' ? 'bg-green/10 text-green' :
+                          o.status === 'cancelled' ? 'bg-red/10 text-red' :
+                          'bg-yellow/10 text-yellow'
+                        )}>
+                          {o.status || 'unknown'}
+                        </span>
+                      </td>
+                      <td className="px-2 py-2 text-right font-mono text-[10px]">
+                        {rec.block_number ? (
+                          <a
+                            href={`https://explorer.mersennet.com/block/${rec.block_number}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary/70 hover:text-primary transition-colors"
+                          >#{rec.block_number}</a>
+                        ) : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           ) : (

@@ -247,7 +247,21 @@ export default function OrderBook() {
             <div className="flex-1 flex items-center justify-center">
               <EmptyState
                 label="Book is empty"
-                hint="No resting orders. Place a limit order to seed liquidity."
+                hint="No resting orders. Be the first maker — maker fills earn the rebate tier."
+                action={
+                  <button
+                    onClick={() => {
+                      // Focus the order form's price field so the user can seed
+                      // the book in two keystrokes.
+                      const form = document.querySelector('[data-trade-form]');
+                      const priceInput = form?.querySelector<HTMLInputElement>('input[type=number]');
+                      priceInput?.focus();
+                    }}
+                    className="mt-1 px-3 py-1.5 bg-primary/10 text-primary border border-primary/25 rounded-md text-[11px] font-semibold hover:bg-primary/20 transition-colors"
+                  >
+                    Place a limit order
+                  </button>
+                }
               />
             </div>
           ) : (

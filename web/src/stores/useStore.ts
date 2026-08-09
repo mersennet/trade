@@ -85,6 +85,8 @@ interface AppState {
   orders: Order[];
   pendingOrders: PendingOrder[];
   favorites: number[];
+  /** Recently viewed market ids, most recent first (persisted, max 5). */
+  recentMarkets: number[];
   soundEnabled: boolean;
   skipConfirm: boolean;
   oneClickEnabled: boolean;
@@ -162,6 +164,7 @@ export const useStore = create<AppState>()(
       orders: [],
       pendingOrders: [],
       favorites: [],
+      recentMarkets: [],
       soundEnabled: false,
       skipConfirm: false,
       oneClickEnabled: false,
@@ -184,7 +187,10 @@ export const useStore = create<AppState>()(
         document.documentElement.setAttribute('data-theme', theme);
         set({ theme });
       },
-      setMarket: (market) => set({ market }),
+      setMarket: (market) => set((s) => ({
+        market,
+        recentMarkets: [market.id, ...s.recentMarkets.filter((id) => id !== market.id)].slice(0, 5),
+      })),
       updateTicker: (id, t) => set((s) => ({ tickers: { ...s.tickers, [id]: t } })),
       setWallet: (w) => set((s) => ({ wallet: { ...s.wallet, ...w } })),
       setTrade: (t) => set((s) => ({ trade: { ...s.trade, ...t } })),
@@ -237,6 +243,7 @@ export const useStore = create<AppState>()(
       partialize: (state) => ({
         theme: state.theme,
         favorites: state.favorites,
+        recentMarkets: state.recentMarkets,
         soundEnabled: state.soundEnabled,
         skipConfirm: state.skipConfirm,
         oneClickEnabled: state.oneClickEnabled,

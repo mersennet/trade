@@ -6,6 +6,9 @@ import { api, type Market, type Ticker } from '@/lib/api';
 import { formatPrice, formatNumber, cn } from '@/lib/utils';
 import TokenLogo from '@/components/TokenLogo';
 import EmptyState from '@/components/shared/EmptyState';
+import MiniChart from '@/components/shared/MiniChart';
+
+type SortKey = 'market' | 'price' | 'change' | 'volume' | 'trades' | 'funding' | 'oi';
 
 export default function MarketsPage() {
   const router = useRouter();
@@ -13,6 +16,9 @@ export default function MarketsPage() {
   const [markets, setMarkets] = useState<Market[]>([]);
   const [tickers, setTickers] = useState<Record<number, Ticker>>({});
   const [filter, setFilter] = useState<'all' | 'favorites' | 'prelaunch' | 'synthetic'>('all');
+  const [view, setView] = useState<'table' | 'cards' | 'grid'>('table');
+  const [sortKey, setSortKey] = useState<SortKey>('volume');
+  const [sortDir, setSortDir] = useState<1 | -1>(-1);
 
   useEffect(() => {
     api.getMarkets().then((data) => setMarkets(data.markets || [])).catch(() => {});
@@ -41,6 +47,36 @@ export default function MarketsPage() {
     ? []
     : markets;
 
+  const sorted = [...filtered].sort((a, b) => {
+    const ta = tickers[a.id];
+    const tb = tickers[b.id];
+    const val = (k: SortKey, m: Market, t?: Ticker): number | string => {
+      switch (k) {
+        case 'market': return m.base;
+        case 'price': return t?.markPrice ?? 0;
+        case 'change': return t?.change24h ?? 0;
+        case 'volume': return t?.volume24h ?? 0;
+        case 'trades': return t?.trades24h ?? 0;
+        case 'funding': return m.fundingRate ?? 0;
+        case 'oi': return t?.openInterest ?? 0;
+      }
+    };
+    const va = val(sortKey, a, ta);
+    const vb = val(sortKey, b, tb);
+    const cmp = typeof va === 'string' ? va.localeCompare(vb as string) : va - (vb as number);
+    return cmp * sortDir;
+  });
+
+  // Gainers / losers strip from live 24h change.
+  const withChange = markets.map((m) => ({ m, ch: tickers[m.id]?.change24h ?? 0 }));
+  const gainers = [...withChange].sort((a, b) => b.ch - a.ch).slice(0, 2);
+  const losers = [...withChange].sort((a, b) => a.ch - b.ch).slice(0, 2);
+
+  const toggleSort = (k: SortKey) => {
+    if (sortKey === k) setSortDir((d) => (d === 1 ? -1 : 1));
+    else { setSortKey(k); setSortDir(k === 'market' ? 1 : -1); }
+  };
+
   const handleSelect = (m: Market) => {
     setMarket(m);
     router.push('/trade');
@@ -67,28 +103,62 @@ export default function MarketsPage() {
         </div>
       </div>
 
-      {/* Filter pills — segmented control with counts */}
-      <div className="flex items-center gap-px bg-background rounded-md border border-border overflow-hidden w-fit">
-        {filters.map((f) => (
-          <button
-            key={f.key}
-            onClick={() => setFilter(f.key)}
-            className={cn(
-              'px-3 md:px-4 py-1.5 text-[11.5px] font-medium transition-colors whitespace-nowrap flex items-center gap-1.5',
-              filter === f.key
-                ? 'bg-foreground/[0.07] text-foreground'
-                : 'bg-surface-2 text-dim hover:text-foreground'
-            )}
-          >
-            <span>{f.label}</span>
-            {typeof f.count === 'number' && (
-              <span className={cn(
-                'text-[10px] px-1 py-px rounded font-mono tabular-nums',
-                filter === f.key ? 'bg-foreground/10 text-foreground' : 'bg-background text-dim'
-              )}>{f.count}</span>
-            )}
-          </button>
-        ))}
+      {/* Gainers / losers strip — market discovery at a glance */}
+      {markets.length > 0 && Object.keys(tickers).length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {gainers.filter((g) => g.ch > 0).map((g) => (
+            <button key={`g-${g.m.id}`} onClick={() => handleSelect(g.m)}
+              className="flex items-center gap-1.5 px-2.5 py-1 bg-green/5 border border-green/20 rounded-md text-[11px] hover:bg-green/10 transition-colors">
+              <span className="font-semibold text-foreground">{g.m.base}</span>
+              <span className="font-mono text-green">+{formatNumber(g.ch, 2)}%</span>
+            </button>
+          ))}
+          {losers.filter((l) => l.ch < 0).map((l) => (
+            <button key={`l-${l.m.id}`} onClick={() => handleSelect(l.m)}
+              className="flex items-center gap-1.5 px-2.5 py-1 bg-red/5 border border-red/20 rounded-md text-[11px] hover:bg-red/10 transition-colors">
+              <span className="font-semibold text-foreground">{l.m.base}</span>
+              <span className="font-mono text-red">{formatNumber(l.ch, 2)}%</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Filter pills + view toggle */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-px bg-background rounded-md border border-border overflow-hidden w-fit">
+          {filters.map((f) => (
+            <button
+              key={f.key}
+              onClick={() => setFilter(f.key)}
+              className={cn(
+                'px-3 md:px-4 py-1.5 text-[11.5px] font-medium transition-colors whitespace-nowrap flex items-center gap-1.5',
+                filter === f.key
+                  ? 'bg-foreground/[0.07] text-foreground'
+                  : 'bg-surface-2 text-dim hover:text-foreground'
+              )}
+            >
+              <span>{f.label}</span>
+              {typeof f.count === 'number' && (
+                <span className={cn(
+                  'text-[10px] px-1 py-px rounded font-mono tabular-nums',
+                  filter === f.key ? 'bg-foreground/10 text-foreground' : 'bg-background text-dim'
+                )}>{f.count}</span>
+              )}
+            </button>
+          ))}
+        </div>
+        <div className="hidden md:flex items-center gap-px bg-background rounded-md border border-border overflow-hidden">
+          {(['table', 'cards', 'grid'] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              className={cn(
+                'px-3 py-1.5 text-[11px] font-medium transition-colors capitalize',
+                view === v ? 'bg-foreground/[0.07] text-foreground' : 'bg-surface-2 text-dim hover:text-foreground'
+              )}
+            >{v}</button>
+          ))}
+        </div>
       </div>
 
       {filtered.length === 0 && (
@@ -134,7 +204,7 @@ export default function MarketsPage() {
 
       {/* Mobile: compact list with logo */}
       <div className="md:hidden space-y-2">
-        {filtered.map((m) => {
+        {sorted.map((m) => {
           const t = tickers[m.id];
           const ch = t?.change24h ?? 0;
           const isFav = favorites.includes(m.id);
@@ -174,8 +244,110 @@ export default function MarketsPage() {
         })}
       </div>
 
+      {/* Desktop table view — Paradex-style sortable stats */}
+      {view === 'table' && (
+        <div className="hidden md:block bg-surface border border-border rounded-xl overflow-hidden">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-dim text-[10px] border-b border-border">
+                <th className="text-left px-4 py-2.5 font-medium w-8"></th>
+                {([
+                  ['market', 'Market'],
+                  ['price', 'Price'],
+                  ['change', '24h %'],
+                  ['volume', '24h Volume'],
+                  ['trades', '24h Trades'],
+                  ['funding', 'Funding'],
+                  ['oi', 'Open Interest'],
+                ] as [SortKey, string][]).map(([k, label]) => (
+                  <th key={k} className={cn('py-2.5 font-medium', k === 'market' ? 'text-left px-2' : 'text-right px-3')}>
+                    <button onClick={() => toggleSort(k)} className="hover:text-foreground transition-colors uppercase tracking-wider inline-flex items-center gap-1">
+                      {label}
+                      {sortKey === k && <span className="text-primary">{sortDir === 1 ? '↑' : '↓'}</span>}
+                    </button>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((m) => {
+                const t = tickers[m.id];
+                const ch = t?.change24h ?? 0;
+                const isFav = favorites.includes(m.id);
+                return (
+                  <tr
+                    key={m.id}
+                    onClick={() => handleSelect(m)}
+                    className="border-b border-border/40 hover:bg-surface-2/50 cursor-pointer transition-colors"
+                  >
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleFavorite(m.id); }}
+                        aria-label={isFav ? `Remove ${m.base} from favorites` : `Add ${m.base} to favorites`}
+                        className={cn('text-[13px] transition-colors', isFav ? 'text-yellow' : 'text-dim/30 hover:text-dim')}
+                      >{isFav ? '★' : '☆'}</button>
+                    </td>
+                    <td className="px-2 py-3">
+                      <div className="flex items-center gap-2">
+                        <TokenLogo symbol={m.base} size={20} />
+                        <span className="font-semibold text-foreground">{m.base}<span className="text-dim font-normal">/{m.quote}</span></span>
+                        <span className="text-[9px] px-1 py-0.5 bg-surface-2 text-dim rounded">{m.maxLeverage}×</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 text-right font-mono tabular-nums text-foreground">{t ? formatPrice(t.markPrice) : '—'}</td>
+                    <td className={cn('px-3 py-3 text-right font-mono tabular-nums', ch >= 0 ? 'text-green' : 'text-red')}>
+                      {ch >= 0 ? '+' : ''}{formatNumber(ch, 2)}%
+                    </td>
+                    <td className="px-3 py-3 text-right font-mono tabular-nums text-foreground/70">{t ? `$${formatNumber(t.volume24h ?? 0)}` : '—'}</td>
+                    <td className="px-3 py-3 text-right font-mono tabular-nums text-foreground/70">{t ? formatNumber(t.trades24h ?? 0, 0) : '—'}</td>
+                    <td className={cn('px-3 py-3 text-right font-mono tabular-nums', (m.fundingRate ?? 0) >= 0 ? 'text-green' : 'text-red')}>
+                      {((m.fundingRate ?? 0) * 100).toFixed(4)}%
+                    </td>
+                    <td className="px-3 py-3 text-right font-mono tabular-nums text-foreground/70">
+                      {t?.openInterest ? `$${formatNumber(t.openInterest)}` : '—'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Grid view — multi-chart monitoring (mini chart per market) */}
+      {view === 'grid' && (
+        <div className="hidden md:grid grid-cols-2 xl:grid-cols-3 gap-3">
+          {sorted.map((m) => {
+            const t = tickers[m.id];
+            const ch = t?.change24h ?? 0;
+            return (
+              <button
+                key={m.id}
+                onClick={() => handleSelect(m)}
+                className="bg-surface border border-border rounded-xl p-3.5 hover:border-primary/30 transition-colors text-left"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <TokenLogo symbol={m.base} size={18} />
+                    <span className="text-[12px] font-semibold text-foreground">{m.base}<span className="text-dim font-normal">/{m.quote}</span></span>
+                  </div>
+                  <span className={cn('text-[10px] font-mono tabular-nums', ch >= 0 ? 'text-green' : 'text-red')}>
+                    {ch >= 0 ? '+' : ''}{formatNumber(ch, 2)}%
+                  </span>
+                </div>
+                <MiniChart marketId={m.id} height={72} />
+                <div className="flex items-center justify-between mt-2">
+                  <span className="font-mono text-[13px] font-semibold text-foreground tabular-nums">{t ? formatPrice(t.markPrice) : '—'}</span>
+                  <span className="text-[9.5px] text-dim font-mono">Vol {t ? `$${formatNumber(t.volume24h ?? 0)}` : '—'}</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Desktop: cards with token logo + quote pair logo */}
-      <div className="hidden md:grid grid-cols-2 lg:grid-cols-3 gap-3.5">
+      <div className={cn('hidden md:grid grid-cols-2 lg:grid-cols-3 gap-3.5', view !== 'cards' && 'md:!hidden')}>
         {filtered.map((m) => {
           const t = tickers[m.id];
           const ch = t?.change24h ?? 0;

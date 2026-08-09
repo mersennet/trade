@@ -18,18 +18,50 @@ router.get('/export/:address', async (req, res) => {
     const marketMap = {};
     for (const m of chain.MARKETS) marketMap[m.id] = m.symbol;
 
-    const lines = ['Date,Market,Side,Price,Size,Fee,PnL'];
+    const lines = ['Date,Market,Side,Price,Size,Fee,CashFlow'];
     for (const r of result.rows) {
       const date = new Date(r.block_timestamp).toISOString();
       const market = marketMap[r.market_id] || `Market #${r.market_id}`;
       const price = (() => { try { return Number(BigInt(String(r.price))); } catch { return Number(r.price) || 0; } })();
       const size  = (() => { try { return Number(BigInt(String(r.size))); } catch { return Number(r.size) || 0; } })();
       const fee = (price * size * 0.0005).toFixed(6);
-      lines.push(`${date},${market},${r.side},${price},${size},${fee},0`);
+      // Cash-flow PnL model (same as the leaderboard): a sell brings cash in,
+      // a buy sends cash out. Summed over a flat position this IS realized PnL.
+      const cashFlow = (r.side === 'sell' ? 1 : -1) * price * size;
+      lines.push(`${date},${market},${r.side},${price},${size},${fee},${cashFlow}`);
     }
 
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename="trades-${addr}.csv"`);
+    res.send(lines.join('\n'));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Order-history export: every order lifecycle event (placed/filled/cancelled)
+// with block numbers — the audit-trail counterpart to the fills export.
+router.get('/export-orders/:address', async (req, res) => {
+  try {
+    const addr = req.params.address.toLowerCase();
+    const result = await pool.query(
+      `SELECT created_at, order_id, market_id, side, price, size, filled, status, tif, block_number
+       FROM orders_history WHERE owner = $1 ORDER BY created_at DESC LIMIT 5000`,
+      [addr]
+    );
+    const marketMap = {};
+    for (const m of chain.MARKETS) marketMap[m.id] = m.symbol;
+    const lines = ['Date,OrderId,Market,Side,Price,Size,Filled,Status,TIF,Block'];
+    for (const r of result.rows) {
+      lines.push([
+        new Date(r.created_at).toISOString(),
+        r.order_id,
+        marketMap[r.market_id] || `Market #${r.market_id}`,
+        r.side, r.price, r.size, r.filled, r.status, r.tif, r.block_number,
+      ].join(','));
+    }
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="orders-${addr}.csv"`);
     res.send(lines.join('\n'));
   } catch (e) {
     res.status(500).json({ error: e.message });

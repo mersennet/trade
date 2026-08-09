@@ -91,6 +91,9 @@ export const api = {
   exportTrades: (address: string) => {
     window.open(`${API_BASE}/trades/export/${address}`, '_blank');
   },
+  exportOrders: (address: string) => {
+    window.open(`${API_BASE}/trades/export-orders/${address}`, '_blank');
+  },
   getFeeTiers: () => apiFetch<{ feeTiers: FeeTier[] }>('/stats'),
   getLeaderboard: (period = 'alltime', sort = 'pnl', limit = 50) =>
     apiFetch<LeaderboardResponse>(`/leaderboard?period=${period}&sort=${sort}&limit=${limit}`),

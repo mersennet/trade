@@ -518,6 +518,68 @@ export default function Chart() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [market.id, tf, (tickers[market.id] as { oracleMarkUsd?: number } | undefined)?.oracleMarkUsd]);
 
+  // Position + bracket overlay lines (entry / liquidation / TP / SL) drawn on
+  // the main series — Hyperliquid-style visual position management.
+  const positions = useStore((s) => s.positions);
+  const brackets = useStore((s) => s.brackets);
+  const walletAddress = useStore((s) => s.wallet.address);
+  const overlayRefs = useRef<unknown[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let retry: ReturnType<typeof setInterval> | null = null;
+
+    const apply = () => {
+      const series = seriesRefs.current.main;
+      if (!series) return false;
+      for (const ref of overlayRefs.current) {
+        try { (series as { removePriceLine: (r: unknown) => void }).removePriceLine(ref); } catch { /* gone */ }
+      }
+      overlayRefs.current = [];
+
+      const add = (price: number, color: string, title: string, dashed = false) => {
+        if (!price || price <= 0) return;
+        try {
+          const ref = (series as { createPriceLine: (o: object) => unknown }).createPriceLine({
+            price, color, lineWidth: 1, lineStyle: dashed ? 2 : 0,
+            axisLabelVisible: true, title,
+          });
+          overlayRefs.current.push(ref);
+        } catch { /* series mid-rebuild */ }
+      };
+
+      const pos = positions.find((p) => p.marketId === market.id);
+      if (pos) {
+        const entry = Number(pos.entryPrice);
+        add(entry, '#5b8cff', 'Entry');
+        const liq = Number(pos.liquidationPrice || 0);
+        if (liq > 0) add(liq, '#ff5240', 'Liq', true);
+      }
+      const br = brackets.find(
+        (b) => b.marketId === market.id && (!walletAddress || b.owner.toLowerCase() === walletAddress.toLowerCase())
+      );
+      if (br) {
+        if (br.tp) add(Number(br.tp), '#34d399', 'TP');
+        if (br.sl) add(Number(br.sl), '#ff9a3c', 'SL');
+      }
+      return true;
+    };
+
+    if (!apply()) {
+      // Chart may still be building (async lib import) — retry briefly.
+      retry = setInterval(() => { if (!cancelled && apply() && retry) clearInterval(retry); }, 300);
+    }
+    return () => {
+      cancelled = true;
+      if (retry) clearInterval(retry);
+      const series = seriesRefs.current.main;
+      for (const ref of overlayRefs.current) {
+        try { (series as { removePriceLine: (r: unknown) => void })?.removePriceLine(ref); } catch { /* gone */ }
+      }
+      overlayRefs.current = [];
+    };
+  }, [positions, brackets, market.id, walletAddress]);
+
   // Keep the price-axis precision in sync with the actual market magnitude.
   // We track the last applied precision so we don't churn applyOptions on
   // every WS tick — only when the order of magnitude actually shifts
