@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useWallet } from '@/hooks/useWallet';
+import { MERSENNET_TESTNET } from '@/lib/chain';
 import { useStore } from '@/stores/useStore';
 import { useToast } from '@/components/shared/Toast';
 import { api } from '@/lib/api';
@@ -24,14 +25,18 @@ export default function WalletButton() {
       const { ethers } = await import('ethers');
       type EthersLike = typeof import('ethers');
       const e = ethers as EthersLike;
-      const p = provider as InstanceType<EthersLike['providers']['Web3Provider']>;
-      // Native MRSN balance (Mersennet collateral is the native asset).
-      const bal = await p.getBalance(address);
+      // Native MRSN balance, read from the Mersennet RPC directly so it is
+      // correct regardless of which chain the wallet provider is pointed at.
+      const rpc = new e.providers.JsonRpcProvider(MERSENNET_TESTNET.rpcUrls[0]);
+      const bal = await rpc.getBalance(address);
       setUsdcBalance(Number(e.utils.formatEther(bal)));
+      // Keep the store copy fresh too — the header chip and account panel
+      // read wallet.balance, which was previously only set once at connect.
+      setWallet({ balance: bal.toString() });
     } catch {
       // ignore
     }
-  }, [address, provider]);
+  }, [address, provider, setWallet]);
 
   useEffect(() => {
     if (!isConnected || !address) { setCollateral(0); setUsdcBalance(0); return; }

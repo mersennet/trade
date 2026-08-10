@@ -6,7 +6,7 @@ import { useWallet } from '@/hooks/useWallet';
 import { useToast } from '@/components/shared/Toast';
 import { api } from '@/lib/api';
 import { formatNumber, cn } from '@/lib/utils';
-import { explorerTx } from '@/lib/chain';
+import { explorerTx, MERSENNET_TESTNET } from '@/lib/chain';
 import { depositToVault, withdrawFromVault } from '@/lib/vault';
 import EmptyState from '@/components/shared/EmptyState';
 
@@ -60,9 +60,11 @@ export default function AccountPanel() {
       const { ethers } = await import('ethers');
       type EthersLike = typeof import('ethers');
       const e = ethers as EthersLike;
-      const p = provider as InstanceType<EthersLike['providers']['Web3Provider']>;
-      // Native MRSN balance (Mersennet collateral is the native asset).
-      const bal = await p.getBalance(address);
+      // Native MRSN balance, read from the Mersennet RPC directly so it is
+      // correct even when the wallet provider briefly serves another chain
+      // (Rabby right after an add/switch).
+      const rpc = new e.providers.JsonRpcProvider(MERSENNET_TESTNET.rpcUrls[0]);
+      const bal = await rpc.getBalance(address);
       setUsdcWalletBalance(Number(e.utils.formatEther(bal)));
     } catch { /* ignore */ }
   }, [address, provider]);
@@ -150,18 +152,16 @@ export default function AccountPanel() {
           <span className="text-xs font-mono font-medium text-foreground/70">{formatNumber(stats.totalNotional, 2)} MRSN</span>
         </div>
         <div className="h-px bg-border" />
-        <div className="flex items-center justify-between" title="Native MRSN, used to pay gas">
-          <span className="text-[11px] text-dim">MRSN (gas)</span>
+        {/* Native MRSN is both the gas asset and the depositable balance —
+            one row, not two rows disagreeing about the same number. */}
+        <div className="flex items-center justify-between" title="Native MRSN in your wallet — pays gas, and is what you deposit as collateral">
+          <span className="text-[11px] text-dim">Wallet (gas)</span>
           <span className={cn(
             'text-xs font-mono font-medium',
-            stats.nativeBalance < 1 ? 'text-yellow' : 'text-foreground',
+            usdcWalletBalance < 1 ? 'text-yellow' : 'text-foreground',
           )}>
-            {formatNumber(stats.nativeBalance, stats.nativeBalance >= 1 ? 2 : 4)} MRSN
+            {formatNumber(usdcWalletBalance, usdcWalletBalance >= 1 ? 2 : 4)} MRSN
           </span>
-        </div>
-        <div className="flex items-center justify-between" title="MRSN sitting in your wallet (deposit as collateral to start trading)">
-          <span className="text-[11px] text-dim">MRSN (wallet)</span>
-          <span className="text-xs font-mono font-medium text-foreground">{formatNumber(usdcWalletBalance, 2)} MRSN</span>
         </div>
         {feeTier && (
           <div className="flex items-center justify-between" title="Your fee tier from 30d trading volume">
