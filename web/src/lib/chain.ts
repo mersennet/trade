@@ -73,32 +73,50 @@ export async function ensureMersennetNetwork(
   ethereum: { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> },
   target: ChainConfig = getDefaultChain()
 ): Promise<number> {
+  const addChain = () => ethereum.request({
+    method: 'wallet_addEthereumChain',
+    params: [{
+      chainId: target.chainIdHex,
+      chainName: target.name,
+      nativeCurrency: target.nativeCurrency,
+      rpcUrls: target.rpcUrls,
+      blockExplorerUrls: target.blockExplorerUrls,
+    }],
+  });
+  const switchChain = () => ethereum.request({
+    method: 'wallet_switchEthereumChain',
+    params: [{ chainId: target.chainIdHex }],
+  });
+
   try {
-    await ethereum.request({
-      method: 'wallet_switchEthereumChain',
-      params: [{ chainId: target.chainIdHex }],
-    });
+    await switchChain();
   } catch (err) {
-    const code = (err as { code?: number }).code;
-    // 4902 = chain not added; 4001 = user rejected
-    if (code === 4902) {
-      await ethereum.request({
-        method: 'wallet_addEthereumChain',
-        params: [{
-          chainId: target.chainIdHex,
-          chainName: target.name,
-          nativeCurrency: target.nativeCurrency,
-          rpcUrls: target.rpcUrls,
-          blockExplorerUrls: target.blockExplorerUrls,
-        }],
-      });
-      // After adding, try the switch again
-      await ethereum.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: target.chainIdHex }],
-      });
-    } else {
-      throw err;
+    const e = err as { code?: number; message?: string };
+    // 4001 = user rejected — surface as-is (caller shows the switch prompt).
+    if (e.code === 4001) throw err;
+    // "Chain not added yet" is signalled inconsistently across wallets:
+    //  - MetaMask: code 4902
+    //  - Rabby: code -32603 with "Unrecognized chain ID … Try adding the chain"
+    //  - others: -32602 / plain messages mentioning "add"/"unrecognized".
+    // Any of these means: add the chain, then switch again. We attempt the add
+    // regardless (idempotent) and only give up if BOTH add and re-switch fail.
+    const looksUnknownChain =
+      e.code === 4902 || e.code === -32603 || e.code === -32602 ||
+      /unrecognized|add(ing)? (the )?chain|not\s+added|unknown chain/i.test(e.message || '');
+    if (!looksUnknownChain) throw err;
+    try {
+      await addChain();
+    } catch (addErr) {
+      const ae = addErr as { code?: number };
+      if (ae.code === 4001) throw addErr; // user declined the add prompt
+      // Some wallets (Rabby included) throw on add even when it succeeds, or
+      // add without switching — fall through and re-check the chain below.
+    }
+    try {
+      await switchChain();
+    } catch {
+      // ignore — the wallet may have switched as part of the add, or may need
+      // a manual switch; the chainId read below is the source of truth.
     }
   }
   const chainIdHex = (await ethereum.request({ method: 'eth_chainId' })) as string;
