@@ -17,7 +17,7 @@ const FOOTER_LINKS = [
     links: [
       { label: 'API docs', href: '/api' },
       { label: 'Status', href: 'https://trade.mersennet.com/api/v1/status', external: true },
-      { label: 'GitHub', href: 'https://github.com/mersennet/trade', external: true },
+      { label: 'GitHub', href: 'https://github.com/mersennet', external: true },
       { label: 'Contracts (MersennetOrders precompile)', href: 'https://explorer.mersennet.com/address/0x0000000000000000000000000000000000000100', external: true },
     ],
   },
