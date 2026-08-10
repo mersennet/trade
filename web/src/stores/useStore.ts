@@ -111,6 +111,8 @@ interface AppState {
   notifications: AppNotification[];
   /** Client-side price alerts (persisted). */
   priceAlerts: PriceAlert[];
+  /** Wallet connected but on the wrong chain — drives the WrongNetwork modal. */
+  wrongChain: boolean;
 
   setTheme: (t: 'dark' | 'light') => void;
   setMarket: (m: Market) => void;
@@ -143,6 +145,7 @@ interface AppState {
   clearAllNotifications: () => void;
   addPriceAlert: (a: PriceAlert) => void;
   removePriceAlert: (id: string) => void;
+  setWrongChain: (v: boolean) => void;
 }
 
 // Must match API market id 1 (chain.js MARKETS[0]) — MRSN/USD, 50x. A mismatch
@@ -182,6 +185,7 @@ export const useStore = create<AppState>()(
       brackets: [],
       notifications: [],
       priceAlerts: [],
+      wrongChain: false,
 
       setTheme: (theme) => {
         document.documentElement.setAttribute('data-theme', theme);
@@ -237,6 +241,7 @@ export const useStore = create<AppState>()(
       clearAllNotifications: () => set({ notifications: [] }),
       addPriceAlert: (a) => set((s) => ({ priceAlerts: [...s.priceAlerts, a] })),
       removePriceAlert: (id) => set((s) => ({ priceAlerts: s.priceAlerts.filter((x) => x.id !== id) })),
+      setWrongChain: (wrongChain) => set({ wrongChain }),
     }),
     {
       name: 'mersennet-trade-store',

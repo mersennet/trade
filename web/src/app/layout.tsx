@@ -7,6 +7,7 @@ import BottomBar from '@/components/layout/BottomBar';
 import ErrorBoundary from '@/components/shared/ErrorBoundary';
 import BetaBanner from '@/components/beta/BetaBanner';
 import AnnouncementBar from '@/components/layout/AnnouncementBar';
+import WrongNetworkModal from '@/components/shared/WrongNetworkModal';
 import WelcomeModal from '@/components/beta/WelcomeModal';
 import Footer from '@/components/beta/Footer';
 
@@ -97,6 +98,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
           <BottomBar />
           <WelcomeModal />
+          <WrongNetworkModal />
         </Providers>
       </body>
     </html>

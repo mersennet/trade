@@ -2,6 +2,11 @@
 import { useCallback, useRef, useEffect } from 'react';
 import { useStore } from '@/stores/useStore';
 import { ensureMersennetNetwork, MERSENNET_TESTNET } from '@/lib/chain';
+
+/** Re-attempt the network switch from the WrongNetwork modal's Retry button. */
+export async function retryMersennetSwitch(eip: { request: (a: { method: string; params?: unknown[] }) => Promise<unknown> }) {
+  return ensureMersennetNetwork(eip);
+}
 import { getWalletConnectProvider, type WcProvider } from '@/lib/walletconnect';
 
 declare global {
@@ -125,9 +130,20 @@ export function useWallet() {
     }
     const accounts = (await window.ethereum.request({ method: 'eth_requestAccounts' })) as string[];
     if (!accounts[0]) throw new Error('No account');
-    const address = await finishConnect(window.ethereum, accounts[0]);
-    localStorage.setItem(WALLET_TYPE_KEY, 'injected');
-    return address;
+    try {
+      const address = await finishConnect(window.ethereum, accounts[0]);
+      localStorage.setItem(WALLET_TYPE_KEY, 'injected');
+      useStore.getState().setWrongChain(false);
+      return address;
+    } catch (e) {
+      // Surface the WrongNetwork modal (with manual-add details) instead of a
+      // bare toast when the wallet can't switch to Mersennet.
+      if ((e as Error)?.message === 'wrong-chain' || /Mersennet network/i.test((e as Error)?.message || '')) {
+        useStore.getState().setWrongChain(true);
+        return accounts[0];
+      }
+      throw e;
+    }
   }, [finishConnect]);
 
   /** Connect a mobile/desktop wallet over WalletConnect (Reown QR modal). */
@@ -145,8 +161,31 @@ export function useWallet() {
       localStorage.setItem(WALLET_TYPE_KEY, 'walletconnect');
       return out;
     } catch (e) {
-      // A session pinned to the wrong chain is useless here — drop it so the
-      // next attempt starts a fresh pairing instead of re-attaching to it.
+      // Wrong chain: KEEP the session alive and wait for the user to switch
+      // networks inside their wallet (many mobile wallets can't add a custom
+      // chain over WC, so tearing down the session just forces a pointless
+      // re-scan). The WrongNetwork modal guides the manual add, and the
+      // chainChanged listener completes the connection the moment they land
+      // on Mersennet.
+      if ((e as Error)?.message === 'wrong-chain' || /Mersennet network/i.test((e as Error)?.message || '')) {
+        useStore.getState().setWrongChain(true);
+        const onChain = async (id: unknown) => {
+          const raw = typeof id === 'string' ? parseInt(id, 16) : Number(id);
+          if (raw === MERSENNET_TESTNET.chainId) {
+            wc.removeListener('chainChanged', onChain);
+            try {
+              await finishConnect(wc, address);
+              localStorage.setItem(WALLET_TYPE_KEY, 'walletconnect');
+              useStore.getState().setWrongChain(false);
+            } catch { /* still wrong — modal stays up */ }
+          }
+        };
+        wc.on('chainChanged', onChain);
+        // Return the address so the UI shows the connected-but-wrong-chain
+        // state instead of an error toast.
+        return address;
+      }
+      // Any other failure: drop the session so the next attempt re-pairs.
       wc.disconnect().catch(() => {});
       wcRef.current = null;
       throw e;
