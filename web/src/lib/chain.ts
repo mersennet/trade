@@ -130,6 +130,9 @@ export async function ensureMersennetNetwork(
 /** The MersennetOrders CLOB precompile — order placement, collateral, positions. */
 export const MERSENNET_ORDERS_PRECOMPILE = '0x0000000000000000000000000000000000000100';
 
+/** Delegated staking precompile — delegate/undelegate/claim, staking views. */
+export const MERSENNET_STAKING_PRECOMPILE = '0x0000000000000000000000000000000000000400';
+
 export interface DeployedContracts {
   MersennetOrders: string;
 }

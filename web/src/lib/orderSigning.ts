@@ -25,8 +25,13 @@ const TIF_CODE: Record<Tif, number> = { Gtc: 0, Ioc: 1, Fok: 2 };
 
 const PLACE_ORDER_ABI = [
   'function placeOrder(uint64 marketId, bool isBuy, uint256 price, uint256 size, uint8 tif) returns (uint256 orderId, uint256 filled, uint256 remaining)',
+  'function placeOrderExt(uint64 marketId, bool isBuy, uint256 price, uint256 size, uint8 tif, uint8 flags, uint64 expireAtBlock) returns (uint256 orderId, uint256 filled, uint256 remaining)',
   'function cancelOrder(uint256 orderId) returns (bool success)',
+  'function createMarket(bytes32 symbol, uint256 tickSize, uint256 lotSize) returns (uint64 marketId)',
 ];
+
+/** Post-only flag bit for placeOrderExt's `flags` byte. */
+export const FLAG_POST_ONLY = 0x01;
 
 export interface PlacedOrder {
   txHash: string;
@@ -35,6 +40,13 @@ export interface PlacedOrder {
   price: string;
   size: string;
   tif: Tif;
+}
+
+/** Maker-order options for placeOrderExt (post-only / good-till-date). */
+export interface MakerFlags {
+  postOnly?: boolean;
+  /** Absolute chain block height at which a resting order auto-cancels. */
+  expireAtBlock?: number;
 }
 
 /** Convert a human number string to integer chain units (rounds decimals). */
@@ -110,6 +122,8 @@ export async function placeOrderOnChain(
     priceUsd: string;     // human, e.g. "95000"
     sizeBase: string;     // human, e.g. "2"
     tif?: Tif;
+    // Maker flags — when set, the call routes through placeOrderExt.
+    maker?: MakerFlags;
     // Optional session key (no-popup signing). When set, signs with this key
     // directly against the chain RPC and ignores `signerSource`.
     sessionKey?: string;
@@ -137,13 +151,24 @@ export async function placeOrderOnChain(
   if (BigInt(price) <= BigInt(0)) throw new Error('Price must be > 0');
 
   const iface = new e.utils.Interface(PLACE_ORDER_ABI);
-  const data = iface.encodeFunctionData('placeOrder', [
-    params.marketId,
-    params.isBuy,
-    price,
-    size,
-    TIF_CODE[tif],
-  ]);
+  const usesExt = !!(params.maker && (params.maker.postOnly || params.maker.expireAtBlock));
+  const data = usesExt
+    ? iface.encodeFunctionData('placeOrderExt', [
+        params.marketId,
+        params.isBuy,
+        price,
+        size,
+        TIF_CODE[tif],
+        params.maker?.postOnly ? FLAG_POST_ONLY : 0,
+        params.maker?.expireAtBlock ?? 0,
+      ])
+    : iface.encodeFunctionData('placeOrder', [
+        params.marketId,
+        params.isBuy,
+        price,
+        size,
+        TIF_CODE[tif],
+      ]);
 
   // Explicit gas: the precompile call would otherwise rely on eth_estimateGas,
   // which reverts (and fails the order) when the account has no collateral yet.
@@ -163,6 +188,55 @@ export async function placeOrderOnChain(
     size,
     tif,
   };
+}
+
+/**
+ * Permissionless market listing. Calls `createMarket` on the CLOB precompile;
+ * the chain charges a 100 MRSN listing fee (native balance) and validates the
+ * symbol + tick/lot. Returns the new integer market id.
+ */
+export async function createMarketOnChain(
+  signerSource: unknown,
+  params: { symbol: string; tickSize: string; lotSize: string },
+): Promise<{ txHash: string; marketId: number }> {
+  const { ethers } = await import('ethers');
+  type EthersLike = typeof import('ethers');
+  const e = ethers as EthersLike;
+
+  if (!signerSource) throw new Error('No signer (connect wallet)');
+  const p = signerSource as InstanceType<EthersLike['providers']['Web3Provider']>;
+  const signer = p.getSigner();
+
+  const symbol = params.symbol.trim().toUpperCase();
+  if (!symbol || symbol.length > 20) throw new Error('Symbol must be 1–20 characters');
+  const tick = toChainUnits(params.tickSize);
+  const lot = toChainUnits(params.lotSize);
+  if (BigInt(tick) <= 0n || BigInt(lot) <= 0n) throw new Error('Tick and lot must be > 0');
+
+  // bytes32 = right-padded ASCII.
+  const symbolBytes32 = e.utils.formatBytes32String(symbol);
+  const iface = new e.utils.Interface(PLACE_ORDER_ABI);
+  const data = iface.encodeFunctionData('createMarket', [symbolBytes32, tick, lot]);
+
+  const tx = await signer.sendTransaction({
+    to: MERSENNET_ORDERS_PRECOMPILE,
+    data,
+    gasLimit: 800_000,
+  });
+  const receipt = await tx.wait(1);
+
+  // Decode the returned marketId from the call (best-effort via eth_call replay).
+  let marketId = 0;
+  try {
+    const rpc = new e.providers.JsonRpcProvider(getDefaultChain().rpcUrls[0]);
+    const ret = await rpc.call({ to: MERSENNET_ORDERS_PRECOMPILE, data, from: await signer.getAddress() }, receipt.blockNumber);
+    const [id] = iface.decodeFunctionResult('createMarket', ret);
+    marketId = Number(id);
+  } catch {
+    // Non-fatal: the tx already mined; the markets list refresh will show it.
+  }
+
+  return { txHash: tx.hash, marketId };
 }
 
 /** Cancel an order directly on-chain via a wallet transaction. */

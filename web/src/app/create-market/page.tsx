@@ -4,6 +4,7 @@ import { cn, formatNumber, shortenAddress, formatTimeAgo } from '@/lib/utils';
 import { useToast } from '@/components/shared/Toast';
 import { useWallet } from '@/hooks/useWallet';
 import { api, type MarketProposal } from '@/lib/api';
+import { createMarketOnChain } from '@/lib/orderSigning';
 
 function votePct(forV: number, againstV: number) {
   const total = forV + againstV;
@@ -19,8 +20,12 @@ const STATUS_STYLES: Record<string, string> = {
 };
 
 export default function CreateMarketPage() {
-  const { address, isConnected } = useWallet();
+  const { address, provider, isConnected } = useWallet();
   const { toast } = useToast();
+  const [onchainSymbol, setOnchainSymbol] = useState('');
+  const [onchainTick, setOnchainTick] = useState('1');
+  const [onchainLot, setOnchainLot] = useState('1');
+  const [creating, setCreating] = useState(false);
   const [proposals, setProposals] = useState<MarketProposal[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -84,6 +89,31 @@ export default function CreateMarketPage() {
     }
   };
 
+  const handleCreateOnChain = async () => {
+    if (!provider) { toast('Connect wallet to create a market', 'error'); return; }
+    if (!onchainSymbol.trim()) { toast('Enter a market symbol', 'error'); return; }
+    setCreating(true);
+    try {
+      const res = await createMarketOnChain(provider, {
+        symbol: onchainSymbol,
+        tickSize: onchainTick || '1',
+        lotSize: onchainLot || '1',
+      });
+      toast(
+        res.marketId
+          ? `Market #${res.marketId} "${onchainSymbol.toUpperCase()}" is live on-chain`
+          : `Market "${onchainSymbol.toUpperCase()}" created on-chain`,
+        'success',
+      );
+      setOnchainSymbol('');
+    } catch (e) {
+      const msg = (e as Error).message || 'Creation failed';
+      toast(msg.length > 160 ? `${msg.slice(0, 160)}…` : msg, 'error');
+    } finally {
+      setCreating(false);
+    }
+  };
+
   const activeProposals = proposals.filter((p) => p.status === 'pending' || p.status === 'active');
   const pastProposals = proposals.filter((p) => p.status === 'approved' || p.status === 'rejected');
 
@@ -91,7 +121,68 @@ export default function CreateMarketPage() {
     <div className="p-4 max-w-full space-y-6">
       <div className="text-center mb-8">
         <h2 className="text-2xl font-bold text-foreground mb-2">Create Market</h2>
-        <p className="text-dim text-sm">Propose new perpetual markets through permissionless listing</p>
+        <p className="text-dim text-sm">Permissionless listing — create a market directly on-chain, or rally support through a proposal</p>
+      </div>
+
+      {/* On-chain instant listing */}
+      <div className="bg-surface border border-green/20 rounded-xl p-5 space-y-4 shadow-[0_0_24px_rgba(125,255,155,0.04)]">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-10 h-10 bg-green/10 rounded-xl flex items-center justify-center">
+            <svg className="w-5 h-5 text-green" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">Create Instantly On-Chain</h3>
+            <p className="text-[10px] text-dim">One transaction to the CLOB precompile — 100 MRSN listing fee (goes to the insurance fund)</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label className="text-[10px] text-dim uppercase tracking-wider font-medium mb-1 block">Symbol</label>
+            <input
+              value={onchainSymbol}
+              onChange={(e) => setOnchainSymbol(e.target.value)}
+              placeholder="e.g. DOGE/USD"
+              maxLength={20}
+              className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-green transition-colors font-mono"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] text-dim uppercase tracking-wider font-medium mb-1 block">Tick Size</label>
+            <input
+              value={onchainTick}
+              onChange={(e) => setOnchainTick(e.target.value)}
+              placeholder="1"
+              inputMode="numeric"
+              className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-green transition-colors font-mono"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] text-dim uppercase tracking-wider font-medium mb-1 block">Lot Size</label>
+            <input
+              value={onchainLot}
+              onChange={(e) => setOnchainLot(e.target.value)}
+              placeholder="1"
+              inputMode="numeric"
+              className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-green transition-colors font-mono"
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between pt-2 border-t border-border">
+          <span className="text-xs text-dim">
+            Listing fee: <span className="text-green font-semibold font-mono">100 MRSN</span> · symbol must be unique
+          </span>
+          <button
+            onClick={handleCreateOnChain}
+            disabled={creating || !isConnected}
+            className="px-6 py-2 premium-gradient text-black rounded-lg text-xs font-semibold disabled:opacity-50 hover:brightness-110 transition-all duration-200"
+          >
+            {creating ? 'Creating…' : 'Create Market'}
+          </button>
+        </div>
       </div>
 
       {/* Proposal Form */}

@@ -32,6 +32,41 @@ scripts/  Postgres backup + health watchdog
   (no decimal scaling), matching the chain engine's `notional = price × size`
   margin math
 
+### Unified margin account
+
+Every address has **one cross-margin account** on the chain, shared by all
+markets and products — there are no per-market or per-product sub-accounts at
+the protocol level:
+
+- **Perps** — all perp positions in all markets draw margin from the same
+  account. Equity = collateral + unrealized PnL across every open position;
+  initial margin is checked on order placement, maintenance margin on
+  withdrawals and liquidation.
+- **Spot** — spot fills settle against the same native-token balance and
+  collateral account.
+- **Earn / staking** — delegated stake (staking precompile `0x…0400`) is held
+  in the staking escrow; rewards claim straight back to the wallet's native
+  balance, where they can be deposited as trading collateral with one call.
+- **Multi-collateral** — besides native MRSN, tokens registered in the
+  chain's collateral registry (e.g. USDC) can be deposited via
+  `depositTokenCollateral`. Each asset has a haircut weight (bps) and a
+  value rate; weighted values are summed into the same account equity used
+  for perp margin.
+
+The "sub-accounts" feature in the terminal is a client-side organizational
+layer (separate keys), not separate margin pools.
+
+### Order types
+
+- **Chain-native**: limit / market, `GTC` / `IOC` / `FOK`, **post-only**
+  (rejects instead of taking) and **good-till-date** (auto-cancels on-chain at
+  a block height — works with the tab closed).
+- **Client/keeper-side**: TWAP and scale (API slicer), stop and trailing
+  triggers, and **chase** (client keeper re-pegs a post-only order to the top
+  of the book via the one-click session key until it fills).
+- **Permissionless listing**: anyone can create a market on-chain via
+  `createMarket(symbol, tick, lot)` for a 100 MRSN listing fee.
+
 ## Quick start
 
 ```bash

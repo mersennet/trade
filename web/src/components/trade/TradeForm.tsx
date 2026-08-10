@@ -47,6 +47,15 @@ export default function TradeForm() {
   const [scalePriceFrom, setScalePriceFrom] = useState('');
   const [scalePriceTo, setScalePriceTo] = useState('');
   const [showProTypes, setShowProTypes] = useState(false);
+  // Maker flags (chain-native): post-only rejects instead of taking, and a
+  // good-till-date order auto-cancels on-chain at the chosen expiry.
+  const [postOnly, setPostOnly] = useState(false);
+  const [expiry, setExpiry] = useState<'never' | '1h' | '4h' | '1d' | '1w'>('never');
+  // Chase: client-side keeper that re-pegs the limit order to the top of the
+  // book via the one-click session key until it fills.
+  const [chase, setChase] = useState(false);
+  const [chaseId, setChaseId] = useState<string | null>(null);
+  const [chaseReprices, setChaseReprices] = useState(0);
   const proTypesRef = useDismissable<HTMLDivElement>(showProTypes, () => setShowProTypes(false));
 
   const currentPosition = useMemo(() => {
@@ -267,6 +276,40 @@ export default function TradeForm() {
         // matching engine runs atomically and the order owner IS the verified
         // transaction signer. The API no longer places orders on a caller's
         // behalf (that trusted an unsigned `owner` field — account takeover).
+        // Chase order: hand off to the client-side keeper, which places a
+        // post-only order at the top of the book and re-pegs it on every move.
+        if (trade.orderType === 'limit' && chase) {
+          if (!useOneClick || !sessionKey) {
+            throw new Error('Chase orders need one-click trading (session key) — enable it in settings.');
+          }
+          const { startChase } = await import('@/lib/chase');
+          const marketSymbol = market.symbol;
+          const id = await startChase({
+            marketId: market.id,
+            isBuy: trade.side === 'buy',
+            size: toChainUnits(trade.size),
+            sessionKey,
+            onEvent: (evt) => {
+              if (evt.kind === 'repriced') {
+                setChaseReprices(evt.reprices || 0);
+              } else if (evt.kind === 'filled') {
+                setChaseId(null);
+                setChaseReprices(0);
+                toast(`Chase order filled on ${marketSymbol}`, 'success');
+                if (useStore.getState().soundEnabled) playSound('fill');
+              } else if (evt.kind === 'stopped') {
+                setChaseId(null);
+                setChaseReprices(0);
+                toast(`Chase stopped: ${evt.message}`, 'info');
+              }
+            },
+          });
+          setChaseId(id);
+          setChaseReprices(0);
+          toast(`Chasing top of book on ${marketSymbol}`, 'success');
+          setTrade({ size: '' });
+          return;
+        }
         const ticker = tickers[market.id];
         let priceForOrder = trade.price;
         const { placeOrderOnChain, marketableLimitPrice } = await import('@/lib/orderSigning');
@@ -300,6 +343,26 @@ export default function TradeForm() {
           tif,
           ts: Date.now(),
         });
+        // Good-till-date: convert the chosen duration to an absolute chain
+        // block height (~2s blocks). Only meaningful for resting GTC limits.
+        const isRestingLimit = trade.orderType !== 'market' && tif === 'Gtc';
+        let expireAtBlock = 0;
+        if (isRestingLimit && expiry !== 'never') {
+          const seconds = { '1h': 3_600, '4h': 14_400, '1d': 86_400, '1w': 604_800 }[expiry];
+          try {
+            const { getDefaultChain } = await import('@/lib/chain');
+            const res = await fetch(getDefaultChain().rpcUrls[0], {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_blockNumber', params: [] }),
+            });
+            const { result } = await res.json();
+            expireAtBlock = parseInt(result, 16) + Math.ceil(seconds / 2);
+          } catch {
+            // If the head lookup fails, place without expiry rather than fail.
+            expireAtBlock = 0;
+          }
+        }
         try {
           await placeOrderOnChain(provider, {
             marketId: market.id,
@@ -307,10 +370,17 @@ export default function TradeForm() {
             priceUsd: priceForOrder,
             sizeBase: trade.size,
             tif,
+            maker: isRestingLimit && (postOnly || expireAtBlock > 0)
+              ? { postOnly, expireAtBlock: expireAtBlock || undefined }
+              : undefined,
             sessionKey: useOneClick ? sessionKey || undefined : undefined,
           });
         } catch (e) {
           useStore.getState().removePendingOrder(tempId);
+          const msg = (e as Error).message || '';
+          if (msg.includes('post-only')) {
+            throw new Error('Post-only order would cross the book — adjust your price or disable Post Only.');
+          }
           throw e;
         }
         // Report the real outcome (filled / resting / partial / no fill) instead
@@ -737,7 +807,62 @@ export default function TradeForm() {
             {t('trade.reduceOnly', 'Reduce Only')}
           </label>
         )}
+        {trade.orderType === 'limit' && trade.tif === 'gtc' && (
+          <label className="flex items-center gap-2 text-[11px] text-muted cursor-pointer select-none"
+            title="Maker-only: the chain rejects the order instead of letting it take liquidity">
+            <input type="checkbox" checked={postOnly}
+              onChange={(e) => setPostOnly(e.target.checked)} className="accent-primary w-3.5 h-3.5 rounded" />
+            Post Only
+          </label>
+        )}
+        {trade.orderType === 'limit' && trade.tif === 'gtc' && (
+          <label className={cn(
+            'flex items-center gap-2 text-[11px] select-none',
+            oneClickEnabled && sessionKey ? 'text-muted cursor-pointer' : 'text-dim/60 cursor-not-allowed'
+          )}
+            title={oneClickEnabled && sessionKey
+              ? 'Auto-reprice: keeps this order pegged to the top of the book (cancels + re-places via your one-click session key) until it fills'
+              : 'Chase needs one-click trading — enable it in settings so reprices can sign without popups'}>
+            <input type="checkbox" checked={chase} disabled={!oneClickEnabled || !sessionKey}
+              onChange={(e) => setChase(e.target.checked)} className="accent-primary w-3.5 h-3.5 rounded" />
+            Chase
+          </label>
+        )}
       </div>
+
+      {/* Active chase banner */}
+      {chaseId && (
+        <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 bg-primary/[0.08] border border-primary/30 rounded-lg">
+          <span className="text-[11px] text-foreground">
+            Chasing top of book
+            <span className="text-dim font-mono"> · {chaseReprices} reprice{chaseReprices === 1 ? '' : 's'}</span>
+          </span>
+          <button
+            onClick={async () => {
+              const { stopChase } = await import('@/lib/chase');
+              if (chaseId) stopChase(chaseId);
+            }}
+            className="px-2 py-0.5 text-[10.5px] font-medium text-red border border-red/40 rounded-md hover:bg-red/10 transition-colors"
+          >Stop</button>
+        </div>
+      )}
+
+      {/* Good-till-date: the chain auto-cancels the resting order at expiry */}
+      {trade.orderType === 'limit' && trade.tif === 'gtc' && (
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10.5px] text-dim whitespace-nowrap" title="On-chain expiry: the order cancels itself at the chosen time, even with the tab closed">Expires</span>
+          <div className="flex flex-1 gap-px bg-background rounded-md border border-border overflow-hidden">
+            {(['never', '1h', '4h', '1d', '1w'] as const).map((v) => (
+              <button key={v} onClick={() => setExpiry(v)}
+                className={cn(
+                  'flex-1 py-1 text-[10px] font-medium uppercase tracking-wide transition-colors',
+                  expiry === v ? 'bg-foreground/[0.07] text-foreground' : 'bg-surface-2 text-dim hover:text-foreground'
+                )}
+              >{v === 'never' ? 'GTC' : v}</button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* TP/SL */}
       {trade.tpEnabled && (
