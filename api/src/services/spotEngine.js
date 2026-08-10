@@ -56,11 +56,11 @@ async function initSpotTables() {
 
 async function seedSpotMarkets() {
   const markets = [
-    { symbol: 'MRSN/USDC', base: 'MRSN', quote: 'USDC', tick_size: 0.001, lot_size: 1 },
-    { symbol: 'BTC/USDC',  base: 'BTC',  quote: 'USDC', tick_size: 0.01,  lot_size: 0.0001 },
-    { symbol: 'ETH/USDC',  base: 'ETH',  quote: 'USDC', tick_size: 0.01,  lot_size: 0.001 },
-    { symbol: 'SOL/USDC',  base: 'SOL',  quote: 'USDC', tick_size: 0.01,  lot_size: 0.01 },
-    { symbol: 'ARB/USDC',  base: 'ARB',  quote: 'USDC', tick_size: 0.0001, lot_size: 1 },
+    { symbol: 'MRSN/USD', base: 'MRSN', quote: 'USD', tick_size: 0.001, lot_size: 1 },
+    { symbol: 'BTC/USD',  base: 'BTC',  quote: 'USD', tick_size: 0.01,  lot_size: 0.0001 },
+    { symbol: 'ETH/USD',  base: 'ETH',  quote: 'USD', tick_size: 0.01,  lot_size: 0.001 },
+    { symbol: 'SOL/USD',  base: 'SOL',  quote: 'USD', tick_size: 0.01,  lot_size: 0.01 },
+    { symbol: 'ARB/USD',  base: 'ARB',  quote: 'USD', tick_size: 0.0001, lot_size: 1 },
   ];
   for (const m of markets) {
     await pool.query(

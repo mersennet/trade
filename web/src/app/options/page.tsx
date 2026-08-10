@@ -45,8 +45,15 @@ export default function OptionsPage() {
       .catch(() => {});
   }, [contracts, underlying]);
 
+  // Contracts carry full timestamps; several expire at different times on the
+  // same day. Group by calendar day so the tab row shows "Aug 16" once, not
+  // a dozen identical chips overflowing the viewport.
+  const expiryDay = (exp: string) => {
+    try { return new Date(exp).toISOString().slice(0, 10); } catch { return exp; }
+  };
+
   const expiries = useMemo(() => {
-    const set = new Set(contracts.map((c) => c.expiry));
+    const set = new Set(contracts.map((c) => expiryDay(c.expiry)));
     return Array.from(set).sort();
   }, [contracts]);
 
@@ -56,7 +63,7 @@ export default function OptionsPage() {
   }, [expiries, selectedExpiry]);
 
   const filteredContracts = useMemo(() =>
-    contracts.filter((c) => c.expiry === selectedExpiry),
+    contracts.filter((c) => expiryDay(c.expiry) === selectedExpiry),
   [contracts, selectedExpiry]);
 
   const strikes = useMemo(() => {
@@ -111,7 +118,7 @@ export default function OptionsPage() {
 
       {/* Expiry tabs */}
       {expiries.length > 0 && (
-        <div className="flex gap-1 overflow-x-auto pb-1">
+        <div className="flex gap-1 flex-wrap">
           {expiries.map((exp) => (
             <button
               key={exp}

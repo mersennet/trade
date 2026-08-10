@@ -343,7 +343,10 @@ export default function MarketBar() {
             <Stat label="Oracle" value={formatPrice(stats.oraclePrice)} valueClass="text-dim" />
           )}
           <Stat label="24h Volume" value={formatCompact(stats.volume24h)} />
-          <Stat label="24h Trades" value={formatNumber(stats.trades24h, 0)} />
+          {/* Lower-priority stats hide at narrow desktop widths so Best
+              Bid/Ask never get clipped off the right edge (the row's
+              horizontal scroll has no scrollbar and is undiscoverable). */}
+          <Stat label="24h Trades" value={formatNumber(stats.trades24h, 0)} className="hidden lg:flex" />
 
           {tradeMode === 'perps' && (
             <>
@@ -352,15 +355,16 @@ export default function MarketBar() {
                 value={`${stats.fundingRate >= 0 ? '+' : ''}${(stats.fundingRate * 100).toFixed(4)}%`}
                 valueClass={stats.fundingRate >= 0 ? 'text-green' : 'text-red'}
               />
-              <Stat label="Next funding" value={<FundingCountdown />} valueClass="text-yellow" />
+              <Stat label="Next funding" value={<FundingCountdown />} valueClass="text-yellow" className="hidden xl:flex" />
               {stats.openInterest > 0 && (
-                <Stat label="Open Interest" value={formatCompact(stats.openInterest)} />
+                <Stat label="Open Interest" value={formatCompact(stats.openInterest)} className="hidden lg:flex" />
               )}
               {stats.longPct !== null && (
                 <Stat
                   label="L/S Accounts"
                   value={`${stats.longPct}% / ${100 - stats.longPct}%`}
                   valueClass={stats.longPct >= 50 ? 'text-green' : 'text-red'}
+                  className="hidden xl:flex"
                 />
               )}
             </>
@@ -382,9 +386,9 @@ export default function MarketBar() {
   );
 }
 
-function Stat({ label, value, valueClass }: { label: string; value: React.ReactNode; valueClass?: string }) {
+function Stat({ label, value, valueClass, className }: { label: string; value: React.ReactNode; valueClass?: string; className?: string }) {
   return (
-    <div className="flex flex-col justify-center gap-0.5 shrink-0 min-w-0">
+    <div className={cn('flex flex-col justify-center gap-0.5 shrink-0 min-w-0', className)}>
       <span className="text-[9.5px] uppercase tracking-wider text-dim leading-none whitespace-nowrap">{label}</span>
       <span className={cn('font-mono font-medium tabular-nums text-[12px] text-foreground leading-none whitespace-nowrap', valueClass)}>
         {value}
