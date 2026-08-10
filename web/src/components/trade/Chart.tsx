@@ -860,7 +860,7 @@ export default function Chart() {
           (the old overflow-x scroll had no scrollbar, so wrapped-out tools
           like Indicators were unreachable). */}
       <div className="flex items-center justify-between gap-1 px-2 md:px-3 py-1.5 md:py-2 border-b border-border flex-wrap">
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-1 flex-wrap min-w-0">
           <button onClick={() => setChartMode('price')} className={cn('px-2 py-1 text-[11px] font-medium rounded transition-all', chartMode === 'price' ? 'bg-surface-2 text-foreground' : 'text-dim hover:text-muted')}>Price</button>
           <button onClick={() => setChartMode('depth')} className={cn('px-2 py-1 text-[11px] font-medium rounded transition-all', chartMode === 'depth' ? 'bg-surface-2 text-foreground' : 'text-dim hover:text-muted')}>Depth</button>
           <button onClick={() => setChartMode('heatmap')} className={cn('px-2 py-1 text-[11px] font-medium rounded transition-all', chartMode === 'heatmap' ? 'bg-surface-2 text-foreground' : 'text-dim hover:text-muted')}>Heatmap</button>
