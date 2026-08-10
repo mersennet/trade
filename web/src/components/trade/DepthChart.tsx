@@ -77,7 +77,7 @@ export default function DepthChart() {
 
     if (bids.length === 0 && asks.length === 0) {
       ctx.fillStyle = colors.text;
-      ctx.font = '11px Sora, sans-serif';
+      ctx.font = '11px "Schibsted Grotesk", sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText('Waiting for order book data...', w / 2, h / 2);
       return;

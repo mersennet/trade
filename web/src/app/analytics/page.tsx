@@ -152,8 +152,8 @@ function EquityCurveChart({ data }: { data: { time: number; value: number }[] })
         horzLines: { color: 'rgba(255,255,255,0.03)' },
       },
       crosshair: {
-        vertLine: { color: 'rgba(139,92,246,0.3)', labelBackgroundColor: '#1a1a2e' },
-        horzLine: { color: 'rgba(139,92,246,0.3)', labelBackgroundColor: '#1a1a2e' },
+        vertLine: { color: 'rgba(125,255,155,0.3)', labelBackgroundColor: '#10140f' },
+        horzLine: { color: 'rgba(125,255,155,0.3)', labelBackgroundColor: '#10140f' },
       },
       rightPriceScale: { borderColor: 'rgba(255,255,255,0.06)' },
       timeScale: { borderColor: 'rgba(255,255,255,0.06)' },

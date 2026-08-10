@@ -68,7 +68,7 @@ export default function TestnetPage() {
           <button
             onClick={addToWallet}
             disabled={adding}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-primary hover:bg-primary-hover disabled:opacity-60 text-white font-semibold rounded-lg text-sm hover:shadow-[0_0_16px_rgba(139,92,246,0.15)] transition-all duration-200"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-primary hover:bg-primary-hover disabled:opacity-60 text-white font-semibold rounded-lg text-sm hover:shadow-[0_0_16px_rgba(125,255,155,0.15)] transition-all duration-200"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />

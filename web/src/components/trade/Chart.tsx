@@ -253,7 +253,7 @@ export default function Chart() {
       layout: {
         background: { type: lc.ColorType.Solid, color: isDark ? '#050507' : '#ffffff' },
         textColor: isDark ? '#6e6b7b' : '#71717a',
-        fontFamily: 'Sora, sans-serif',
+        fontFamily: 'Schibsted Grotesk, sans-serif',
         fontSize: 11,
       },
       grid: {

@@ -74,7 +74,7 @@ export default function Sidebar() {
     <aside className="hidden md:flex flex-col h-screen bg-surface border-r border-border fixed left-0 top-0 z-40 w-[52px] xl:w-[180px] transition-all duration-200">
       <div className="h-12 border-b border-border flex items-center justify-center xl:justify-start gap-2 px-2 xl:px-3 shrink-0">
         <Link href="/trade" className="flex items-center gap-2 group">
-          <Image src="/logo.png" alt="Mersennet Trade" width={32} height={32} className="shrink-0 drop-shadow-[0_0_10px_rgba(139,92,246,0.35)]" priority />
+          <Image src="/logo.png" alt="Mersennet Trade" width={32} height={32} className="shrink-0 drop-shadow-[0_0_10px_rgba(125,255,155,0.35)]" priority />
           <span className="hidden xl:block font-semibold text-foreground tracking-tight text-sm">Mersennet Trade</span>
         </Link>
       </div>

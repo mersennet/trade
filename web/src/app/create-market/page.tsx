@@ -262,7 +262,7 @@ export default function CreateMarketPage() {
           <button
             onClick={handleSubmit}
             disabled={submitting || !isConnected}
-            className="px-6 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-xs font-medium disabled:opacity-50 hover:shadow-[0_0_16px_rgba(139,92,246,0.15)] transition-all duration-200"
+            className="px-6 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-xs font-medium disabled:opacity-50 hover:shadow-[0_0_16px_rgba(125,255,155,0.15)] transition-all duration-200"
           >
             {submitting ? 'Submitting...' : 'Submit Proposal'}
           </button>

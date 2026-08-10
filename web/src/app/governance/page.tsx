@@ -160,7 +160,7 @@ export default function GovernancePage() {
         {isConnected && (
           <button
             onClick={() => setShowCreate(!showCreate)}
-            className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-xs font-medium hover:shadow-[0_0_16px_rgba(139,92,246,0.15)] transition-all duration-200"
+            className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-xs font-medium hover:shadow-[0_0_16px_rgba(125,255,155,0.15)] transition-all duration-200"
           >
             {showCreate ? 'Cancel' : '+ New Proposal'}
           </button>

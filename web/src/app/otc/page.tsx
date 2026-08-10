@@ -127,7 +127,7 @@ export default function OTCPage() {
             <button
               onClick={handleSubmitRfq}
               disabled={submitting || !isConnected}
-              className="w-full py-3 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold disabled:opacity-50 hover:shadow-[0_0_16px_rgba(139,92,246,0.15)] transition-all duration-200"
+              className="w-full py-3 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold disabled:opacity-50 hover:shadow-[0_0_16px_rgba(125,255,155,0.15)] transition-all duration-200"
             >
               {!isConnected ? 'Connect Wallet' : submitting ? 'Submitting...' : 'Request Quote'}
             </button>

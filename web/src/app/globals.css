@@ -1,5 +1,5 @@
 @import "tailwindcss";
-/* Sora font is loaded via <link> in app/layout.tsx — putting any @import after
+/* Schibsted Grotesk (brand font) is loaded via <link> in app/layout.tsx — putting any @import after
    `@import "tailwindcss"` makes Tailwind v4 silently drop its expanded output
    (the resulting bundle would have an @import after other rules, which is
    spec-invalid). Load fonts through layout.tsx or next/font instead. */
@@ -22,7 +22,7 @@
   --color-muted: var(--muted);
   --color-dim: var(--dim);
   --color-orange: #f97316;
-  --font-sans: "Sora", system-ui, sans-serif;
+  --font-sans: "Schibsted Grotesk", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "SF Mono", monospace;
 }
 
@@ -50,9 +50,10 @@
 [data-theme="light"] {
   --background: #fafafa;
   --foreground: #0f0f12;
-  --primary: #0fae62;
-  --primary-hover: #0a8f50;
-  --primary-glow: rgba(15, 174, 98, 0.1);
+  /* brand deep green (#0c8f43) on light backgrounds */
+  --primary: #0c8f43;
+  --primary-hover: #0fae62;
+  --primary-glow: rgba(12, 143, 67, 0.1);
   --surface: #ffffff;
   --surface-2: #f4f4f5;
   --surface-3: #e8e8ec;
@@ -75,7 +76,7 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: "Sora", system-ui, sans-serif;
+  font-family: "Schibsted Grotesk", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -109,11 +110,6 @@ input[type="number"] {
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.glow-purple {
-  box-shadow: 0 0 20px rgba(125, 255, 155, 0.12),
-              0 0 40px rgba(125, 255, 155, 0.06);
 }
 
 .glow-green {

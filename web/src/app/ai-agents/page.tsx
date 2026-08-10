@@ -108,7 +108,7 @@ export default function AIAgentsPage() {
         <div className="flex justify-end mb-2">
           <button
             onClick={() => setShowCreate(true)}
-            className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-xs font-semibold hover:shadow-[0_0_16px_rgba(139,92,246,0.15)] transition-all duration-200"
+            className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-xs font-semibold hover:shadow-[0_0_16px_rgba(125,255,155,0.15)] transition-all duration-200"
           >
             + Create Agent
           </button>
@@ -294,7 +294,7 @@ export default function AIAgentsPage() {
               <button
                 onClick={handleCreate}
                 disabled={submitting || !form.name || form.markets.length === 0}
-                className="w-full py-3 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold disabled:opacity-50 hover:shadow-[0_0_16px_rgba(139,92,246,0.15)] transition-all duration-200"
+                className="w-full py-3 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold disabled:opacity-50 hover:shadow-[0_0_16px_rgba(125,255,155,0.15)] transition-all duration-200"
               >
                 {submitting ? 'Creating...' : 'Create Agent'}
               </button>

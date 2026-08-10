@@ -92,7 +92,7 @@ export default function ReferralsPage() {
           <div className="flex gap-2">
             <input value={newCode} onChange={(e) => setNewCode(e.target.value)} placeholder="Code (optional, auto-generated)" className="flex-1 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary transition-colors duration-200" />
             <input value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="Label" className="w-32 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary transition-colors duration-200" />
-            <button onClick={createCode} className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium hover:shadow-[0_0_16px_rgba(139,92,246,0.15)] transition-all duration-200">
+            <button onClick={createCode} className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium hover:shadow-[0_0_16px_rgba(125,255,155,0.15)] transition-all duration-200">
               Create
             </button>
           </div>
