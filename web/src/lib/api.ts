@@ -173,6 +173,8 @@ export const api = {
     apiFetch<{ order: unknown }>('/options/order', { method: 'POST', body: JSON.stringify(data) }),
   getOptionPositions: (address: string) => apiFetch<{ positions: OptionPosition[] }>(`/options/positions/${address}`),
   getOptionGreeks: (contractId: number) => apiFetch<OptionGreeks>(`/options/greeks/${contractId}`),
+  getOptionGreeksBulk: (underlying: string) =>
+    apiFetch<{ greeks: OptionGreeks[] }>(`/options/greeks?underlying=${encodeURIComponent(underlying)}`),
 
   // Pre-launch
   getPrelaunchMarkets: () => apiFetch<{ markets: PrelaunchMarket[] }>('/prelaunch'),
@@ -352,7 +354,7 @@ export interface SpotBalance { asset: string; available: number; locked: number;
 export interface OptionChain { underlying: string; expiry: string; contracts: number; min_strike: number; max_strike: number; }
 export interface OptionContract { id: number; underlying: string; strike: number; expiry: string; option_type: 'call' | 'put'; mark_price: number; iv: number; }
 export interface OptionPosition { id: number; contract_id: number; underlying: string; strike: number; expiry: string; option_type: string; size: number; entry_price: number; mark_price: number; pnl: number; }
-export interface OptionGreeks { delta: number; gamma: number; theta: number; vega: number; rho: number; iv: number; }
+export interface OptionGreeks { contractId?: number; delta: number; gamma: number; theta: number; vega: number; rho?: number; iv: number; }
 export interface PrelaunchMarket { id: number; symbol: string; token_name: string; launch_date: string; status: string; last_price: number; volume: number; }
 export interface PrelaunchPosition { id: number; market_id: number; symbol: string; side: string; size: number; entry_price: number; mark_price: number; pnl: number; }
 export interface WhaleTrade { id: number; market_id: number; symbol: string; side: string; price: number; size: number; value: number; taker: string; time: string; }

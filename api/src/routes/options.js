@@ -244,6 +244,53 @@ router.post('/exercise/:id', strictLimiter, async (req, res) => {
   }
 });
 
+// Bulk greeks for a whole underlying in ONE request — the options chain page
+// used to fire one request per contract (hundreds), tripping the rate limiter.
+router.get('/greeks', async (req, res) => {
+  try {
+    const underlying = String(req.query.underlying || '').toUpperCase();
+    if (!underlying) return res.status(400).json({ error: 'underlying required' });
+    const contracts = await pool.query(
+      `SELECT id, underlying, strike::float8 AS strike, option_type, expiry,
+              (CASE WHEN iv > 2 THEN iv / 100.0 ELSE iv END)::float8 AS iv
+         FROM options_contracts WHERE underlying = $1 AND expiry > NOW()`,
+      [underlying]
+    );
+    const spotResult = await pool.query(
+      `SELECT st.price FROM spot_trades st
+         JOIN spot_markets sm ON sm.id = st.market_id
+        WHERE sm.base = $1 ORDER BY st.created_at DESC LIMIT 1`,
+      [underlying]
+    );
+    const S0 = Number(spotResult.rows[0]?.price) || 0;
+    const r = 0.05;
+    const out = contracts.rows.map((c) => {
+      const K = Number(c.strike);
+      const S = S0 || K;
+      const T = Math.max(0.001, (new Date(c.expiry) - new Date()) / (365 * 24 * 3600 * 1000));
+      const sigma = Number(c.iv || 0.6);
+      return {
+        contractId: c.id,
+        underlying: c.underlying,
+        strike: K,
+        expiry: c.expiry,
+        optionType: c.option_type,
+        spot: S,
+        timeToExpiry: T,
+        iv: sigma,
+        delta: delta(S, K, T, r, sigma, c.option_type),
+        gamma: gamma(S, K, T, r, sigma),
+        theta: theta(S, K, T, r, sigma, c.option_type),
+        vega: vega(S, K, T, r, sigma),
+        theoreticalPrice: c.option_type === 'call' ? callPrice(S, K, T, r, sigma) : putPrice(S, K, T, r, sigma),
+      };
+    });
+    res.json({ underlying, greeks: out, timestamp: Date.now() });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.get('/greeks/:contractId', async (req, res) => {
   try {
     const { contractId } = req.params;

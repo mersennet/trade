@@ -32,18 +32,18 @@ export default function OptionsPage() {
 
   useEffect(() => {
     if (contracts.length === 0) return;
-    const fetchGreeks = async () => {
-      const results = await Promise.allSettled(
-        contracts.map((c) => api.getOptionGreeks(c.id).then((g) => ({ id: c.id, greeks: g })))
-      );
-      const next: Record<number, OptionGreeks> = {};
-      for (const r of results) {
-        if (r.status === 'fulfilled') next[r.value.id] = r.value.greeks;
-      }
-      setGreeksMap(next);
-    };
-    fetchGreeks();
-  }, [contracts]);
+    // One bulk request for the whole underlying — the old per-contract fan-out
+    // fired hundreds of parallel requests and tripped the API rate limiter.
+    api.getOptionGreeksBulk(underlying)
+      .then((d) => {
+        const next: Record<number, OptionGreeks> = {};
+        for (const g of d.greeks || []) {
+          if (g.contractId != null) next[g.contractId] = g;
+        }
+        setGreeksMap(next);
+      })
+      .catch(() => {});
+  }, [contracts, underlying]);
 
   const expiries = useMemo(() => {
     const set = new Set(contracts.map((c) => c.expiry));

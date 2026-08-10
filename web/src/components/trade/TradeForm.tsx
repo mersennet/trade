@@ -127,7 +127,7 @@ export default function TradeForm() {
     }
   };
 
-  const reportOutcome = async (owner: string, isBuy: boolean, price: string, before: { ids: Set<string>; size: number }) => {
+  const reportOutcome = async (owner: string, isBuy: boolean, price: string, before: { ids: Set<string>; size: number }, requestedSize?: string) => {
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     const posSize = (list: { marketId: number; size: number | string }[]) =>
       Number(list.find((p) => p.marketId === market.id)?.size ?? 0);
@@ -151,8 +151,12 @@ export default function TradeForm() {
         }
         if (filled > 0) {
           const entry = (p.positions || []).find((x) => x.marketId === market.id)?.entryPrice;
-          const msg = `Filled ${formatNumber(filled, 4)} ${market.base}${entry ? ` @ ${formatPrice(Number(entry))}` : ''}`;
-          toast(msg, 'success');
+          const requested = requestedSize ? Number(requestedSize) : 0;
+          const shortfall = requested > 0 && filled < requested - 1e-9;
+          const msg = shortfall
+            ? `Filled ${formatNumber(filled, 4)} of ${requestedSize} ${market.base}${entry ? ` @ ${formatPrice(Number(entry))}` : ''} — book depth exhausted`
+            : `Filled ${formatNumber(filled, 4)} ${market.base}${entry ? ` @ ${formatPrice(Number(entry))}` : ''}`;
+          toast(msg, shortfall ? 'warning' : 'success');
           notify('fill', `${isBuy ? 'Bought' : 'Sold'} ${market.base}`, `${market.symbol}: ${msg}`);
           return;
         }
@@ -309,7 +313,7 @@ export default function TradeForm() {
         }
         // Report the real outcome (filled / resting / partial / no fill) instead
         // of a blind "placed" — the tx mining only proves inclusion, not a fill.
-        void reportOutcome(orderOwner, trade.side === 'buy', String(priceForOrder), before);
+        void reportOutcome(orderOwner, trade.side === 'buy', String(priceForOrder), before, trade.size);
       }
       if (useStore.getState().soundEnabled) playSound('fill');
       setTrade({ size: '' });

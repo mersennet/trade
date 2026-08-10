@@ -7,7 +7,9 @@ function isLocalhost(req) {
 
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 300,
+  // A trading terminal polls several endpoints per page plus WS handshakes;
+  // 300/min was tripping on ordinary multi-page sessions.
+  max: 600,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later.' },
