@@ -92,7 +92,7 @@ export default function AccountPanel() {
 
   if (!isConnected) {
     return (
-      <div className="bg-surface border border-border rounded-xl md:border-0 md:rounded-none p-3">
+      <div className="bg-surface border border-border rounded-xl md:border-0 md:rounded-none p-3 shrink-0">
         <h3 className="text-[11px] text-dim font-medium uppercase tracking-wider mb-1">Account</h3>
         <EmptyState
           label="Wallet not connected"
@@ -104,7 +104,7 @@ export default function AccountPanel() {
   }
 
   return (
-    <div className="bg-surface border border-border rounded-xl md:border-0 md:rounded-none p-3 flex flex-col gap-2">
+    <div className="bg-surface border border-border rounded-xl md:border-0 md:rounded-none p-3 flex flex-col gap-2 shrink-0">
       <h3 className="text-[11px] text-dim font-medium uppercase tracking-wider">Account</h3>
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">

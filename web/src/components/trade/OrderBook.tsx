@@ -292,8 +292,11 @@ export default function OrderBook() {
               />
             </div>
           ) : (
-            <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-              <div className="flex-1 overflow-y-auto flex flex-col-reverse min-h-0">
+            // justify-center + content-sized sides: a sparse book renders as a
+            // compact ladder centered on the spread instead of leaving a huge
+            // void above the asks; dense sides still cap at half the panel.
+            <div className="flex-1 overflow-hidden flex flex-col justify-center min-h-0">
+              <div className="overflow-y-auto flex flex-col-reverse min-h-0 max-h-[calc(50%-20px)]">
                 {asks.map((level, i) => (
                   <div
                     key={`a-${i}`}
@@ -326,7 +329,7 @@ export default function OrderBook() {
                 </span>
               </div>
 
-              <div className="flex-1 overflow-y-auto min-h-0">
+              <div className="overflow-y-auto min-h-0 max-h-[calc(50%-20px)]">
                 {bids.map((level, i) => (
                   <div
                     key={`b-${i}`}

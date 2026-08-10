@@ -103,7 +103,7 @@ export default function PrivacyPanel() {
   }, [viewingKey, toast]);
 
   return (
-    <div className="bg-surface border border-border rounded-xl md:border-0 md:rounded-none p-2.5 md:p-3 flex flex-col gap-2">
+    <div className="bg-surface border border-border rounded-xl md:border-0 md:rounded-none p-2.5 md:p-3 flex flex-col gap-2 shrink-0">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">

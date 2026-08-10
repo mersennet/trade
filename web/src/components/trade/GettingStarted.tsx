@@ -30,7 +30,9 @@ export default function GettingStarted() {
   const steps = [
     {
       label: 'Get testnet MRSN',
-      done: balance > 0,
+      // Having collateral implies the faucet step happened — don't show
+      // step 2 done while step 1 is pending just because gas was spent.
+      done: balance > 0 || collateral > 0,
       action: (
         <Link href="/faucet" className="text-[10px] text-primary hover:underline font-medium">Faucet</Link>
       ),

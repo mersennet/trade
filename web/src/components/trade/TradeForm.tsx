@@ -326,7 +326,7 @@ export default function TradeForm() {
   };
 
   return (
-    <div data-trade-form className="relative bg-surface border border-border rounded-xl md:border-0 md:rounded-none p-2.5 md:p-3 xl:p-3.5 flex flex-col gap-2 overflow-hidden">
+    <div data-trade-form className="relative bg-surface border border-border rounded-xl md:border-0 md:rounded-none p-2.5 md:p-3 xl:p-3.5 flex flex-col gap-2 overflow-hidden shrink-0">
       {/* Inline order confirmation — replaces the native window.confirm popup.
           Shows the full order ticket and keeps the user in the terminal. */}
       {confirming && (
@@ -424,11 +424,11 @@ export default function TradeForm() {
               >{m}</button>
             ))}
           </div>
-          <span className="ml-auto font-mono text-dim">
+          <span className="ml-auto font-mono text-dim whitespace-nowrap">
             <span className="text-muted">Lev </span>
             <span className="text-foreground font-semibold">{trade.leverage}×</span>
           </span>
-          <span className="font-mono text-dim">
+          <span className="font-mono text-dim whitespace-nowrap">
             <span className="text-muted">·</span> {formatNumber(collateral, 2)} MRSN
           </span>
         </div>
