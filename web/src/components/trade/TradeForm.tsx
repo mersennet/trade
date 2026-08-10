@@ -411,8 +411,8 @@ export default function TradeForm() {
 
       {/* Cross/Isolated + Leverage chip on one compact row (perps only) */}
       {!isSpot && (
-        <div className="flex items-center gap-1 text-[11px]">
-          <div className="flex bg-surface-2 rounded-md overflow-hidden border border-border">
+        <div className="flex items-center gap-1 text-[11px] flex-wrap">
+          <div className="flex bg-surface-2 rounded-md overflow-hidden border border-border shrink-0">
             {(['cross', 'isolated'] as const).map((m) => (
               <button
                 key={m}
