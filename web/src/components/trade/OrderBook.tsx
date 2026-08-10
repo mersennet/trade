@@ -211,12 +211,14 @@ export default function OrderBook() {
       {/* Header: Book/Trades tabs + grouping */}
       <div className="flex items-center justify-between px-3 py-0 border-b border-border shrink-0">
         <div className="flex items-center gap-0">
+          {/* "Book" not "Order Book": the panel is a fixed 220px and the long
+              label forced a wrap that overlapped the unit/grouping chips. */}
           <button onClick={() => setActiveTab('book')} className={cn(
-            'px-3 py-2 text-[11px] font-medium transition-colors border-b-2 -mb-px',
+            'px-2.5 py-2 text-[11px] font-medium transition-colors border-b-2 -mb-px whitespace-nowrap',
             activeTab === 'book' ? 'text-foreground border-primary' : 'text-dim hover:text-muted border-transparent'
-          )}>Order Book</button>
+          )}>Book</button>
           <button onClick={() => setActiveTab('trades')} className={cn(
-            'px-3 py-2 text-[11px] font-medium transition-colors border-b-2 -mb-px',
+            'px-2.5 py-2 text-[11px] font-medium transition-colors border-b-2 -mb-px whitespace-nowrap',
             activeTab === 'trades' ? 'text-foreground border-primary' : 'text-dim hover:text-muted border-transparent'
           )}>Trades</button>
         </div>

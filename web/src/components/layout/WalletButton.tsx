@@ -6,6 +6,7 @@ import { useStore } from '@/stores/useStore';
 import { useToast } from '@/components/shared/Toast';
 import { api } from '@/lib/api';
 import { shortenAddress, formatNumber } from '@/lib/utils';
+import { useDismissable } from '@/hooks/useDismissable';
 
 export default function WalletButton() {
   const { address, balance, provider, isConnected, connect, connectWalletConnect, connectWithEmail, disconnect } = useWallet();
@@ -18,6 +19,9 @@ export default function WalletButton() {
   const [showConnectMenu, setShowConnectMenu] = useState(false);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const [email, setEmail] = useState('');
+  const connectMenuRef = useDismissable<HTMLDivElement>(showConnectMenu, () => setShowConnectMenu(false));
+  const accountMenuRef = useDismissable<HTMLDivElement>(showAccountMenu, () => setShowAccountMenu(false));
+  const emailRef = useDismissable<HTMLDivElement>(showEmailLogin, () => setShowEmailLogin(false));
 
   const refreshTokens = useCallback(async () => {
     if (!address || !provider) { setUsdcBalance(0); return; }
@@ -107,7 +111,7 @@ export default function WalletButton() {
             </>
           )}
         </div>
-        <div className="relative">
+        <div className="relative" ref={accountMenuRef}>
           <button
             onClick={() => setShowAccountMenu(!showAccountMenu)}
             aria-expanded={showAccountMenu}
@@ -172,7 +176,7 @@ export default function WalletButton() {
 
   return (
     <div className="flex items-center gap-1.5">
-      <div className="relative">
+      <div className="relative" ref={connectMenuRef}>
         <button
           onClick={() => setShowConnectMenu(!showConnectMenu)}
           disabled={loading}
@@ -205,7 +209,7 @@ export default function WalletButton() {
           </div>
         )}
       </div>
-      <div className="relative">
+      <div className="relative" ref={emailRef}>
         <button
           onClick={() => setShowEmailLogin(!showEmailLogin)}
           className="px-2.5 h-8 bg-surface-2 rounded-lg border border-border text-[11.5px] text-dim hover:text-foreground transition-colors"

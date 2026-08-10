@@ -9,6 +9,7 @@ import { getReferralCode } from '@/lib/referral';
 import { playSound } from '@/lib/sounds';
 import { useTranslation } from '@/i18n';
 import { loadViewingKey, submitShieldedOrder, toChainUnits } from '@/lib/shielded';
+import { useDismissable } from '@/hooks/useDismissable';
 const PRO_ORDER_TYPES = [
   { value: 'stop', tKey: 'trade.stop', fallback: 'Stop', desc: 'Trigger at price' },
   { value: 'trailing', tKey: 'trade.trailingShort', fallback: 'Trail', desc: 'Follow the market' },
@@ -46,6 +47,7 @@ export default function TradeForm() {
   const [scalePriceFrom, setScalePriceFrom] = useState('');
   const [scalePriceTo, setScalePriceTo] = useState('');
   const [showProTypes, setShowProTypes] = useState(false);
+  const proTypesRef = useDismissable<HTMLDivElement>(showProTypes, () => setShowProTypes(false));
 
   const currentPosition = useMemo(() => {
     return positions.find((p) => p.marketId === market.id);
@@ -438,7 +440,7 @@ export default function TradeForm() {
           primary (most used) choices at readable size; the advanced types
           (Stop / Trail / TWAP / Scale) live behind a "Pro" dropdown so they
           don't shrink the common path down to 9px labels. */}
-      <div className="relative">
+      <div className="relative" ref={proTypesRef}>
         <div className="flex gap-px bg-background rounded-md border border-border overflow-hidden">
           {SPOT_ORDER_TYPES.map((ot) => (
             <button

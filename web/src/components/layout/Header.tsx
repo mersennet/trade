@@ -8,6 +8,7 @@ import ThemeToggle from './ThemeToggle';
 import NotificationCenter from '../shared/NotificationCenter';
 import { useStore } from '@/stores/useStore';
 import { useLocale, useTranslation, type Locale } from '@/i18n';
+import { useDismissable } from '@/hooks/useDismissable';
 
 const LANGS: { code: Locale; label: string }[] = [
   { code: 'en', label: 'EN' },
@@ -55,6 +56,7 @@ export default function Header() {
   const isConnected = useStore((s) => !!s.wallet.address);
   const requestDeposit = useStore((s) => s.requestDeposit);
   const [showLang, setShowLang] = useState(false);
+  const langRef = useDismissable<HTMLDivElement>(showLang, () => setShowLang(false));
 
   return (
     <header className="h-11 md:h-12 bg-surface/80 backdrop-blur-xl border-b border-border flex items-center justify-between px-3 md:px-4 sticky top-0 z-30">
@@ -89,7 +91,7 @@ export default function Header() {
             className="px-3 h-8 bg-primary/10 text-primary border border-primary/25 rounded-lg text-[11.5px] font-semibold hover:bg-primary/20 transition-colors"
           >Deposit</button>
         )}
-        <div className="relative">
+        <div className="relative" ref={langRef}>
           <button
             onClick={() => setShowLang(!showLang)}
             aria-label="Change language"

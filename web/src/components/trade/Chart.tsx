@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, useCallback, lazy, Suspense } from 'react'
 import { useStore } from '@/stores/useStore';
 import { api, createWsConnection } from '@/lib/api';
 import { cn, formatPrice, formatNumber } from '@/lib/utils';
+import { useDismissable } from '@/hooks/useDismissable';
 
 const DepthChart = lazy(() => import('./DepthChart'));
 const DepthHeatmap = lazy(() => import('./DepthHeatmap'));
@@ -201,6 +202,8 @@ export default function Chart() {
   const [fibLevels, setFibLevels] = useState<FibLevel[]>([]);
   const [showDrawingPanel, setShowDrawingPanel] = useState(false);
   const [showIndicatorPanel, setShowIndicatorPanel] = useState(false);
+  const drawingPanelRef = useDismissable<HTMLDivElement>(showDrawingPanel, () => setShowDrawingPanel(false));
+  const indicatorPanelRef = useDismissable<HTMLDivElement>(showIndicatorPanel, () => setShowIndicatorPanel(false));
   const [loading, setLoading] = useState(true);
   const candlesCache = useRef<any[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
@@ -885,7 +888,7 @@ export default function Chart() {
         {chartMode === 'price' && (
           <div className="flex items-center gap-1 md:gap-1.5 shrink-0">
             {/* Indicators dropdown (keeps the toolbar compact; active count shown on the trigger) */}
-            <div className="relative">
+            <div className="relative" ref={indicatorPanelRef}>
               <button onClick={() => { setShowIndicatorPanel(!showIndicatorPanel); setShowDrawingPanel(false); }}
                 className={cn('flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded transition-all',
                   showIndicatorPanel || INDICATORS.some(i => i.state) ? 'bg-primary/15 text-primary' : 'text-dim hover:text-muted hover:bg-surface-2')}>
@@ -914,7 +917,7 @@ export default function Chart() {
             <div className="w-px h-4 bg-border mx-0.5" />
 
             {/* Drawing tools */}
-            <div className="relative">
+            <div className="relative" ref={drawingPanelRef}>
               <button onClick={() => { setShowDrawingPanel(!showDrawingPanel); setShowIndicatorPanel(false); }}
                 className={cn('p-1 rounded transition-all', showDrawingPanel || drawingTool !== 'none' ? 'bg-primary/15 text-primary' : 'text-dim hover:text-muted hover:bg-surface-2')}
                 title="Drawing Tools">
