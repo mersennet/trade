@@ -17,7 +17,9 @@ const PARAMS: { label: string; value: string; copy?: string }[] = [
   { label: 'Network name', value: NET.name },
   { label: 'Chain ID', value: `${NET.chainId} (${NET.chainIdHex.toUpperCase().replace('0X', '0x')})`, copy: String(NET.chainId) },
   { label: 'RPC URL', value: NET.rpcUrls[0], copy: NET.rpcUrls[0] },
-  { label: 'WebSocket URL', value: NET.wsUrls[0], copy: NET.wsUrls[0] },
+  // No WebSocket row: the node's WS port is not publicly proxied yet, and
+  // publishing a dead endpoint as a copyable network parameter wastes
+  // developers' time. Market-data streaming is available via the trade API.
   { label: 'Currency symbol', value: NET.nativeCurrency.symbol },
   { label: 'Decimals', value: String(NET.nativeCurrency.decimals) },
   { label: 'Block explorer', value: NET.blockExplorerUrls[0], copy: NET.blockExplorerUrls[0] },
@@ -164,8 +166,10 @@ export default function TestnetPage() {
       <div className={cn('bg-surface border border-border rounded-xl px-5 py-4')}>
         <p className="text-[11px] text-dim leading-relaxed">
           Mersennet is a test network. Tokens hold no monetary value and the network may be reset.
-          Native collateral is <span className="text-foreground">MRSN</span> (18 decimals). There is
-          no USDC on Mersennet.
+          Native collateral is <span className="text-foreground">MRSN</span> (18 decimals). Test
+          USDC is also accepted as margin collateral on-chain (90% weight) via the CLOB
+          precompile&apos;s <span className="font-mono">depositTokenCollateral</span> — claim it
+          from the faucet.
         </p>
       </div>
     </div>

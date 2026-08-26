@@ -261,6 +261,15 @@ export const useStore = create<AppState>()(
         notifications: state.notifications,
         priceAlerts: state.priceAlerts,
       }),
+      // sessionKey is deliberately NOT persisted (security), so a rehydrated
+      // oneClickEnabled=true without a key would leave every one-click feature
+      // (Chase, silent brackets) dead behind a toggle that reads "on". Reset
+      // the flag so the user is prompted to re-setup instead.
+      onRehydrateStorage: () => (state) => {
+        if (state && state.oneClickEnabled && !state.sessionKey) {
+          state.oneClickEnabled = false;
+        }
+      },
     }
   )
 );

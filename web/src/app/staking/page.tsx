@@ -8,8 +8,7 @@ import {
   delegate,
   getDelegation,
   getUnbonding,
-  getValidators,
-  getValidatorStaking,
+  getValidatorsFull,
   undelegate,
   weiToMrsn,
   withdrawUnbonded,
@@ -40,42 +39,48 @@ export default function StakingPage() {
   const [rows, setRows] = useState<ValidatorRow[]>([]);
   const [unbonding, setUnbonding] = useState<UnbondingView | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [mode, setMode] = useState<Record<string, 'delegate' | 'undelegate'>>({});
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (): Promise<boolean> => {
     try {
-      const validators = await getValidators();
+      const validators = await getValidatorsFull();
       const enriched = await Promise.all(
         validators.map(async (v) => {
-          const pool = await getValidatorStaking(v.address).catch(() => ({ delegatedTotal: '0', commissionBps: 0 }));
           const mine = address
             ? await getDelegation(address, v.address).catch(() => ({ amount: '0', pending: '0' }))
             : { amount: '0', pending: '0' };
-          return {
-            address: v.address,
-            selfStake: v.stake,
-            delegatedTotal: pool.delegatedTotal,
-            commissionBps: pool.commissionBps,
-            myDelegation: mine.amount,
-            myPending: mine.pending,
-          };
+          return { ...v, myDelegation: mine.amount, myPending: mine.pending };
         }),
       );
       setRows(enriched);
+      setLoadError(false);
       if (address) {
         setUnbonding(await getUnbonding(address).catch(() => null));
       }
-    } finally {
       setLoading(false);
+      return true;
+    } catch {
+      setLoadError(true);
+      setLoading(false);
+      return false;
     }
   }, [address]);
 
   useEffect(() => {
-    refresh();
+    let cancelled = false;
+    // Initial load with quick retries so a transient failure doesn't leave
+    // the page empty until the next slow poll cycle.
+    (async () => {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (cancelled || (await refresh())) return;
+        await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+      }
+    })();
     const t = setInterval(refresh, 15_000);
-    return () => clearInterval(t);
+    return () => { cancelled = true; clearInterval(t); };
   }, [refresh]);
 
   const act = async (key: string, fn: () => Promise<string>, okMsg: string) => {
@@ -150,6 +155,13 @@ export default function StakingPage() {
           <tbody>
             {loading && (
               <tr><td colSpan={7} className="px-4 py-8 text-center text-dim">Loading validators…</td></tr>
+            )}
+            {!loading && rows.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center text-dim">
+                  {loadError ? 'Could not reach the network — retrying automatically…' : 'No validators found.'}
+                </td>
+              </tr>
             )}
             {!loading && rows.map((r) => {
               const m = mode[r.address] ?? 'delegate';

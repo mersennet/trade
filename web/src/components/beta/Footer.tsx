@@ -16,17 +16,19 @@ const FOOTER_LINKS = [
     title: 'Build',
     links: [
       { label: 'API docs', href: '/api' },
+      { label: 'Docs', href: 'https://docs.mersennet.com', external: true },
       { label: 'Status', href: 'https://trade.mersennet.com/api/v1/status', external: true },
-      { label: 'GitHub', href: 'https://github.com/mersennet', external: true },
       { label: 'Contracts (MersennetOrders precompile)', href: 'https://explorer.mersennet.com/address/0x0000000000000000000000000000000000000100', external: true },
     ],
   },
   {
+    // Social links (X / Discord / Telegram) are intentionally absent until the
+    // official handles exist and are verified — unowned vanity URLs on a
+    // trading product are a phishing vector for squatters.
     title: 'Community',
     links: [
-      { label: 'Twitter / X', href: 'https://twitter.com/mersennet', external: true },
-      { label: 'Discord', href: 'https://discord.gg/mersennet', external: true },
-      { label: 'Telegram', href: 'https://t.me/mersennet', external: true },
+      { label: 'Explorer', href: 'https://explorer.mersennet.com', external: true },
+      { label: 'Faucet', href: '/faucet' },
       { label: 'Feedback', href: '/feedback' },
     ],
   },

@@ -9,13 +9,10 @@ import { getReferralCode } from '@/lib/referral';
 import { playSound } from '@/lib/sounds';
 import { useTranslation } from '@/i18n';
 import { loadViewingKey, submitShieldedOrder, toChainUnits } from '@/lib/shielded';
-import { useDismissable } from '@/hooks/useDismissable';
-const PRO_ORDER_TYPES = [
-  { value: 'stop', tKey: 'trade.stop', fallback: 'Stop', desc: 'Trigger at price' },
-  { value: 'trailing', tKey: 'trade.trailingShort', fallback: 'Trail', desc: 'Follow the market' },
-  { value: 'twap', tKey: 'trade.twap', fallback: 'TWAP', desc: 'Slice over time' },
-  { value: 'scale', tKey: 'trade.scale', fallback: 'Scale', desc: 'Ladder of limits' },
-] as const;
+// Stop / Trail / TWAP / Scale are intentionally NOT offered: their server-side
+// execution engines require signed orders and would silently never fire.
+// They return when client-side signed execution ships. TP/SL brackets and
+// Chase (both client-side signed) cover the protective use cases today.
 
 const LEVERAGE_PRESETS = [1, 2, 5, 10, 25, 50];
 const SIZE_PRESETS = [25, 50, 75, 100];
@@ -42,11 +39,6 @@ export default function TradeForm() {
   const [riskPct, setRiskPct] = useState('2');
   const [calcEntry, setCalcEntry] = useState('');
   const [calcSl, setCalcSl] = useState('');
-  const [twapSlices, setTwapSlices] = useState('10');
-  const [twapDuration, setTwapDuration] = useState('60');
-  const [scalePriceFrom, setScalePriceFrom] = useState('');
-  const [scalePriceTo, setScalePriceTo] = useState('');
-  const [showProTypes, setShowProTypes] = useState(false);
   // Maker flags (chain-native): post-only rejects instead of taking, and a
   // good-till-date order auto-cancels on-chain at the chosen expiry.
   const [postOnly, setPostOnly] = useState(false);
@@ -56,8 +48,6 @@ export default function TradeForm() {
   const [chase, setChase] = useState(false);
   const [chaseId, setChaseId] = useState<string | null>(null);
   const [chaseReprices, setChaseReprices] = useState(0);
-  const proTypesRef = useDismissable<HTMLDivElement>(showProTypes, () => setShowProTypes(false));
-
   const currentPosition = useMemo(() => {
     return positions.find((p) => p.marketId === market.id);
   }, [positions, market.id]);
@@ -99,7 +89,7 @@ export default function TradeForm() {
       toast('Connect wallet first', 'error');
       return;
     }
-    if (!trade.price && (trade.orderType === 'limit' || trade.orderType === 'stop')) {
+    if (!trade.price && trade.orderType === 'limit') {
       toast('Enter a price', 'error');
       return;
     }
@@ -238,39 +228,16 @@ export default function TradeForm() {
       // referrer is credited — this is the only signal the API records.
       const builderCode = getReferralCode() || undefined;
 
-      if (trade.orderType === 'twap' || trade.orderType === 'scale') {
-        await api.submitTwap({
-          owner: orderOwner,
-          market_id: market.id,
-          side: trade.side === 'buy' ? 'Buy' : 'Sell',
-          total_size: parseFloat(trade.size),
-          price_limit: trade.price ? parseFloat(trade.price) : undefined,
-          slices: parseInt(twapSlices) || 10,
-          duration_ms: (parseInt(twapDuration) || 60) * 1000,
-          order_type: trade.orderType,
-        });
-        toast(`${trade.orderType.toUpperCase()} order submitted (${twapSlices} slices)`, 'success');
-      } else if (trade.orderType === 'stop' || trade.orderType === 'trailing') {
-        // Conditional orders are not signed; the API stores them and triggers
-        // the actual signed market order when the trigger fires.
-        await api.submitOrder({
-          owner: orderOwner,
-          market_id: market.id,
-          side: trade.side === 'buy' ? 'Buy' : 'Sell',
-          price: trade.price,
-          size: trade.size,
-          tif: trade.tif === 'gtc' ? 'Gtc' : trade.tif === 'ioc' ? 'Ioc' : 'Fok',
-          leverage: trade.leverage,
-          order_type: trade.orderType,
-          tp_price: trade.tpEnabled && trade.tpPrice ? trade.tpPrice : undefined,
-          sl_price: trade.slPrice ? trade.slPrice : undefined,
-          trigger_price: (trade.orderType === 'stop') ? trade.price : undefined,
-          trailing_pct: (trade.orderType === 'trailing') ? trade.price : undefined,
-          reduce_only: trade.reduceOnly,
-          builder_code: builderCode,
-        });
-        toast(`${trade.orderType.toUpperCase()} trigger order armed`, 'success');
-      } else {
+      if (trade.orderType !== 'limit' && trade.orderType !== 'market') {
+        // Defensive: a stale persisted orderType (stop/trail/twap/scale from an
+        // older session) must never reach the server-side engines, which cannot
+        // execute unsigned orders. Reset to limit and tell the user plainly.
+        setTrade({ orderType: 'limit' as never });
+        throw new Error(
+          `${trade.orderType.toUpperCase()} orders are disabled until signed execution ships — use TP/SL brackets or Chase instead.`,
+        );
+      }
+      {
         // Limit / market orders are signed by the wallet and sent straight to
         // Mersennet's native on-chain CLOB precompile (0x…0100), where the
         // matching engine runs atomically and the order owner IS the verified
@@ -506,16 +473,15 @@ export default function TradeForm() {
         </div>
       )}
 
-      {/* Order type — tiered segmented control: Limit and Market are the
-          primary (most used) choices at readable size; the advanced types
-          (Stop / Trail / TWAP / Scale) live behind a "Pro" dropdown so they
-          don't shrink the common path down to 9px labels. */}
-      <div className="relative" ref={proTypesRef}>
+      {/* Order type — Limit and Market. Advanced server-triggered types
+          (Stop / Trail / TWAP / Scale) are withheld until they execute with
+          signed orders; use TP/SL brackets and Chase for protection today. */}
+      <div className="relative">
         <div className="flex gap-px bg-background rounded-md border border-border overflow-hidden">
           {SPOT_ORDER_TYPES.map((ot) => (
             <button
               key={ot.value}
-              onClick={() => { setTrade({ orderType: ot.value as never }); setShowProTypes(false); }}
+              onClick={() => setTrade({ orderType: ot.value as never })}
               className={cn(
                 'basis-0 flex-1 min-w-0 px-1 py-1.5 text-[11px] font-semibold transition-colors whitespace-nowrap',
                 trade.orderType === ot.value
@@ -524,38 +490,7 @@ export default function TradeForm() {
               )}
             >{t(ot.tKey, ot.fallback)}</button>
           ))}
-          {!isSpot && (
-            <button
-              onClick={() => setShowProTypes((v) => !v)}
-              className={cn(
-                'basis-0 flex-1 min-w-0 px-1 py-1.5 text-[11px] font-semibold transition-colors whitespace-nowrap flex items-center justify-center gap-1',
-                PRO_ORDER_TYPES.some((ot) => ot.value === trade.orderType)
-                  ? 'bg-foreground/[0.07] text-foreground'
-                  : 'bg-surface-2 text-dim hover:text-foreground'
-              )}
-            >
-              {PRO_ORDER_TYPES.find((ot) => ot.value === trade.orderType)?.fallback ?? 'Pro'}
-              <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><polyline points="6 9 12 15 18 9" /></svg>
-            </button>
-          )}
         </div>
-        {showProTypes && !isSpot && (
-          <div className="absolute right-0 top-full mt-1 bg-surface border border-border rounded-lg shadow-xl z-30 py-1 min-w-[150px]">
-            {PRO_ORDER_TYPES.map((ot) => (
-              <button
-                key={ot.value}
-                onClick={() => { setTrade({ orderType: ot.value as never }); setShowProTypes(false); }}
-                className={cn(
-                  'flex items-center justify-between w-full text-left px-3 py-1.5 text-[11px] transition-colors',
-                  trade.orderType === ot.value ? 'text-primary bg-primary/10' : 'text-foreground hover:bg-surface-2'
-                )}
-              >
-                <span className="font-medium">{t(ot.tKey, ot.fallback)}</span>
-                <span className="text-[9px] text-dim">{ot.desc}</span>
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Current position pill (only when there is one) */}
@@ -569,28 +504,6 @@ export default function TradeForm() {
       )}
 
       {/* Price field */}
-      {trade.orderType === 'stop' && (
-        <div>
-          <label className="text-[11px] text-muted mb-1.5 block font-medium">{t('trade.triggerPrice', 'Trigger Price')}</label>
-          <input
-            type="number" value={trade.price}
-            onChange={(e) => setTrade({ price: e.target.value })}
-            placeholder="Trigger price"
-            className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-dim font-mono outline-none focus:border-primary/60 focus:bg-surface-3 transition-all"
-          />
-        </div>
-      )}
-      {trade.orderType === 'trailing' && (
-        <div>
-          <label className="text-[11px] text-muted mb-1.5 block font-medium">Trailing %</label>
-          <input
-            type="number" value={trade.price}
-            onChange={(e) => setTrade({ price: e.target.value })}
-            placeholder="e.g. 1.5"
-            className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-dim font-mono outline-none focus:border-primary/60 focus:bg-surface-3 transition-all"
-          />
-        </div>
-      )}
       {trade.orderType === 'limit' && (
         <div>
           <label className="text-[11px] text-muted mb-1.5 block font-medium">{t('trade.price', 'Price')} ({market.quote})</label>
@@ -607,48 +520,6 @@ export default function TradeForm() {
         <div className="flex items-center px-3 py-2.5 bg-surface-2 border border-border rounded-lg">
           <span className="text-[11px] text-dim">{t('trade.price', 'Price')}</span>
           <span className="ml-auto text-sm font-mono text-foreground/60">{t('trade.market', 'Market')}</span>
-        </div>
-      )}
-      {trade.orderType === 'twap' && (
-        <div className="space-y-2">
-          <div>
-            <label className="text-[11px] text-muted mb-1.5 block font-medium">Price Limit (optional)</label>
-            <input type="number" value={trade.price} onChange={(e) => setTrade({ price: e.target.value })}
-              placeholder="Max/min price" className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-dim font-mono outline-none focus:border-primary/60 focus:bg-surface-3 transition-all" />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-[10px] text-dim block mb-1">Slices</label>
-              <input type="number" value={twapSlices} onChange={(e) => setTwapSlices(e.target.value)}
-                className="w-full bg-surface-2 border border-border rounded-md px-2 py-1.5 text-[11px] text-foreground font-mono outline-none focus:border-primary/40" />
-            </div>
-            <div>
-              <label className="text-[10px] text-dim block mb-1">Duration (sec)</label>
-              <input type="number" value={twapDuration} onChange={(e) => setTwapDuration(e.target.value)}
-                className="w-full bg-surface-2 border border-border rounded-md px-2 py-1.5 text-[11px] text-foreground font-mono outline-none focus:border-primary/40" />
-            </div>
-          </div>
-        </div>
-      )}
-      {trade.orderType === 'scale' && (
-        <div className="space-y-2">
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-[10px] text-dim block mb-1">Price From</label>
-              <input type="number" value={scalePriceFrom} onChange={(e) => setScalePriceFrom(e.target.value)}
-                className="w-full bg-surface-2 border border-border rounded-md px-2 py-1.5 text-[11px] text-foreground font-mono outline-none focus:border-primary/40" />
-            </div>
-            <div>
-              <label className="text-[10px] text-dim block mb-1">Price To</label>
-              <input type="number" value={scalePriceTo} onChange={(e) => setScalePriceTo(e.target.value)}
-                className="w-full bg-surface-2 border border-border rounded-md px-2 py-1.5 text-[11px] text-foreground font-mono outline-none focus:border-primary/40" />
-            </div>
-          </div>
-          <div>
-            <label className="text-[10px] text-dim block mb-1">Orders Count</label>
-            <input type="number" value={twapSlices} onChange={(e) => setTwapSlices(e.target.value)}
-              className="w-full bg-surface-2 border border-border rounded-md px-2 py-1.5 text-[11px] text-foreground font-mono outline-none focus:border-primary/40" />
-          </div>
         </div>
       )}
 

@@ -51,6 +51,17 @@ export default function ReferralsPage() {
         <p className="text-dim">Earn revenue share by referring traders or building integrations</p>
       </div>
 
+      {/* Attribution from signed on-chain orders is not wired up yet, so
+          counters cannot grow from real trading. Say so instead of showing a
+          forever-zero dashboard under revenue-share promises. */}
+      <div className="max-w-2xl mx-auto flex items-start gap-2 px-4 py-3 rounded-lg bg-yellow/10 border border-yellow/30">
+        <span className="text-yellow text-sm leading-none mt-0.5">⚠</span>
+        <p className="text-xs text-yellow/90 leading-relaxed">
+          Early preview — referral attribution for signed on-chain orders is still being built,
+          so points and order counters may not reflect your referred traders&apos; activity yet.
+        </p>
+      </div>
+
       <div className="grid md:grid-cols-2 gap-4">
         <div className="bg-surface border border-border rounded-xl p-4">
           <h3 className="text-xs font-medium text-foreground uppercase tracking-wider mb-2">Referral Program</h3>

@@ -28,18 +28,72 @@ const USDC_UNIT  = 10n ** BigInt(USDC_DECIMALS);
 const SIZE_UNIT  = 10n ** BigInt(SIZE_DECIMALS);
 const PRICE_UNIT = 10n ** BigInt(PRICE_DECIMALS);
 
+// Per-market risk/funding parameters the chain doesn't expose. Known listings
+// keep their tuned values; permissionlessly created markets get the defaults.
+// fundingRate is the per-8h rate as a fraction (0.0001 = 0.01% per interval,
+// ~11% APR) — in line with typical perp venues. The old 0.01 (1% per 8h)
+// annualized to a nonsensical +1095%.
+const MARKET_PARAMS = {
+  MRSN: { maxLeverage: 50,  fundingRate: 0.0001 },
+  BTC:  { maxLeverage: 100, fundingRate: 0.00008 },
+  ETH:  { maxLeverage: 50,  fundingRate: 0.00012 },
+  SOL:  { maxLeverage: 20,  fundingRate: 0.0001 },
+  ARB:  { maxLeverage: 20,  fundingRate: 0.00015 },
+};
+const DEFAULT_PARAMS = { maxLeverage: 10, fundingRate: 0.0001 };
+
+// USD-quoted perps, MRSN-collateralized. There is no USDC on the perp side —
+// the quote is the oracle's USD price (spot pairs against MockUSDC live in
+// spotEngine). This array is the seed / RPC-outage fallback; refreshMarkets()
+// below syncs it IN PLACE with the live on-chain list (markets are created
+// permissionlessly via createMarket, so new listings must appear without a
+// redeploy — every consumer iterates chain.MARKETS at call time).
 const MARKETS = [
-  // fundingRate is the per-8h rate as a fraction (0.0001 = 0.01% per interval,
-  // ~11% APR) — in line with typical perp venues. The old 0.01 (1% per 8h)
-  // annualized to a nonsensical +1095%.
-  // USD-quoted perps, MRSN-collateralized. There is no USDC on the perp side —
-  // the quote is the oracle's USD price (spot pairs against MockUSDC live in spotEngine).
   { id: 1, symbol: 'MRSN/USD', base: 'MRSN', quote: 'USD', maxLeverage: 50,  fundingRate: 0.0001 },
   { id: 2, symbol: 'BTC/USD',  base: 'BTC',  quote: 'USD', maxLeverage: 100, fundingRate: 0.00008 },
   { id: 3, symbol: 'ETH/USD',  base: 'ETH',  quote: 'USD', maxLeverage: 50,  fundingRate: 0.00012 },
   { id: 4, symbol: 'SOL/USD',  base: 'SOL',  quote: 'USD', maxLeverage: 20,  fundingRate: 0.0001 },
   { id: 5, symbol: 'ARB/USD',  base: 'ARB',  quote: 'USD', maxLeverage: 20,  fundingRate: 0.00015 },
 ];
+
+/**
+ * Sync MARKETS with `mersennet_orders_getMarkets`. Chain symbols are bare
+ * ("MRSN"); the UI convention is BASE/USD. Hex tick/lot sizes are decoded to
+ * plain integers (chain units). On RPC failure the previous list is kept.
+ */
+async function refreshMarkets() {
+  try {
+    const live = await rpcCall('mersennet_orders_getMarkets', []);
+    if (!Array.isArray(live) || live.length === 0) return;
+    const toInt = (v) => {
+      try { return Number(BigInt(v ?? '0x1')); } catch { return 1; }
+    };
+    const mapped = live
+      .filter((m) => (m.status ?? 'active') === 'active')
+      .map((m) => {
+        const base = String(m.symbol || `MKT${m.id}`).toUpperCase();
+        const params = MARKET_PARAMS[base] || DEFAULT_PARAMS;
+        return {
+          id: Number(m.id),
+          symbol: `${base}/USD`,
+          base,
+          quote: 'USD',
+          maxLeverage: params.maxLeverage,
+          fundingRate: params.fundingRate,
+          tickSize: toInt(m.tickSize),
+          lotSize: toInt(m.lotSize),
+        };
+      });
+    MARKETS.length = 0;
+    MARKETS.push(...mapped);
+  } catch (e) {
+    console.warn('[chain] refreshMarkets failed (keeping previous list):', e.message);
+  }
+}
+
+refreshMarkets();
+const _marketsTimer = setInterval(refreshMarkets, 30_000);
+if (_marketsTimer.unref) _marketsTimer.unref();
 
 // ---------------------------------------------------------------------
 // Generic JSON-RPC

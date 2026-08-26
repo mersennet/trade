@@ -100,6 +100,22 @@ export default function OptionsPage() {
 
   return (
     <div className="p-3 md:p-4 max-w-full space-y-4">
+      {/* Options settle in the API's database, not on-chain — labeled a
+          preview like vault/funding-arb so nobody mistakes it for live. */}
+      <div className="bg-yellow/10 border border-yellow/40 rounded-lg p-3 flex items-start gap-2.5">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-yellow shrink-0 mt-0.5">
+          <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+          <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+        </svg>
+        <div className="text-[12px] leading-relaxed">
+          <span className="text-yellow font-semibold">Preview &middot; Not yet on-chain.</span>{' '}
+          <span className="text-foreground/80">
+            Options trading is simulated for UX testing — no tokens move from your wallet and
+            positions are not settled on-chain.
+          </span>
+        </div>
+      </div>
+
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-2">
         <h2 className="text-xl font-bold text-foreground">Options</h2>
         <div className="flex gap-1 bg-surface-2 rounded-lg p-1">

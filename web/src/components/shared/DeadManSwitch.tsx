@@ -3,11 +3,12 @@ import { useEffect } from 'react';
 import { useStore } from '@/stores/useStore';
 import { API_BASE } from '@/lib/api';
 
-// Cancels all of the user's resting orders when they leave the app (tab close,
-// navigation away, or the page being backgrounded/frozen). It deliberately does
-// NOT cancel on mere inactivity — a trader reading the screen must keep their
-// resting orders. The beacon goes to the same-origin API so it isn't blocked as
-// mixed content on the https deployment.
+// Cancels the user's SERVER-SIDE conditional/trigger orders when they leave the
+// app (tab close or navigation away). It cannot cancel resting on-chain CLOB
+// orders — those need a signed transaction, which can't reliably be produced
+// during pagehide — and the settings copy says so. It deliberately does NOT
+// cancel on mere inactivity. The beacon goes to the same-origin API so it isn't
+// blocked as mixed content on the https deployment.
 export default function DeadManSwitch() {
   const deadManEnabled = useStore((s) => s.deadManEnabled);
   const address = useStore((s) => s.wallet.address);

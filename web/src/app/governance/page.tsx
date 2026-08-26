@@ -117,11 +117,22 @@ export default function GovernancePage() {
         <p className="text-dim text-sm">Vote on proposals to shape the future of Mersennet Trade</p>
       </div>
 
+      {/* Votes are unsigned and voting power doesn't yet read the on-chain
+          staking precompile — this is a preview, and hiding that would be
+          worse than the missing feature. */}
+      <div className="max-w-2xl mx-auto flex items-start gap-2 px-4 py-3 rounded-lg bg-yellow/10 border border-yellow/30">
+        <span className="text-yellow text-sm leading-none mt-0.5">⚠</span>
+        <p className="text-xs text-yellow/90 leading-relaxed">
+          Preview — governance is not yet on-chain. Votes are advisory and voting power is not
+          linked to your staked MRSN on the staking precompile yet.
+        </p>
+      </div>
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-surface border border-border rounded-xl p-4">
           <div className="text-[10px] text-dim uppercase tracking-wider font-medium mb-1">Your Voting Power</div>
           <div className="text-xl font-bold text-foreground">{isConnected ? votingPower.toLocaleString() : '—'}</div>
-          <div className="text-[11px] text-muted mt-1">Based on staked MRSN</div>
+          <div className="text-[11px] text-muted mt-1">Preview — not yet linked to on-chain stake</div>
         </div>
         <div className="bg-surface border border-border rounded-xl p-4">
           <div className="text-[10px] text-dim uppercase tracking-wider font-medium mb-1">Active Proposals</div>

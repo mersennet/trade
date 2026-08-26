@@ -205,6 +205,9 @@ export default function Chart() {
   const drawingPanelRef = useDismissable<HTMLDivElement>(showDrawingPanel, () => setShowDrawingPanel(false));
   const indicatorPanelRef = useDismissable<HTMLDivElement>(showIndicatorPanel, () => setShowIndicatorPanel(false));
   const [loading, setLoading] = useState(true);
+  // True when the chart is showing generated (random-walk) candles because the
+  // candles API returned no real trade history for this market/timeframe.
+  const [isSynthetic, setIsSynthetic] = useState(false);
   const candlesCache = useRef<any[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const drawClickCount = useRef(0);
@@ -684,6 +687,7 @@ export default function Chart() {
       if (candles.length > 0) {
         candlesCache.current = candles;
         applyData(candles);
+        setIsSynthetic(false);
         setLoading(false);
         return;
       }
@@ -703,6 +707,7 @@ export default function Chart() {
     const s = generateSyntheticCandles(seedPrice);
     candlesCache.current = s;
     applyData(s);
+    setIsSynthetic(true);
     setLoading(false);
   }
 
@@ -1013,6 +1018,12 @@ export default function Chart() {
           )}
           <div className="relative flex-1 min-h-[300px]">
             <div ref={containerRef} className={cn('absolute inset-0', drawingTool !== 'none' && 'cursor-crosshair')} />
+            {isSynthetic && !loading && (
+              <div className="absolute bottom-2 left-2 z-10 pointer-events-none flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface/80 border border-border backdrop-blur-sm">
+                <span className="w-1.5 h-1.5 rounded-full bg-yellow/70 shrink-0" />
+                <span className="text-[10px] text-dim font-medium">Indicative chart — no trade history yet</span>
+              </div>
+            )}
             {loading && (
               <div className="absolute inset-0 flex items-center justify-center bg-surface/60 backdrop-blur-[1px] z-10 pointer-events-none transition-opacity duration-200">
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-surface-2/80 border border-border">

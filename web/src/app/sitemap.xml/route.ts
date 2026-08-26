@@ -2,12 +2,15 @@ export const dynamic = 'force-static';
 
 const SITE = 'https://trade.mersennet.com';
 
+// '/' is deliberately absent: it 307-redirects to /trade, and listing a
+// redirecting URL in the sitemap only confuses crawlers.
 const PAGES = [
-  { url: '/', priority: 1.0, changefreq: 'daily' },
-  { url: '/trade', priority: 0.95, changefreq: 'hourly' },
+  { url: '/trade', priority: 1.0, changefreq: 'hourly' },
   { url: '/markets', priority: 0.9, changefreq: 'hourly' },
+  { url: '/staking', priority: 0.8, changefreq: 'daily' },
   { url: '/portfolio', priority: 0.8, changefreq: 'daily' },
   { url: '/vault', priority: 0.8, changefreq: 'daily' },
+  { url: '/testnet', priority: 0.7, changefreq: 'weekly' },
   { url: '/leaderboard', priority: 0.6, changefreq: 'daily' },
   { url: '/feedback', priority: 0.5, changefreq: 'monthly' },
   { url: '/risk', priority: 0.5, changefreq: 'monthly' },

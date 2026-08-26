@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState, useRef, useMemo } from 'react';
+import Link from 'next/link';
 import { useStore } from '@/stores/useStore';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { api, type Market } from '@/lib/api';
@@ -43,24 +44,14 @@ export default function MarketBar() {
   const { market, tickers, setMarket, updateTicker, favorites, toggleFavorite, recentMarkets } = useStore();
   const { subscribe } = useWebSocket();
   const [markets, setMarkets] = useState<Market[]>([]);
-  const [spotMarkets, setSpotMarkets] = useState<Market[]>([]);
   const [showSelector, setShowSelector] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const tradeMode = useStore((s) => s.tradeMode);
-  const setTradeMode = useStore((s) => s.setTradeMode);
   const selectorRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     api.getMarkets().then((data) => setMarkets(data.markets || [])).catch(() => {});
-    api.getSpotMarkets().then((res) => {
-      const list = (res as any)?.markets || res || [];
-      setSpotMarkets(Array.isArray(list) ? list.map((s: any) => ({
-        id: s.id ?? 1000 + Math.random(), symbol: `${s.base}/${s.quote}`, base: s.base, quote: s.quote,
-        maxLeverage: 1, tickSize: s.tick_size || '0.01', minSize: s.min_size || '0.001',
-        fundingRate: 0, openInterest: 0,
-      })) : []);
-    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -86,7 +77,7 @@ export default function MarketBar() {
     return () => document.removeEventListener('mousedown', handler);
   }, [showSelector]);
 
-  const activeMarkets = tradeMode === 'perps' ? markets : spotMarkets;
+  const activeMarkets = markets;
 
   const filteredMarkets = useMemo(() => {
     if (!searchQuery) return activeMarkets;
@@ -153,16 +144,12 @@ export default function MarketBar() {
 
         {showSelector && (
           <div className="absolute top-full left-0 right-0 z-50 bg-surface border-b border-border shadow-xl max-h-[70vh] overflow-hidden flex flex-col">
-            {/* Perps | Spot toggle */}
+            {/* Terminal is perps-only; spot has a dedicated page. */}
             <div className="flex items-center gap-1 px-3 py-2 border-b border-border shrink-0">
-              <button onClick={() => setTradeMode('perps')}
-                className={cn('flex-1 py-1.5 text-[11px] font-semibold rounded-md transition-all', tradeMode === 'perps' ? 'bg-primary/15 text-primary' : 'text-dim bg-surface-2')}>
-                Perps
-              </button>
-              <button onClick={() => setTradeMode('spot')}
-                className={cn('flex-1 py-1.5 text-[11px] font-semibold rounded-md transition-all', tradeMode === 'spot' ? 'bg-primary/15 text-primary' : 'text-dim bg-surface-2')}>
+              <span className="flex-1 py-1.5 text-[11px] font-semibold rounded-md text-center bg-primary/15 text-primary">Perps</span>
+              <Link href="/spot" className="flex-1 py-1.5 text-[11px] font-semibold rounded-md text-center text-dim bg-surface-2">
                 Spot
-              </button>
+              </Link>
             </div>
             {/* Search input */}
             <div className="px-3 py-2 border-b border-border shrink-0">
@@ -250,22 +237,12 @@ export default function MarketBar() {
 
       {/* Desktop: scrollable tab bar */}
       <div className="hidden md:flex items-center gap-0 px-1 h-10 bg-surface border-b border-border overflow-x-auto scrollbar-none">
-        {/* Perps | Spot toggle */}
+        {/* The terminal trades perps on the on-chain CLOB only; spot lives on
+            its own page rather than a mode toggle, so the order form can never
+            send a perp-encoded transaction for a spot market. */}
         <div className="flex items-center gap-0.5 mr-2 ml-1 shrink-0">
-          <button
-            onClick={() => setTradeMode('perps')}
-            className={cn(
-              'px-2.5 py-1 text-[11px] font-semibold rounded-md transition-all',
-              tradeMode === 'perps' ? 'bg-primary/15 text-primary' : 'text-dim hover:text-muted'
-            )}
-          >Perps</button>
-          <button
-            onClick={() => setTradeMode('spot')}
-            className={cn(
-              'px-2.5 py-1 text-[11px] font-semibold rounded-md transition-all',
-              tradeMode === 'spot' ? 'bg-primary/15 text-primary' : 'text-dim hover:text-muted'
-            )}
-          >Spot</button>
+          <span className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-primary/15 text-primary">Perps</span>
+          <Link href="/spot" className="px-2.5 py-1 text-[11px] font-semibold rounded-md text-dim hover:text-muted transition-all">Spot</Link>
         </div>
         <div className="w-px h-5 bg-border shrink-0 mr-1" />
         {activeMarkets.map((m) => {

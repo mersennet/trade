@@ -61,6 +61,7 @@ const ITEMS = [
 // live features (matching the desktop sidebar) so mobile users aren't shown
 // a wall of empty roadmap screens.
 const MORE_LINKS = [
+  { href: '/staking', label: 'Staking', tKey: 'nav.staking' },
   { href: '/leaderboard', label: 'Leaderboard', tKey: 'nav.leaderboard' },
   { href: '/points', label: 'Points', tKey: 'nav.points' },
   { href: '/api', label: 'API', tKey: 'nav.api' },

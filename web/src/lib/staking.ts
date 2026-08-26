@@ -149,3 +149,33 @@ export async function getValidators(): Promise<{ address: string; stake: string 
     stake: String(v.stake),
   }));
 }
+
+export interface ValidatorFull {
+  address: string;
+  selfStake: string; // wei (decimal string)
+  delegatedTotal: string; // wei (decimal string)
+  commissionBps: number;
+}
+
+/**
+ * Full validator staking info in a single RPC round-trip
+ * (`mersennet_staking_getValidators`): self-stake, delegated total, and
+ * commission for every validator. Values arrive hex-encoded.
+ */
+export async function getValidatorsFull(): Promise<ValidatorFull[]> {
+  const rpc = getDefaultChain().rpcUrls[0];
+  const res = await fetch(rpc, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'mersennet_staking_getValidators', params: [] }),
+  });
+  const body = await res.json();
+  if (body.error) throw new Error(body.error.message || 'staking RPC error');
+  type Raw = { address: string; selfStake: string; delegatedTotal: string; commissionBps: number };
+  return ((body.result || []) as Raw[]).map((v) => ({
+    address: v.address,
+    selfStake: BigInt(v.selfStake ?? '0').toString(),
+    delegatedTotal: BigInt(v.delegatedTotal ?? '0').toString(),
+    commissionBps: Number(v.commissionBps ?? 0),
+  }));
+}

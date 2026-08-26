@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useStore } from '@/stores/useStore';
 import { useWallet } from '@/hooks/useWallet';
 import { api, type Trade, type Order, type FundingRate } from '@/lib/api';
@@ -299,8 +299,8 @@ export default function PositionsTable() {
                   const pnl = p.unrealizedPnl || 0;
                   const liq = p.liquidationPrice || 0;
                   return (
-                    <>
-                    <tr key={i} className="border-b border-border/30 hover:bg-surface-2/50 transition-colors">
+                    <Fragment key={p.marketId ?? i}>
+                    <tr className="border-b border-border/30 hover:bg-surface-2/50 transition-colors">
                       <td className="px-3 py-2.5">
                         <span className="text-foreground font-semibold">{p.symbol}</span>
                         <span className={cn('ml-1.5 text-[10px] font-medium', size > 0 ? 'text-green' : 'text-red')}>
@@ -435,7 +435,7 @@ export default function PositionsTable() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                   );
                 })}
               </tbody>

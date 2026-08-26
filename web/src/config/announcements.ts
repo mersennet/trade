@@ -16,8 +16,8 @@ export const ANNOUNCEMENTS: Announcement[] = [
     link: { href: '/trade', label: 'Try it' },
   },
   {
-    id: 'privacy-fork-preview',
-    text: 'Privacy hard fork preview: shielded balances and encrypted intents are anchored every block.',
-    link: { href: '/trade', label: 'Learn more' },
+    id: 'staking-live-2026-08',
+    text: 'Delegated staking is live — delegate MRSN to a validator and earn block rewards.',
+    link: { href: '/staking', label: 'Stake now' },
   },
 ];

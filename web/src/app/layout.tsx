@@ -20,16 +20,16 @@ export const metadata: Metadata = {
     default: 'Mersennet Trade: Perpetuals on the Native On-Chain Order Book',
     template: '%s · Mersennet Trade',
   },
-  description: 'Trade MRSN, BTC, ETH, SOL, and ARB perpetuals on Mersennet, the zero-knowledge L1 with a native on-chain order book. Atomic matching, testnet MRSN from the faucet.',
+  description: 'Trade perpetuals — MRSN, BTC, ETH, SOL and more — on Mersennet, the zero-knowledge L1 with a native on-chain order book and permissionless market listing. Atomic matching, testnet MRSN from the faucet.',
   applicationName: 'Mersennet Trade',
   keywords: ['Mersennet', 'MRSN', 'perpetuals', 'perps', 'DEX', 'DeFi', 'on-chain', 'derivatives', 'zero-knowledge', 'CLOB'],
   authors: [{ name: 'Mersennet' }],
-  alternates: {
-    canonical: SITE_URL,
-  },
+  // No global `alternates.canonical`: the root layout's value is inherited by
+  // every route, which would declare the redirecting homepage as canonical for
+  // /trade, /markets, etc. and risk deindexing them.
   openGraph: {
     title: 'Mersennet Trade: Perpetuals on the Native On-Chain Order Book',
-    description: 'Trade MRSN, BTC, ETH, SOL, ARB perps on Mersennet. Atomic on-chain matching, free testnet MRSN.',
+    description: 'Trade perps on Mersennet\u2019s native on-chain order book. Atomic matching, permissionless listings, free testnet MRSN.',
     url: SITE_URL,
     siteName: 'Mersennet Trade',
     type: 'website',
@@ -77,7 +77,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
       </head>
       <body className="antialiased overscroll-none">
         <Providers>

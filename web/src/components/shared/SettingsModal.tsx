@@ -202,7 +202,7 @@ export default function SettingsModal() {
             />
             <ToggleRow
               label="Dead Man's Switch"
-              description="Auto-cancel all open orders on disconnect"
+              description="Auto-cancel server-side trigger orders when you leave. On-chain resting orders stay on the book — cancel those from Open Orders."
               checked={deadManEnabled}
               onChange={setDeadMan}
             />

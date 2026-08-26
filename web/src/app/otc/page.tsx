@@ -82,6 +82,22 @@ export default function OTCPage() {
         <p className="text-dim text-sm">Execute large block trades with minimal slippage. Designed for 50K+ MRSN orders with institutional-grade execution.</p>
       </div>
 
+      {/* RFQ settlement runs in the API's database, not on-chain — say so
+          rather than toasting "trade executed" on a simulation. */}
+      <div className="bg-yellow/10 border border-yellow/40 rounded-lg p-3 flex items-start gap-2.5">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-yellow shrink-0 mt-0.5">
+          <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+          <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+        </svg>
+        <div className="text-[12px] leading-relaxed">
+          <span className="text-yellow font-semibold">Preview &middot; Not yet on-chain.</span>{' '}
+          <span className="text-foreground/80">
+            OTC quotes and settlements are simulated for UX testing — no tokens move from your
+            wallet when a quote is accepted.
+          </span>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
         {/* RFQ Form */}
         <div className="lg:col-span-2 bg-surface border border-border rounded-xl p-5">

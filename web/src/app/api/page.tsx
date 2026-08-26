@@ -15,16 +15,16 @@ const ENDPOINTS = [
   { method: 'GET', path: '/trades/:marketId', desc: 'Get recent trades' },
   { method: 'GET', path: '/positions/:address', desc: 'Get open positions' },
   { method: 'GET', path: '/orders/:address', desc: 'Get open orders' },
-  { method: 'POST', path: '/orders', desc: 'Submit new order' },
-  { method: 'DELETE', path: '/orders/:id', desc: 'Cancel order' },
+  { method: 'POST', path: '/orders', desc: 'Trigger/conditional orders only — limit & market orders are signed txs to the CLOB precompile' },
+  { method: 'DELETE', path: '/orders/:id', desc: 'Cancel trigger orders only — on-chain orders are cancelled by signed tx' },
   { method: 'GET', path: '/collateral/:address', desc: 'Get collateral balance' },
   { method: 'POST', path: '/collateral/deposit', desc: 'Deposit collateral' },
   { method: 'GET', path: '/leaderboard', desc: 'Get leaderboard rankings' },
   { method: 'GET', path: '/points/:address', desc: 'Get points balance' },
   { method: 'GET', path: '/vault/state', desc: 'Get vault TVL and APY' },
-  { method: 'POST', path: '/vault/deposit', desc: 'Deposit to vault' },
+  { method: 'POST', path: '/vault/deposit', desc: 'Deprecated — DB simulation only, no tokens move' },
   { method: 'GET', path: '/staking/state', desc: 'Get staking stats' },
-  { method: 'POST', path: '/staking/stake', desc: 'Stake MRSN tokens' },
+  { method: 'POST', path: '/staking/stake', desc: 'Deprecated DB simulation — real staking is a signed tx to precompile 0x...0400' },
   { method: 'GET', path: '/competitions', desc: 'List competitions' },
   { method: 'GET', path: '/builder-codes', desc: 'List builder codes' },
   { method: 'GET', path: '/stats', desc: 'Protocol statistics' },
@@ -95,7 +95,7 @@ export default function ApiPage() {
         {[
           { label: 'Base URL', value: API_BASE },
           { label: 'WebSocket', value: WS_URL },
-          { label: 'Rate Limit', value: '300 requests/min (read), 60/min (write)' },
+          { label: 'Rate Limit', value: '600 requests/min (read), 60/min (write)' },
         ].map((item) => (
           <div key={item.label} className="bg-surface border border-border rounded-xl p-4">
             <p className="text-[10px] text-dim uppercase tracking-wider font-medium mb-1">{item.label}</p>
@@ -106,21 +106,41 @@ export default function ApiPage() {
 
       <div className="bg-surface border border-border rounded-xl p-4">
         <h3 className="text-xs font-medium text-foreground uppercase tracking-wider mb-3">Quick Start</h3>
+        <p className="text-xs text-dim mb-3">
+          Market data is served over REST/WebSocket, but <span className="text-foreground">orders are signed
+          transactions</span> to the on-chain CLOB precompile — the API rejects unsigned order submission
+          with <code className="bg-surface-2 px-1 py-0.5 rounded font-mono">SIGNED_ORDER_REQUIRED</code>.
+          The TypeScript SDK (<code className="bg-surface-2 px-1 py-0.5 rounded font-mono">@mersennet/sdk</code>)
+          is not yet published to npm — build it from the monorepo&apos;s <code className="bg-surface-2 px-1 py-0.5 rounded font-mono">sdk-ts/</code> package.
+        </p>
         <pre className="bg-surface-2 rounded-lg p-4 text-xs text-foreground overflow-x-auto font-mono">
-{`// TypeScript
-import { MersennetTradeClient } from '@mersennet-trade/sdk';
-const client = new MersennetTradeClient('https://trade.mersennet.com');
+{`// Place an order: signed tx to the CLOB precompile (ethers v6)
+import { ethers } from 'ethers';
 
-const markets = await client.getMarkets();
-const book = await client.getOrderBook(1);
-const result = await client.submitOrder({
-  owner: '0x...', market_id: 1, side: 'Buy',
-  price: '65000', size: '1'
-});
+const RPC_URL = 'https://rpc.mersennet.com';
+const CLOB_PRECOMPILE = '0x0000000000000000000000000000000000000100';
+const CLOB_ABI = [
+  'function placeOrder(uint64 marketId, bool isBuy, uint256 price, uint256 size, uint8 tif) returns (uint256 orderId, uint256 filled, uint256 remaining)',
+  'function cancelOrder(uint256 orderId) returns (bool success)',
+];
 
-// WebSocket
-client.connect();
-client.subscribe('ticker:1', (data) => console.log(data));`}
+const provider = new ethers.JsonRpcProvider(RPC_URL);
+const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
+const clob = new ethers.Contract(CLOB_PRECOMPILE, CLOB_ABI, wallet);
+
+// Buy 1 unit at price 65000 on market 1. tif: 0 = Gtc, 1 = Ioc, 2 = Fok.
+// Prices/sizes are plain integer chain units (no decimal scaling).
+// Explicit gasLimit: eth_estimateGas reverts for accounts without collateral.
+const tx = await clob.placeOrder(1, true, 65000, 1, 0, { gasLimit: 300_000 });
+await tx.wait();
+
+// Market data: plain REST reads (no signing)
+const markets = await fetch('https://trade.mersennet.com/markets').then(r => r.json());
+
+// WebSocket stream
+const ws = new WebSocket('${WS_URL}');
+ws.onopen = () => ws.send(JSON.stringify({ action: 'subscribe', channel: 'ticker:1' }));
+ws.onmessage = (e) => console.log(JSON.parse(e.data));`}
         </pre>
       </div>
 

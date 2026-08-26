@@ -111,40 +111,25 @@ export default function CopyTradingPage() {
       : adjustedSize;
     if (clampedSize <= 0) return;
 
-    try {
-      await api.submitOrder({
-        owner: address,
-        market_id: trade.marketId,
-        side: trade.side,
-        price: trade.price.toString(),
-        size: clampedSize.toString(),
-        tif: 'ioc',
-        sl_price: settings.stopLoss > 0
-          ? (trade.side === 'buy'
-            ? trade.price * (1 - settings.stopLoss / 100)
-            : trade.price * (1 + settings.stopLoss / 100)
-          ).toString()
-          : undefined,
-      });
+    // Preview: real orders are signed wallet transactions to the CLOB precompile;
+    // the trade API rejects unsigned submission (SIGNED_ORDER_REQUIRED). Until
+    // signed copy execution ships, record the copy locally as a simulation
+    // instead of firing a request that would always 400.
+    const newCopied: CopiedTrade = {
+      id: `${trade.id}-${Date.now()}`,
+      traderAddress: trade.taker,
+      marketId: trade.marketId,
+      symbol: market.symbol,
+      side: trade.side,
+      price: trade.price,
+      size: clampedSize,
+      originalSize: trade.size,
+      timestamp: Date.now(),
+      pnl: 0,
+    };
 
-      const newCopied: CopiedTrade = {
-        id: `${trade.id}-${Date.now()}`,
-        traderAddress: trade.taker,
-        marketId: trade.marketId,
-        symbol: market.symbol,
-        side: trade.side,
-        price: trade.price,
-        size: clampedSize,
-        originalSize: trade.size,
-        timestamp: Date.now(),
-        pnl: 0,
-      };
-
-      saveCopiedTrades([newCopied, ...copiedTrades]);
-      toast(`Copied ${trade.side.toUpperCase()} ${formatNumber(clampedSize)} ${market.base} from ${shortenAddress(trade.taker)}`, 'success');
-    } catch (e) {
-      toast(`Copy failed: ${(e as Error).message}`, 'error');
-    }
+    saveCopiedTrades([newCopied, ...copiedTrades]);
+    toast('Preview: copy trades are simulated — signed execution coming soon', 'info');
   }, [address, copiedTrades, saveCopiedTrades, toast, markets]);
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -207,6 +192,22 @@ export default function CopyTradingPage() {
       <div className="text-center mb-8">
         <h2 className="text-2xl font-bold text-foreground mb-2">Copy Trading</h2>
         <p className="text-dim text-sm">Follow top traders and automatically mirror their positions</p>
+      </div>
+
+      {/* Preview banner */}
+      <div className="bg-yellow/10 border border-yellow/40 rounded-lg p-3 flex items-start gap-2.5">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-yellow shrink-0 mt-0.5">
+          <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+          <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+        </svg>
+        <div className="text-[12px] leading-relaxed">
+          <span className="text-yellow font-semibold">Preview &middot; Not yet on-chain.</span>{' '}
+          <span className="text-foreground/80">
+            Copy execution is a preview and does not place real orders yet. Followed traders&apos; fills are
+            mirrored as simulated entries only — no orders are submitted and no funds move. Signed on-chain
+            copy execution is coming soon.
+          </span>
+        </div>
       </div>
 
       {/* Copy Mode Toggle */}
