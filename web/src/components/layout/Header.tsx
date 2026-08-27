@@ -60,11 +60,18 @@ export default function Header() {
 
   return (
     <header className="h-11 md:h-12 bg-surface/80 backdrop-blur-xl border-b border-border flex items-center justify-between px-3 md:px-4 sticky top-0 z-30">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 min-w-0">
         <Link href="/trade" className="md:hidden flex items-center">
           <Image src="/logo.png" alt="Mersennet Trade" width={28} height={28} className="shrink-0" priority />
         </Link>
-        <h1 className="text-xs md:text-sm font-medium text-foreground tracking-tight">{title}</h1>
+        <h1 className="text-xs md:text-sm font-semibold text-foreground tracking-tight truncate">{title}</h1>
+        <Link
+          href="/risk"
+          title="Public testnet — trade with caution; bugs may exist. Read the risk disclosure."
+          className="shrink-0 px-1.5 py-[3px] rounded border border-yellow/30 bg-yellow/10 text-yellow text-[9px] font-semibold uppercase tracking-[0.08em] leading-none hover:bg-yellow/20 transition-colors"
+        >
+          Testnet
+        </Link>
       </div>
       <div className="flex items-center gap-1.5 md:gap-2">
         <button

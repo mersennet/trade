@@ -14,6 +14,7 @@ export default function MarketsPage() {
   const router = useRouter();
   const { setMarket, favorites, toggleFavorite } = useStore();
   const [markets, setMarkets] = useState<Market[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [tickers, setTickers] = useState<Record<number, Ticker>>({});
   const [filter, setFilter] = useState<'all' | 'favorites' | 'prelaunch' | 'synthetic'>('all');
   const [view, setView] = useState<'table' | 'cards' | 'grid'>('table');
@@ -21,7 +22,9 @@ export default function MarketsPage() {
   const [sortDir, setSortDir] = useState<1 | -1>(-1);
 
   useEffect(() => {
-    api.getMarkets().then((data) => setMarkets(data.markets || [])).catch(() => {});
+    api.getMarkets()
+      .then((data) => { setMarkets(data.markets || []); setLoaded(true); })
+      .catch(() => setLoaded(true));
   }, []);
 
   useEffect(() => {
@@ -47,7 +50,20 @@ export default function MarketsPage() {
     ? []
     : markets;
 
+  // "Quiet" markets (permissionlessly listed, no trades yet) sink to the
+  // bottom so dead rows never sit above live ones — a venue-killer look.
+  const tickersLoaded = Object.keys(tickers).length > 0;
+  const isQuiet = (m: Market) => {
+    const t = tickers[m.id];
+    return !(t && ((t.markPrice ?? 0) > 0 || (t.volume24h ?? 0) > 0));
+  };
+
   const sorted = [...filtered].sort((a, b) => {
+    if (tickersLoaded) {
+      const qa = isQuiet(a) ? 1 : 0;
+      const qb = isQuiet(b) ? 1 : 0;
+      if (qa !== qb) return qa - qb;
+    }
     const ta = tickers[a.id];
     const tb = tickers[b.id];
     const val = (k: SortKey, m: Market, t?: Ticker): number | string => {
@@ -91,14 +107,16 @@ export default function MarketsPage() {
   ];
 
   return (
-    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-5">
+    <div className="page-shell space-y-5">
       {/* Page header — left-aligned, no marketing copy. Stats live in the
           filter row below since they're more useful than a tagline. */}
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight">Markets</h1>
-          <p className="text-dim text-xs md:text-[13px] mt-0.5">
-            {markets.length} perpetual market{markets.length === 1 ? '' : 's'} live on Mersennet
+          <h1 className="page-title">Markets</h1>
+          <p className="page-sub">
+            {loaded
+              ? `${markets.length} perpetual market${markets.length === 1 ? '' : 's'} live on Mersennet`
+              : 'Loading live markets…'}
           </p>
         </div>
       </div>
@@ -226,12 +244,18 @@ export default function MarketsPage() {
               </div>
               <div className="flex items-center gap-3">
                 <div className="text-right">
-                  <span className="text-[13px] font-mono font-semibold text-foreground block tabular-nums">
-                    {t ? formatPrice(t.markPrice) : '—'}
-                  </span>
-                  <span className={cn('text-[10.5px] font-mono tabular-nums', ch >= 0 ? 'text-green' : 'text-red')}>
-                    {ch >= 0 ? '+' : ''}{formatNumber(ch, 2)}%
-                  </span>
+                  {tickersLoaded && isQuiet(m) ? (
+                    <span className="text-[10px] text-dim block">No trades yet</span>
+                  ) : (
+                    <>
+                      <span className="text-[13px] font-mono font-semibold text-foreground block tabular-nums">
+                        {t ? formatPrice(t.markPrice) : '—'}
+                      </span>
+                      <span className={cn('text-[10.5px] font-mono tabular-nums', ch >= 0 ? 'text-green' : 'text-red')}>
+                        {ch >= 0 ? '+' : ''}{formatNumber(ch, 2)}%
+                      </span>
+                    </>
+                  )}
                 </div>
                 <button
                   onClick={(e) => { e.stopPropagation(); toggleFavorite(m.id); }}
@@ -245,7 +269,7 @@ export default function MarketsPage() {
       </div>
 
       {/* Desktop table view — Paradex-style sortable stats */}
-      {view === 'table' && (
+      {view === 'table' && sorted.length > 0 && (
         <div className="hidden md:block bg-surface border border-border rounded-xl overflow-hidden">
           <table className="w-full text-xs">
             <thead>
@@ -274,11 +298,15 @@ export default function MarketsPage() {
                 const t = tickers[m.id];
                 const ch = t?.change24h ?? 0;
                 const isFav = favorites.includes(m.id);
+                const quiet = tickersLoaded && isQuiet(m);
                 return (
                   <tr
                     key={m.id}
                     onClick={() => handleSelect(m)}
-                    className="border-b border-border/40 hover:bg-surface-2/50 cursor-pointer transition-colors"
+                    className={cn(
+                      'border-b border-border/40 hover:bg-surface-2/50 cursor-pointer transition-colors',
+                      quiet && 'opacity-60 hover:opacity-100'
+                    )}
                   >
                     <td className="px-4 py-3">
                       <button
@@ -292,20 +320,31 @@ export default function MarketsPage() {
                         <TokenLogo symbol={m.base} size={20} />
                         <span className="font-semibold text-foreground">{m.base}<span className="text-dim font-normal">/{m.quote}</span></span>
                         <span className="text-[9px] px-1 py-0.5 bg-surface-2 text-dim rounded">{m.maxLeverage}×</span>
+                        {quiet && (
+                          <span className="text-[9px] px-1 py-0.5 bg-primary/10 text-primary rounded font-semibold uppercase tracking-wider">New</span>
+                        )}
                       </div>
                     </td>
-                    <td className="px-3 py-3 text-right font-mono tabular-nums text-foreground">{t ? formatPrice(t.markPrice) : '—'}</td>
-                    <td className={cn('px-3 py-3 text-right font-mono tabular-nums', ch >= 0 ? 'text-green' : 'text-red')}>
-                      {ch >= 0 ? '+' : ''}{formatNumber(ch, 2)}%
-                    </td>
-                    <td className="px-3 py-3 text-right font-mono tabular-nums text-foreground/70">{t ? `$${formatNumber(t.volume24h ?? 0)}` : '—'}</td>
-                    <td className="px-3 py-3 text-right font-mono tabular-nums text-foreground/70">{t ? formatNumber(t.trades24h ?? 0, 0) : '—'}</td>
-                    <td className={cn('px-3 py-3 text-right font-mono tabular-nums', (m.fundingRate ?? 0) >= 0 ? 'text-green' : 'text-red')}>
-                      {((m.fundingRate ?? 0) * 100).toFixed(4)}%
-                    </td>
-                    <td className="px-3 py-3 text-right font-mono tabular-nums text-foreground/70">
-                      {t?.openInterest ? `$${formatNumber(t.openInterest)}` : '—'}
-                    </td>
+                    {quiet ? (
+                      <td colSpan={6} className="px-3 py-3 text-right text-[11px] text-dim">
+                        Listed on-chain — no trades yet
+                      </td>
+                    ) : (
+                      <>
+                        <td className="px-3 py-3 text-right font-mono tabular-nums text-foreground">{t ? formatPrice(t.markPrice) : '—'}</td>
+                        <td className={cn('px-3 py-3 text-right font-mono tabular-nums', ch >= 0 ? 'text-green' : 'text-red')}>
+                          {ch >= 0 ? '+' : ''}{formatNumber(ch, 2)}%
+                        </td>
+                        <td className="px-3 py-3 text-right font-mono tabular-nums text-foreground/70">{t ? `$${formatNumber(t.volume24h ?? 0)}` : '—'}</td>
+                        <td className="px-3 py-3 text-right font-mono tabular-nums text-foreground/70">{t ? formatNumber(t.trades24h ?? 0, 0) : '—'}</td>
+                        <td className={cn('px-3 py-3 text-right font-mono tabular-nums', (m.fundingRate ?? 0) >= 0 ? 'text-green' : 'text-red')}>
+                          {((m.fundingRate ?? 0) * 100).toFixed(4)}%
+                        </td>
+                        <td className="px-3 py-3 text-right font-mono tabular-nums text-foreground/70">
+                          {t?.openInterest ? `$${formatNumber(t.openInterest)}` : '—'}
+                        </td>
+                      </>
+                    )}
                   </tr>
                 );
               })}

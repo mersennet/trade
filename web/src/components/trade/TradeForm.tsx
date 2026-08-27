@@ -46,6 +46,7 @@ export default function TradeForm() {
   // Chase: client-side keeper that re-pegs the limit order to the top of the
   // book via the one-click session key until it fills.
   const [chase, setChase] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [chaseId, setChaseId] = useState<string | null>(null);
   const [chaseReprices, setChaseReprices] = useState(0);
   const currentPosition = useMemo(() => {
@@ -654,28 +655,7 @@ export default function TradeForm() {
         </div>
       )}
 
-      {/* TIF + Slippage on the same compact row */}
-      <div className="flex items-center gap-1">
-        <div className="flex flex-1 gap-px bg-background rounded-md border border-border overflow-hidden">
-          {(['gtc', 'ioc', 'fok'] as const).map((tifVal) => (
-            <button key={tifVal} onClick={() => setTrade({ tif: tifVal })}
-              className={cn(
-                'flex-1 py-1 text-[10.5px] font-medium uppercase tracking-wide transition-colors',
-                trade.tif === tifVal ? 'bg-foreground/[0.07] text-foreground' : 'bg-surface-2 text-dim hover:text-foreground'
-              )}
-            >{tifVal}</button>
-          ))}
-        </div>
-        <button
-          onClick={() => useStore.getState().setShowSettings(true)}
-          className="px-2 py-1 bg-surface-2 rounded-md border border-border text-[10.5px] text-dim hover:text-foreground transition-colors font-mono whitespace-nowrap"
-          title="Slippage tolerance: click to change"
-        >
-          Slip {useStore.getState().slippage}%
-        </button>
-      </div>
-
-      {/* Options row (perps-specific options hidden in spot) */}
+      {/* Everyday toggles stay visible; power settings collapse below. */}
       <div className="flex items-center gap-4 flex-wrap">
         {!isSpot && (
           <label className="flex items-center gap-2 text-[11px] text-muted cursor-pointer select-none"
@@ -693,26 +673,86 @@ export default function TradeForm() {
             {t('trade.reduceOnly', 'Reduce Only')}
           </label>
         )}
-        {trade.orderType === 'limit' && trade.tif === 'gtc' && (
-          <label className="flex items-center gap-2 text-[11px] text-muted cursor-pointer select-none"
-            title="Maker-only: the chain rejects the order instead of letting it take liquidity">
-            <input type="checkbox" checked={postOnly}
-              onChange={(e) => setPostOnly(e.target.checked)} className="accent-primary w-3.5 h-3.5 rounded" />
-            Post Only
-          </label>
-        )}
-        {trade.orderType === 'limit' && trade.tif === 'gtc' && (
-          <label className={cn(
-            'flex items-center gap-2 text-[11px] select-none',
-            oneClickEnabled && sessionKey ? 'text-muted cursor-pointer' : 'text-dim/60 cursor-not-allowed'
-          )}
-            title={oneClickEnabled && sessionKey
-              ? 'Auto-reprice: keeps this order pegged to the top of the book (cancels + re-places via your one-click session key) until it fills'
-              : 'Chase needs one-click trading — enable it in settings so reprices can sign without popups'}>
-            <input type="checkbox" checked={chase} disabled={!oneClickEnabled || !sessionKey}
-              onChange={(e) => setChase(e.target.checked)} className="accent-primary w-3.5 h-3.5 rounded" />
-            Chase
-          </label>
+      </div>
+
+      {/* Advanced: TIF, slippage, post-only, chase, on-chain expiry. Collapsed
+          by default — the summary chip shows any non-default choices. */}
+      <div className="border border-border-subtle rounded-lg overflow-hidden">
+        <button
+          onClick={() => setShowAdvanced((v) => !v)}
+          className="w-full flex items-center justify-between px-2.5 py-1.5 text-[10.5px] text-dim hover:text-foreground bg-surface-2/40 transition-colors"
+          aria-expanded={showAdvanced}
+        >
+          <span className="font-medium">Advanced</span>
+          <span className="flex items-center gap-1.5 font-mono">
+            {trade.tif.toUpperCase()}
+            {postOnly && trade.orderType === 'limit' && trade.tif === 'gtc' && ' · Post'}
+            {chase && ' · Chase'}
+            {expiry !== 'never' && ` · Exp ${expiry}`}
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"
+              className={cn('transition-transform', showAdvanced && 'rotate-180')}><polyline points="6 9 12 15 18 9" /></svg>
+          </span>
+        </button>
+        {showAdvanced && (
+          <div className="px-2.5 py-2 space-y-2 border-t border-border-subtle">
+            <div className="flex items-center gap-1">
+              <div className="flex flex-1 gap-px bg-background rounded-md border border-border overflow-hidden">
+                {(['gtc', 'ioc', 'fok'] as const).map((tifVal) => (
+                  <button key={tifVal} onClick={() => setTrade({ tif: tifVal })}
+                    className={cn(
+                      'flex-1 py-1 text-[10.5px] font-medium uppercase tracking-wide transition-colors',
+                      trade.tif === tifVal ? 'bg-foreground/[0.07] text-foreground' : 'bg-surface-2 text-dim hover:text-foreground'
+                    )}
+                  >{tifVal}</button>
+                ))}
+              </div>
+              <button
+                onClick={() => useStore.getState().setShowSettings(true)}
+                className="px-2 py-1 bg-surface-2 rounded-md border border-border text-[10.5px] text-dim hover:text-foreground transition-colors font-mono whitespace-nowrap"
+                title="Slippage tolerance: click to change"
+              >
+                Slip {useStore.getState().slippage}%
+              </button>
+            </div>
+            <div className="flex items-center gap-4 flex-wrap">
+              {trade.orderType === 'limit' && trade.tif === 'gtc' && (
+                <label className="flex items-center gap-2 text-[11px] text-muted cursor-pointer select-none"
+                  title="Maker-only: the chain rejects the order instead of letting it take liquidity">
+                  <input type="checkbox" checked={postOnly}
+                    onChange={(e) => setPostOnly(e.target.checked)} className="accent-primary w-3.5 h-3.5 rounded" />
+                  Post Only
+                </label>
+              )}
+              {trade.orderType === 'limit' && trade.tif === 'gtc' && (
+                <label className={cn(
+                  'flex items-center gap-2 text-[11px] select-none',
+                  oneClickEnabled && sessionKey ? 'text-muted cursor-pointer' : 'text-dim/60 cursor-not-allowed'
+                )}
+                  title={oneClickEnabled && sessionKey
+                    ? 'Auto-reprice: keeps this order pegged to the top of the book (cancels + re-places via your one-click session key) until it fills'
+                    : 'Chase needs one-click trading — enable it in settings so reprices can sign without popups'}>
+                  <input type="checkbox" checked={chase} disabled={!oneClickEnabled || !sessionKey}
+                    onChange={(e) => setChase(e.target.checked)} className="accent-primary w-3.5 h-3.5 rounded" />
+                  Chase
+                </label>
+              )}
+            </div>
+            {trade.orderType === 'limit' && trade.tif === 'gtc' && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10.5px] text-dim whitespace-nowrap" title="On-chain expiry: the order cancels itself at the chosen time, even with the tab closed">Expires</span>
+                <div className="flex flex-1 gap-px bg-background rounded-md border border-border overflow-hidden">
+                  {(['never', '1h', '4h', '1d', '1w'] as const).map((v) => (
+                    <button key={v} onClick={() => setExpiry(v)}
+                      className={cn(
+                        'flex-1 py-1 text-[10px] font-medium uppercase tracking-wide transition-colors',
+                        expiry === v ? 'bg-foreground/[0.07] text-foreground' : 'bg-surface-2 text-dim hover:text-foreground'
+                      )}
+                    >{v === 'never' ? 'GTC' : v}</button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
@@ -730,23 +770,6 @@ export default function TradeForm() {
             }}
             className="px-2 py-0.5 text-[10.5px] font-medium text-red border border-red/40 rounded-md hover:bg-red/10 transition-colors"
           >Stop</button>
-        </div>
-      )}
-
-      {/* Good-till-date: the chain auto-cancels the resting order at expiry */}
-      {trade.orderType === 'limit' && trade.tif === 'gtc' && (
-        <div className="flex items-center gap-1.5">
-          <span className="text-[10.5px] text-dim whitespace-nowrap" title="On-chain expiry: the order cancels itself at the chosen time, even with the tab closed">Expires</span>
-          <div className="flex flex-1 gap-px bg-background rounded-md border border-border overflow-hidden">
-            {(['never', '1h', '4h', '1d', '1w'] as const).map((v) => (
-              <button key={v} onClick={() => setExpiry(v)}
-                className={cn(
-                  'flex-1 py-1 text-[10px] font-medium uppercase tracking-wide transition-colors',
-                  expiry === v ? 'bg-foreground/[0.07] text-foreground' : 'bg-surface-2 text-dim hover:text-foreground'
-                )}
-              >{v === 'never' ? 'GTC' : v}</button>
-            ))}
-          </div>
         </div>
       )}
 

@@ -152,8 +152,8 @@ function EquityCurveChart({ data }: { data: { time: number; value: number }[] })
         horzLines: { color: 'rgba(255,255,255,0.03)' },
       },
       crosshair: {
-        vertLine: { color: 'rgba(125,255,155,0.3)', labelBackgroundColor: '#10140f' },
-        horzLine: { color: 'rgba(125,255,155,0.3)', labelBackgroundColor: '#10140f' },
+        vertLine: { color: 'rgba(43,217,106,0.3)', labelBackgroundColor: '#101511' },
+        horzLine: { color: 'rgba(43,217,106,0.3)', labelBackgroundColor: '#101511' },
       },
       rightPriceScale: { borderColor: 'rgba(255,255,255,0.06)' },
       timeScale: { borderColor: 'rgba(255,255,255,0.06)' },
@@ -235,15 +235,15 @@ export default function AnalyticsPage() {
   ];
 
   return (
-    <div className="p-4 max-w-full space-y-6">
+    <div className="page-shell space-y-6">
       <div className="text-center mb-2">
-        <h2 className="text-2xl font-bold text-foreground mb-2 flex items-center justify-center gap-2">
+        <h1 className="page-title">
           Analytics
           <span className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded bg-cyan/10 text-cyan text-[10px] font-semibold uppercase tracking-wider">
             Cash-flow PnL &middot; Beta
           </span>
-        </h2>
-        <p className="text-dim text-sm">Track your trading performance with detailed statistics</p>
+        </h1>
+        <p className="page-sub">Track your trading performance with detailed statistics</p>
       </div>
 
       {protocolStats && (

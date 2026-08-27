@@ -82,7 +82,7 @@ export default function PaperTradingPage() {
   const selectedMarket = MARKETS.find((m) => m.id === marketId);
 
   return (
-    <div className="p-4 max-w-full space-y-6">
+    <div className="page-shell space-y-6">
       {/* Banner */}
       <div className="bg-gradient-to-r from-cyan/10 via-primary/10 to-cyan/10 border border-cyan/20 rounded-xl p-4 text-center shadow-[0_0_24px_rgba(34,211,238,0.06)]">
         <div className="flex items-center justify-center gap-2 mb-1">

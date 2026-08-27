@@ -94,21 +94,21 @@ export default function AIAgentsPage() {
   };
 
   return (
-    <div className="p-3 md:p-4 max-w-full space-y-4">
+    <div className="page-shell space-y-4">
       <div className="text-center mb-8">
         <div className="flex items-center justify-center gap-2 mb-2">
-          <h2 className="text-2xl font-bold text-foreground">AI Trading Agents</h2>
+          <h1 className="page-title">AI Trading Agents</h1>
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-yellow/10 text-yellow text-[10px] font-semibold uppercase tracking-wider">
             Preview · simulated
           </span>
         </div>
-        <p className="text-dim text-sm">Configure automated strategies. Agents do not yet trade live. Performance is simulated.</p>
+        <p className="page-sub">Configure automated strategies. Agents do not yet trade live. Performance is simulated.</p>
       </div>
       {isConnected && (
         <div className="flex justify-end mb-2">
           <button
             onClick={() => setShowCreate(true)}
-            className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-xs font-semibold hover:shadow-[0_0_16px_rgba(125,255,155,0.15)] transition-all duration-200"
+            className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-xs font-semibold hover:shadow-[0_0_16px_rgba(43,217,106,0.15)] transition-all duration-200"
           >
             + Create Agent
           </button>
@@ -294,7 +294,7 @@ export default function AIAgentsPage() {
               <button
                 onClick={handleCreate}
                 disabled={submitting || !form.name || form.markets.length === 0}
-                className="w-full py-3 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold disabled:opacity-50 hover:shadow-[0_0_16px_rgba(125,255,155,0.15)] transition-all duration-200"
+                className="w-full py-3 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold disabled:opacity-50 hover:shadow-[0_0_16px_rgba(43,217,106,0.15)] transition-all duration-200"
               >
                 {submitting ? 'Creating...' : 'Create Agent'}
               </button>

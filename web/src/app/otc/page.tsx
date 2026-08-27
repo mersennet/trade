@@ -76,10 +76,10 @@ export default function OTCPage() {
   };
 
   return (
-    <div className="p-3 md:p-4 max-w-full space-y-4">
+    <div className="page-shell space-y-4">
       <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-foreground mb-2">OTC / Request for Quote</h2>
-        <p className="text-dim text-sm">Execute large block trades with minimal slippage. Designed for 50K+ MRSN orders with institutional-grade execution.</p>
+        <h1 className="page-title">OTC / Request for Quote</h1>
+        <p className="page-sub">Execute large block trades with minimal slippage. Designed for 50K+ MRSN orders with institutional-grade execution.</p>
       </div>
 
       {/* RFQ settlement runs in the API's database, not on-chain — say so
@@ -143,7 +143,7 @@ export default function OTCPage() {
             <button
               onClick={handleSubmitRfq}
               disabled={submitting || !isConnected}
-              className="w-full py-3 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold disabled:opacity-50 hover:shadow-[0_0_16px_rgba(125,255,155,0.15)] transition-all duration-200"
+              className="w-full py-3 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold disabled:opacity-50 hover:shadow-[0_0_16px_rgba(43,217,106,0.15)] transition-all duration-200"
             >
               {!isConnected ? 'Connect Wallet' : submitting ? 'Submitting...' : 'Request Quote'}
             </button>

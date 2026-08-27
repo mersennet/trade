@@ -59,10 +59,10 @@ export default function SubAccountsPage() {
 
   if (!isConnected) {
     return (
-      <div className="p-4 max-w-full space-y-6">
+      <div className="page-shell space-y-6">
         <div className="text-center mb-8">
-          <h2 className="text-2xl font-bold text-foreground mb-2">Sub-Accounts</h2>
-          <p className="text-dim text-sm">Track and switch between your wallet accounts</p>
+          <h1 className="page-title">Sub-Accounts</h1>
+          <p className="page-sub">Track and switch between your wallet accounts</p>
         </div>
         <div className="bg-surface border border-border rounded-xl p-10 text-center">
           <h3 className="text-sm font-medium text-foreground mb-1">Connect Wallet</h3>
@@ -77,10 +77,10 @@ export default function SubAccountsPage() {
   }
 
   return (
-    <div className="p-4 max-w-full space-y-6">
+    <div className="page-shell space-y-6">
       <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-foreground mb-2">Sub-Accounts</h2>
-        <p className="text-dim text-sm">Each wallet account is an independent trading identity</p>
+        <h1 className="page-title">Sub-Accounts</h1>
+        <p className="page-sub">Each wallet account is an independent trading identity</p>
       </div>
 
       <div className="bg-surface-2 border border-border rounded-lg p-3 text-[11.5px] text-dim leading-relaxed">

@@ -97,10 +97,10 @@ export default function PortfolioPage() {
 
   if (!isConnected) {
     return (
-      <div className="p-4 md:p-6 max-w-7xl mx-auto">
+      <div className="page-shell">
         <header className="mb-6">
-          <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight">Portfolio</h1>
-          <p className="text-dim text-xs md:text-[13px] mt-0.5">Unified view of positions, collateral, and margin</p>
+          <h1 className="page-title">Portfolio</h1>
+          <p className="page-sub">Unified view of positions, collateral, and margin</p>
         </header>
         <div className="bg-surface border border-border rounded-xl p-10 text-center">
           <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-surface-2 flex items-center justify-center">
@@ -124,12 +124,12 @@ export default function PortfolioPage() {
   const upnlTotal = (data?.positions ?? []).reduce((s, p) => s + (p.unrealizedPnl || 0), 0);
 
   return (
-    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-5">
+    <div className="page-shell space-y-5">
       {/* Header — left-aligned, with margin-mode segmented control on the right */}
       <header className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight">Portfolio</h1>
-          <p className="text-dim text-xs md:text-[13px] mt-0.5">Unified view of positions, collateral, and margin</p>
+          <h1 className="page-title">Portfolio</h1>
+          <p className="page-sub">Unified view of positions, collateral, and margin</p>
         </div>
         <div className="flex items-center gap-px bg-background rounded-md border border-border overflow-hidden">
           {(['cross', 'isolated', 'portfolio'] as const).map((mode) => (

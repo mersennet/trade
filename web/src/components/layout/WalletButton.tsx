@@ -9,22 +9,18 @@ import { shortenAddress, formatNumber } from '@/lib/utils';
 import { useDismissable } from '@/hooks/useDismissable';
 
 export default function WalletButton() {
-  const { address, balance, provider, isConnected, connect, connectWalletConnect, connectWithEmail, disconnect } = useWallet();
+  const { address, balance, provider, isConnected, connect, connectWalletConnect, disconnect } = useWallet();
   const setWallet = useStore((s) => s.setWallet);
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [collateral, setCollateral] = useState<number>(0);
-  const [usdcBalance, setUsdcBalance] = useState<number>(0);
-  const [showEmailLogin, setShowEmailLogin] = useState(false);
   const [showConnectMenu, setShowConnectMenu] = useState(false);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
-  const [email, setEmail] = useState('');
   const connectMenuRef = useDismissable<HTMLDivElement>(showConnectMenu, () => setShowConnectMenu(false));
   const accountMenuRef = useDismissable<HTMLDivElement>(showAccountMenu, () => setShowAccountMenu(false));
-  const emailRef = useDismissable<HTMLDivElement>(showEmailLogin, () => setShowEmailLogin(false));
 
   const refreshTokens = useCallback(async () => {
-    if (!address || !provider) { setUsdcBalance(0); return; }
+    if (!address || !provider) return;
     try {
       const { ethers } = await import('ethers');
       type EthersLike = typeof import('ethers');
@@ -33,7 +29,6 @@ export default function WalletButton() {
       // correct regardless of which chain the wallet provider is pointed at.
       const rpc = new e.providers.JsonRpcProvider(MERSENNET_TESTNET.rpcUrls[0]);
       const bal = await rpc.getBalance(address);
-      setUsdcBalance(Number(e.utils.formatEther(bal)));
       // Keep the store copy fresh too — the header chip and account panel
       // read wallet.balance, which was previously only set once at connect.
       setWallet({ balance: bal.toString() });
@@ -43,7 +38,7 @@ export default function WalletButton() {
   }, [address, provider, setWallet]);
 
   useEffect(() => {
-    if (!isConnected || !address) { setCollateral(0); setUsdcBalance(0); return; }
+    if (!isConnected || !address) { setCollateral(0); return; }
     api.getCollateral(address)
       .then((r) => {
         const val = Number(r.collateral) || 0;
@@ -160,20 +155,6 @@ export default function WalletButton() {
     );
   }
 
-  const handleEmailLogin = async () => {
-    if (!email) return;
-    setLoading(true);
-    try {
-      await connectWithEmail(email);
-      setShowEmailLogin(false);
-      setEmail('');
-    } catch (e) {
-      toast((e as Error)?.message || 'Email login is unavailable', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="flex items-center gap-1.5">
       <div className="relative" ref={connectMenuRef}>
@@ -205,24 +186,6 @@ export default function WalletButton() {
                 <span className="block font-medium">WalletConnect</span>
                 <span className="block text-[10px] text-dim">Scan a QR with a mobile wallet</span>
               </span>
-            </button>
-          </div>
-        )}
-      </div>
-      <div className="relative" ref={emailRef}>
-        <button
-          onClick={() => setShowEmailLogin(!showEmailLogin)}
-          className="px-2.5 h-8 bg-surface-2 rounded-lg border border-border text-[11.5px] text-dim hover:text-foreground transition-colors"
-        >Email</button>
-        {showEmailLogin && (
-          <div className="absolute right-0 top-full mt-1 w-64 bg-surface border border-border rounded-xl p-3 shadow-xl z-50">
-            <p className="text-[10px] text-dim uppercase tracking-wider font-medium mb-2">Continue with Email</p>
-            <p className="text-[11px] text-dim mb-2">Email sign-in is coming soon. For now, connect a browser wallet to trade.</p>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="your@email.com" disabled
-              className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-xs text-foreground outline-none focus:border-primary/40 mb-2 opacity-50 cursor-not-allowed" />
-            <button onClick={handleEmailLogin} disabled
-              className="w-full py-2 bg-primary/40 text-white rounded-lg text-xs font-medium opacity-50 cursor-not-allowed transition-all">
-              Coming soon
             </button>
           </div>
         )}

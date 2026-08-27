@@ -21,7 +21,7 @@ export default function DepthChart() {
     askLine: isDark ? '#f87171' : '#dc2626',
     grid: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.06)',
     text: isDark ? '#6e6b7b' : '#71717a',
-    midLine: isDark ? 'rgba(125,255,155,0.4)' : 'rgba(15,174,98,0.4)',
+    midLine: isDark ? 'rgba(43,217,106,0.4)' : 'rgba(15,174,98,0.4)',
   }), [isDark]);
 
   const fetchData = useCallback(async () => {

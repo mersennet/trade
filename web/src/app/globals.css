@@ -21,50 +21,59 @@
   --color-cyan: var(--cyan);
   --color-muted: var(--muted);
   --color-dim: var(--dim);
+  --color-primary-bright: var(--primary-bright);
   --color-orange: #f97316;
   --font-sans: "Schibsted Grotesk", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "SF Mono", monospace;
 }
 
-/* Mersennet brand — terminal green on pure black (matches mersennet.com) */
+/* Mersennet brand — phosphor terminal, anchored on the brand greens.
+   Neutrals carry a faint green cast (never pure black / pure gray boxes):
+   the whole surface stack lives on the brand hue, which is what separates
+   "Mersennet's terminal" from "generic dark perp DEX template". Accent is
+   the brand mid-green (#2bd96a, from the media kit gradient) rather than
+   the toy-neon #7dff9b, which is reserved for small highlights via
+   --primary-bright. */
 :root {
-  --background: #000000;
-  --foreground: #ececef;
-  --primary: #7dff9b;
-  --primary-hover: #5ee87f;
-  --primary-glow: rgba(125, 255, 155, 0.12);
-  --surface: #0a0a0c;
-  --surface-2: #111114;
-  --surface-3: #18181c;
-  --border-color: rgba(255, 255, 255, 0.08);
-  --border-subtle: rgba(255, 255, 255, 0.04);
+  --background: #050806;
+  --foreground: #e9efe9;
+  --primary: #2bd96a;
+  --primary-hover: #4ce383;
+  --primary-bright: #7dff9b;
+  --primary-glow: rgba(43, 217, 106, 0.12);
+  --surface: #0a0e0b;
+  --surface-2: #101511;
+  --surface-3: #171d18;
+  --border-color: rgba(190, 255, 210, 0.09);
+  --border-subtle: rgba(190, 255, 210, 0.045);
   --green: #34d399;
   --red: #ff5240;
-  --yellow: #ff9a3c;
+  --yellow: #ffab3c;
   --cyan: #5b8cff;
-  --muted: #9a9aa6;
-  --dim: #7b7b8a;
+  --muted: #97a29a;
+  --dim: #6f7d74;
   color-scheme: dark;
 }
 
 [data-theme="light"] {
-  --background: #fafafa;
-  --foreground: #0f0f12;
+  --background: #f7faf7;
+  --foreground: #0e120f;
   /* brand deep green (#0c8f43) on light backgrounds */
   --primary: #0c8f43;
   --primary-hover: #0fae62;
+  --primary-bright: #0c8f43;
   --primary-glow: rgba(12, 143, 67, 0.1);
   --surface: #ffffff;
-  --surface-2: #f4f4f5;
-  --surface-3: #e8e8ec;
-  --border-color: rgba(0, 0, 0, 0.08);
-  --border-subtle: rgba(0, 0, 0, 0.04);
+  --surface-2: #f0f4f0;
+  --surface-3: #e5ebe6;
+  --border-color: rgba(10, 40, 20, 0.1);
+  --border-subtle: rgba(10, 40, 20, 0.05);
   --green: #16a34a;
   --red: #dc2626;
   --yellow: #c2710c;
   --cyan: #2563eb;
-  --muted: #71717a;
-  --dim: #6b6b76;
+  --muted: #6b756e;
+  --dim: #66716a;
   color-scheme: light;
 }
 
@@ -79,6 +88,81 @@ body {
   font-family: "Schibsted Grotesk", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Numerals: always tabular so columns of prices/sizes never wobble. */
+.font-mono {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------ */
+/* Page grammar — every non-terminal page uses the same shell so the   */
+/* app reads as one product, not a collection of screens.              */
+/* ------------------------------------------------------------------ */
+
+/* Content column: consistent width, gutters and vertical rhythm. */
+.page-shell {
+  width: 100%;
+  max-width: 72rem;
+  margin-inline: auto;
+  padding: 1.25rem 1rem 3rem;
+}
+@media (min-width: 768px) {
+  .page-shell { padding: 2rem 1.5rem 4rem; }
+}
+
+/* Page header: title + one-line subtitle, left-aligned, consistent scale. */
+.page-title {
+  font-size: 1.375rem;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--foreground);
+}
+@media (min-width: 768px) {
+  .page-title { font-size: 1.625rem; }
+}
+.page-sub {
+  margin-top: 0.375rem;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--dim);
+  max-width: 42rem;
+}
+
+/* Standard card: one surface step up, hairline border, consistent radius. */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: 0.75rem;
+}
+
+/* Micro section label — the only sanctioned ALL-CAPS style. */
+.label-caps {
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--dim);
+}
+
+/* Sparse pages get a faint phosphor bloom at the top so the empty field
+   reads as atmosphere instead of a void. Fixed, non-interactive, cheap. */
+.page-glow {
+  position: relative;
+}
+.page-glow::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 420px;
+  pointer-events: none;
+  background: radial-gradient(
+    60% 100% at 50% 0%,
+    var(--primary-glow) 0%,
+    transparent 70%
+  );
+  opacity: 0.5;
 }
 
 input[type="number"]::-webkit-inner-spin-button,
@@ -125,7 +209,7 @@ input[type="number"] {
 }
 
 .premium-border {
-  border-image: linear-gradient(135deg, rgba(125, 255, 155, 0.3), rgba(125, 255, 155, 0.05)) 1;
+  border-image: linear-gradient(135deg, rgba(43, 217, 106, 0.3), rgba(43, 217, 106, 0.05)) 1;
 }
 
 .hover-lift {
@@ -151,7 +235,7 @@ input[type="number"] {
   background: linear-gradient(
     90deg,
     transparent,
-    rgba(125, 255, 155, 0.05),
+    rgba(43, 217, 106, 0.05),
     rgba(255, 255, 255, 0.06),
     transparent
   );
@@ -179,7 +263,7 @@ select {
 }
 select:focus {
   outline: none;
-  border-color: rgba(125, 255, 155, 0.4);
+  border-color: rgba(43, 217, 106, 0.4);
 }
 select option {
   background-color: var(--surface);
@@ -225,7 +309,7 @@ select option {
   border-radius: 50%;
   background: #ffffff;
   border: 2px solid var(--primary);
-  box-shadow: 0 0 8px rgba(125, 255, 155, 0.5);
+  box-shadow: 0 0 8px rgba(43, 217, 106, 0.5);
   cursor: pointer;
   transition: transform 0.12s ease;
 }
@@ -236,7 +320,7 @@ select option {
   border-radius: 50%;
   background: #ffffff;
   border: 2px solid var(--primary);
-  box-shadow: 0 0 8px rgba(125, 255, 155, 0.5);
+  box-shadow: 0 0 8px rgba(43, 217, 106, 0.5);
   cursor: pointer;
 }
 

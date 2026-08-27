@@ -28,8 +28,8 @@ export default function EquityCurve({ data, height = 180 }: { data: { time: numb
         horzLines: { color: 'rgba(255,255,255,0.03)' },
       },
       crosshair: {
-        vertLine: { color: 'rgba(125,255,155,0.25)', labelBackgroundColor: '#111114' },
-        horzLine: { color: 'rgba(125,255,155,0.25)', labelBackgroundColor: '#111114' },
+        vertLine: { color: 'rgba(43,217,106,0.25)', labelBackgroundColor: '#101511' },
+        horzLine: { color: 'rgba(43,217,106,0.25)', labelBackgroundColor: '#101511' },
       },
       rightPriceScale: { borderColor: 'rgba(255,255,255,0.06)' },
       timeScale: { borderColor: 'rgba(255,255,255,0.06)' },

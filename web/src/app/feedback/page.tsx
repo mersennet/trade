@@ -66,11 +66,12 @@ export default function FeedbackPage() {
   const cat = CATEGORIES.find((c) => c.id === category)!;
 
   return (
-    <div className="p-4 md:p-6 max-w-2xl mx-auto space-y-5">
+    <div className="page-shell">
+      <div className="max-w-2xl space-y-5">
       {/* Header */}
       <header>
-        <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight">Beta feedback</h1>
-        <p className="text-dim text-xs md:text-[13px] mt-0.5 leading-relaxed">
+        <h1 className="page-title">Beta feedback</h1>
+        <p className="page-sub">
           Found a bug? Want a feature? Confused by something? Tell us. Beta testers shape the product.
         </p>
       </header>
@@ -188,6 +189,7 @@ export default function FeedbackPage() {
         <Link href="/privacy" className="underline hover:text-foreground transition-colors">Privacy</Link> ·{' '}
         <Link href="/risk" className="underline hover:text-foreground transition-colors">Risk</Link>
       </p>
+      </div>
     </div>
   );
 }

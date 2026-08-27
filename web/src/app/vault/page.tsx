@@ -74,17 +74,17 @@ export default function VaultPage() {
   const currentStrategy = VAULT_STRATEGIES.find(v => v.id === selectedVault) || VAULT_STRATEGIES[0];
 
   return (
-    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-5">
+    <div className="page-shell space-y-5">
       {/* Header — left-aligned with MRSN token chip to clarify deposit asset */}
       <header className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight flex items-center gap-2">
+          <h1 className="page-title">
             Mersennet Vault
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-surface-2 text-[10px] text-dim font-mono">
               <TokenLogo symbol="MRSN" size={12} /> MRSN
             </span>
           </h1>
-          <p className="text-dim text-xs md:text-[13px] mt-0.5">Earn yield across multiple automated strategies</p>
+          <p className="page-sub">Earn yield across multiple automated strategies</p>
         </div>
       </header>
 

@@ -118,14 +118,14 @@ export default function CreateMarketPage() {
   const pastProposals = proposals.filter((p) => p.status === 'approved' || p.status === 'rejected');
 
   return (
-    <div className="p-4 max-w-full space-y-6">
+    <div className="page-shell space-y-6">
       <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-foreground mb-2">Create Market</h2>
-        <p className="text-dim text-sm">Permissionless listing — create a market directly on-chain, or rally support through a proposal</p>
+        <h1 className="page-title">Create Market</h1>
+        <p className="page-sub">Permissionless listing — create a market directly on-chain, or rally support through a proposal</p>
       </div>
 
       {/* On-chain instant listing */}
-      <div className="bg-surface border border-green/20 rounded-xl p-5 space-y-4 shadow-[0_0_24px_rgba(125,255,155,0.04)]">
+      <div className="bg-surface border border-green/20 rounded-xl p-5 space-y-4 shadow-[0_0_24px_rgba(43,217,106,0.04)]">
         <div className="flex items-center gap-3 mb-2">
           <div className="w-10 h-10 bg-green/10 rounded-xl flex items-center justify-center">
             <svg className="w-5 h-5 text-green" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -186,7 +186,7 @@ export default function CreateMarketPage() {
       </div>
 
       {/* Proposal Form */}
-      <div className="bg-surface border border-primary/20 rounded-xl p-5 space-y-4 shadow-[0_0_24px_rgba(125,255,155,0.04)]">
+      <div className="bg-surface border border-primary/20 rounded-xl p-5 space-y-4 shadow-[0_0_24px_rgba(43,217,106,0.04)]">
         <div className="flex items-center gap-3 mb-2">
           <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
             <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -262,7 +262,7 @@ export default function CreateMarketPage() {
           <button
             onClick={handleSubmit}
             disabled={submitting || !isConnected}
-            className="px-6 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-xs font-medium disabled:opacity-50 hover:shadow-[0_0_16px_rgba(125,255,155,0.15)] transition-all duration-200"
+            className="px-6 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-xs font-medium disabled:opacity-50 hover:shadow-[0_0_16px_rgba(43,217,106,0.15)] transition-all duration-200"
           >
             {submitting ? 'Submitting...' : 'Submit Proposal'}
           </button>

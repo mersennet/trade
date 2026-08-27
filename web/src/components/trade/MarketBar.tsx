@@ -77,7 +77,16 @@ export default function MarketBar() {
     return () => document.removeEventListener('mousedown', handler);
   }, [showSelector]);
 
-  const activeMarkets = markets;
+  // Untraded (permissionlessly listed) markets sink to the end of the tab
+  // strip so dead "—" tabs never sit ahead of live markets.
+  const activeMarkets = useMemo(() => {
+    const quiet = (m: Market) => {
+      const t = tickers[m.id];
+      return !(t && ((t.markPrice ?? 0) > 0 || (t.volume24h ?? 0) > 0));
+    };
+    if (Object.keys(tickers).length === 0) return markets;
+    return [...markets].sort((a, b) => (quiet(a) ? 1 : 0) - (quiet(b) ? 1 : 0));
+  }, [markets, tickers]);
 
   const filteredMarkets = useMemo(() => {
     if (!searchQuery) return activeMarkets;

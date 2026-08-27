@@ -45,10 +45,10 @@ export default function FundingArbPage() {
   );
 
   return (
-    <div className="p-4 max-w-full space-y-6">
+    <div className="page-shell space-y-6">
       <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-foreground mb-2">Funding Rate Arbitrage</h2>
-        <p className="text-dim text-sm">Cross-exchange funding rate comparison and arbitrage opportunities</p>
+        <h1 className="page-title">Funding Rate Arbitrage</h1>
+        <p className="page-sub">Cross-exchange funding rate comparison and arbitrage opportunities</p>
       </div>
 
       {/* External-venue rates (Hyperliquid / dYdX / Binance) are not yet wired to live
@@ -136,7 +136,7 @@ export default function FundingArbPage() {
               className={cn(
                 'px-3 py-1 text-[11px] rounded-md transition-all duration-200',
                 sortBy === 'annualized'
-                  ? 'bg-primary/10 text-primary shadow-[inset_0_0_0_1px_rgba(125,255,155,0.2)]'
+                  ? 'bg-primary/10 text-primary shadow-[inset_0_0_0_1px_rgba(43,217,106,0.2)]'
                   : 'text-dim hover:text-muted'
               )}
             >
@@ -147,7 +147,7 @@ export default function FundingArbPage() {
               className={cn(
                 'px-3 py-1 text-[11px] rounded-md transition-all duration-200',
                 sortBy === 'spread'
-                  ? 'bg-primary/10 text-primary shadow-[inset_0_0_0_1px_rgba(125,255,155,0.2)]'
+                  ? 'bg-primary/10 text-primary shadow-[inset_0_0_0_1px_rgba(43,217,106,0.2)]'
                   : 'text-dim hover:text-muted'
               )}
             >

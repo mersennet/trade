@@ -188,10 +188,10 @@ export default function CopyTradingPage() {
   ];
 
   return (
-    <div className="p-4 max-w-full space-y-6">
+    <div className="page-shell space-y-6">
       <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-foreground mb-2">Copy Trading</h2>
-        <p className="text-dim text-sm">Follow top traders and automatically mirror their positions</p>
+        <h1 className="page-title">Copy Trading</h1>
+        <p className="page-sub">Follow top traders and automatically mirror their positions</p>
       </div>
 
       {/* Preview banner */}
@@ -255,7 +255,7 @@ export default function CopyTradingPage() {
             className={cn(
               'px-4 py-2 text-sm rounded-md transition-all duration-200',
               tab === t.key
-                ? 'bg-primary/10 text-primary shadow-[inset_0_0_0_1px_rgba(125,255,155,0.2)]'
+                ? 'bg-primary/10 text-primary shadow-[inset_0_0_0_1px_rgba(43,217,106,0.2)]'
                 : 'text-dim hover:text-muted'
             )}
           >
@@ -562,7 +562,7 @@ function EditSettings({ settings, onSave, onCancel }: {
             maxSize: Math.max(1, parseFloat(maxSize) || 1000),
             stopLoss: Math.min(100, Math.max(0, parseFloat(stopLoss) || 10)),
           })}
-          className="px-4 py-1.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-xs font-medium hover:shadow-[0_0_16px_rgba(125,255,155,0.15)] transition-all duration-200"
+          className="px-4 py-1.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-xs font-medium hover:shadow-[0_0_16px_rgba(43,217,106,0.15)] transition-all duration-200"
         >
           Save Settings
         </button>

@@ -136,7 +136,7 @@ export default function WelcomeModal() {
             disabled={!acknowledged}
             className={`w-full py-2.5 rounded-md text-[13px] font-semibold tracking-wide transition ${
               acknowledged
-                ? 'premium-gradient text-black hover:brightness-110 shadow-[0_0_20px_rgba(125,255,155,0.25)]'
+                ? 'premium-gradient text-black hover:brightness-110 shadow-[0_0_20px_rgba(43,217,106,0.25)]'
                 : 'bg-surface-2 text-dim border border-border cursor-not-allowed'
             }`}
           >

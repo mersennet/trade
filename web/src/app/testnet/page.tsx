@@ -53,15 +53,16 @@ export default function TestnetPage() {
   };
 
   return (
-    <div className="p-4 max-w-3xl mx-auto space-y-8">
+    <div className="page-shell">
+      <div className="max-w-3xl space-y-8">
       {/* Hero */}
       <div className="text-center py-8">
         <div className="inline-flex items-center gap-1.5 px-2.5 py-1 mb-4 rounded-full bg-cyan/10 border border-cyan/20 text-[10px] font-medium text-cyan uppercase tracking-wider">
           <span className="w-1.5 h-1.5 rounded-full bg-cyan animate-pulse" />
           Testnet
         </div>
-        <h1 className="text-3xl font-bold text-foreground mb-3">{NET.name}</h1>
-        <p className="text-dim text-sm max-w-lg mx-auto leading-relaxed">
+        <h1 className="page-title">{NET.name}</h1>
+        <p className="page-sub">
           Mersennet is a zero-knowledge L1 with a native on-chain order book. Trading settles in
           native <span className="text-foreground font-medium">MRSN</span> collateral. Add the
           network to your wallet, then claim test MRSN from the faucet to start trading.
@@ -70,7 +71,7 @@ export default function TestnetPage() {
           <button
             onClick={addToWallet}
             disabled={adding}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-primary hover:bg-primary-hover disabled:opacity-60 text-white font-semibold rounded-lg text-sm hover:shadow-[0_0_16px_rgba(125,255,155,0.15)] transition-all duration-200"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-primary hover:bg-primary-hover disabled:opacity-60 text-white font-semibold rounded-lg text-sm hover:shadow-[0_0_16px_rgba(43,217,106,0.15)] transition-all duration-200"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -171,6 +172,7 @@ export default function TestnetPage() {
           precompile&apos;s <span className="font-mono">depositTokenCollateral</span> — claim it
           from the faucet.
         </p>
+      </div>
       </div>
     </div>
   );

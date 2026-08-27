@@ -254,7 +254,7 @@ export default function Chart() {
 
     const chart = lc.createChart(containerRef.current, {
       layout: {
-        background: { type: lc.ColorType.Solid, color: isDark ? '#050507' : '#ffffff' },
+        background: { type: lc.ColorType.Solid, color: isDark ? '#070b08' : '#ffffff' },
         textColor: isDark ? '#6e6b7b' : '#71717a',
         fontFamily: 'Schibsted Grotesk, sans-serif',
         fontSize: 11,
@@ -265,8 +265,8 @@ export default function Chart() {
       },
       crosshair: {
         mode: 0,
-        vertLine: { color: isDark ? 'rgba(125,255,155,0.3)' : 'rgba(15,174,98,0.3)', style: 2 },
-        horzLine: { color: isDark ? 'rgba(125,255,155,0.3)' : 'rgba(15,174,98,0.3)', style: 2 },
+        vertLine: { color: isDark ? 'rgba(43,217,106,0.3)' : 'rgba(15,174,98,0.3)', style: 2 },
+        horzLine: { color: isDark ? 'rgba(43,217,106,0.3)' : 'rgba(15,174,98,0.3)', style: 2 },
       },
       rightPriceScale: {
         borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)',
@@ -299,20 +299,20 @@ export default function Chart() {
       });
     } else if (chartType === 'line') {
       mainSeries = chart.addSeries(lc.LineSeries, {
-        color: '#7dff9b', lineWidth: 2,
+        color: '#2bd96a', lineWidth: 2,
         priceFormat: priceFormatOpt,
       });
     } else {
       mainSeries = chart.addSeries(lc.AreaSeries, {
-        topColor: 'rgba(125,255,155,0.4)', bottomColor: 'rgba(125,255,155,0.02)',
-        lineColor: '#7dff9b', lineWidth: 2,
+        topColor: 'rgba(43,217,106,0.4)', bottomColor: 'rgba(43,217,106,0.02)',
+        lineColor: '#2bd96a', lineWidth: 2,
         priceFormat: priceFormatOpt,
       });
     }
     seriesRefs.current.main = mainSeries;
 
     const volumeSeries = chart.addSeries(lc.HistogramSeries, {
-      color: 'rgba(125,255,155,0.15)',
+      color: 'rgba(43,217,106,0.15)',
       priceFormat: { type: 'volume' },
       priceScaleId: 'volume',
       priceLineVisible: false,
@@ -334,10 +334,10 @@ export default function Chart() {
     // Bollinger
     if (showBB) {
       seriesRefs.current.bbUpper = chart.addSeries(lc.LineSeries, {
-        color: 'rgba(125,255,155,0.4)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+        color: 'rgba(43,217,106,0.4)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
       });
       seriesRefs.current.bbLower = chart.addSeries(lc.LineSeries, {
-        color: 'rgba(125,255,155,0.4)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+        color: 'rgba(43,217,106,0.4)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
       });
     }
 
@@ -367,7 +367,7 @@ export default function Chart() {
     // RSI pane
     if (showRSI) {
       seriesRefs.current.rsi = chart.addSeries(lc.LineSeries, {
-        color: '#7dff9b', lineWidth: 2, priceScaleId: 'rsi', priceLineVisible: false, lastValueVisible: true,
+        color: '#2bd96a', lineWidth: 2, priceScaleId: 'rsi', priceLineVisible: false, lastValueVisible: true,
       });
       chart.priceScale('rsi').applyOptions({ scaleMargins: { top: 0.75, bottom: 0.02 }, borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)' });
       seriesRefs.current.rsiOB = chart.addSeries(lc.LineSeries, {
@@ -442,10 +442,10 @@ export default function Chart() {
       if (drawingTool === 'hline') {
         const id = `hl-${Date.now()}`;
         const ref = mainSeries.createPriceLine({
-          price, color: '#7dff9b', lineWidth: 1, lineStyle: 2,
+          price, color: '#2bd96a', lineWidth: 1, lineStyle: 2,
           axisLabelVisible: true, title: `${formatPrice(price)}`,
         });
-        setPriceLines(prev => [...prev, { price, color: '#7dff9b', label: `${formatPrice(price)}`, id, ref }]);
+        setPriceLines(prev => [...prev, { price, color: '#2bd96a', label: `${formatPrice(price)}`, id, ref }]);
         setDrawingTool('none');
       } else if (drawingTool === 'fib') {
         if (drawClickCount.current === 0) {
@@ -498,7 +498,7 @@ export default function Chart() {
         try {
           const lvlPrice = fb.high - lvl.ratio * (fb.high - fb.low);
           lvl.ref = mainSeries.createPriceLine({
-            price: lvlPrice, color: colors[idx] || '#7dff9b', lineWidth: 1, lineStyle: 2,
+            price: lvlPrice, color: colors[idx] || '#2bd96a', lineWidth: 1, lineStyle: 2,
             axisLabelVisible: true, title: `${(lvl.ratio * 100).toFixed(1)}%`,
           });
         } catch {}

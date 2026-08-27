@@ -5,7 +5,6 @@ import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import BottomBar from '@/components/layout/BottomBar';
 import ErrorBoundary from '@/components/shared/ErrorBoundary';
-import BetaBanner from '@/components/beta/BetaBanner';
 import AnnouncementBar from '@/components/layout/AnnouncementBar';
 import WrongNetworkModal from '@/components/shared/WrongNetworkModal';
 import WelcomeModal from '@/components/beta/WelcomeModal';
@@ -72,7 +71,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
         <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#000000" />
+        <meta name="theme-color" content="#050806" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -84,13 +83,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <div className="flex min-h-[100dvh]">
             <Sidebar />
             <div className="flex-1 min-w-0 flex flex-col md:ml-[52px] xl:ml-[180px]">
-              {/* Banners live INSIDE the offset content column — the sidebar is
-                  fixed at the viewport's left edge and would otherwise cover
-                  their left portion. */}
-              <BetaBanner />
+              {/* One header, one optional dismissible strip. The old beta
+                  banner is now a compact TESTNET pill inside the header. */}
               <Header />
               <AnnouncementBar />
-              <main className="flex-1 flex flex-col pb-[52px] md:pb-0">
+              <main className="page-glow flex-1 flex flex-col pb-[52px] md:pb-0">
                 <ErrorBoundary>{children}</ErrorBoundary>
                 <Footer />
               </main>

@@ -76,7 +76,7 @@ export default function FundingChart() {
 
     const chart = lc.createChart(containerRef.current, {
       layout: {
-        background: { type: lc.ColorType.Solid, color: isDark ? '#050507' : '#ffffff' },
+        background: { type: lc.ColorType.Solid, color: isDark ? '#070b08' : '#ffffff' },
         textColor: isDark ? '#6e6b7b' : '#71717a',
         fontFamily: 'Schibsted Grotesk, sans-serif',
         fontSize: 10,
@@ -87,8 +87,8 @@ export default function FundingChart() {
       },
       crosshair: {
         mode: 0,
-        vertLine: { color: isDark ? 'rgba(125,255,155,0.3)' : 'rgba(15,174,98,0.3)', style: 2 },
-        horzLine: { color: isDark ? 'rgba(125,255,155,0.3)' : 'rgba(15,174,98,0.3)', style: 2 },
+        vertLine: { color: isDark ? 'rgba(43,217,106,0.3)' : 'rgba(15,174,98,0.3)', style: 2 },
+        horzLine: { color: isDark ? 'rgba(43,217,106,0.3)' : 'rgba(15,174,98,0.3)', style: 2 },
       },
       rightPriceScale: {
         borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)',

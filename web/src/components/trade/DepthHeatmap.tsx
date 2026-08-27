@@ -141,7 +141,7 @@ export default function DepthHeatmap() {
       ctx.setLineDash([3, 3]);
       ctx.moveTo(mx, padding.top);
       ctx.lineTo(mx, padding.top + chartH);
-      ctx.strokeStyle = 'rgba(125,255,155,0.4)';
+      ctx.strokeStyle = 'rgba(43,217,106,0.4)';
       ctx.lineWidth = 1;
       ctx.stroke();
       ctx.setLineDash([]);

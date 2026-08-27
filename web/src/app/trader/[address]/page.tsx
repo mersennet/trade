@@ -120,7 +120,7 @@ export default function TraderProfilePage() {
   const flowCurve = buildFlowCurve(trades);
 
   return (
-    <div className="p-4 max-w-full space-y-6">
+    <div className="page-shell space-y-6">
       <div className="flex items-center gap-3">
         <button onClick={() => router.back()} className="text-dim hover:text-muted text-sm transition-colors">
           &larr; Back

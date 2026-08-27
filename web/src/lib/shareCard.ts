@@ -27,8 +27,8 @@ export async function downloadShareCard(data: ShareCardData): Promise<void> {
 
   const win = data.pnl >= 0;
   const accent = win ? '#34d399' : '#ff5240';
-  const bg = '#0a0a0c';
-  const panel = '#111114';
+  const bg = '#0a0e0b';
+  const panel = '#101511';
   const dim = '#7b7b8a';
   const fg = '#ececef';
 
@@ -84,7 +84,7 @@ export async function downloadShareCard(data: ShareCardData): Promise<void> {
   ctx.fillText(fmt(data.markPrice, 4), 400, 553);
 
   // Mersenne mark bottom-right
-  ctx.fillStyle = 'rgba(125,255,155,0.5)';
+  ctx.fillStyle = 'rgba(43,217,106,0.5)';
   ctx.font = '600 24px system-ui, sans-serif';
   ctx.fillText('trade.mersennet.com', W - 380, H - 48);
 

@@ -47,7 +47,7 @@ export default function MarketLoader() {
         style={{
           width: `${progress}%`,
           transition: 'width 250ms cubic-bezier(0.4, 0, 0.2, 1)',
-          boxShadow: '0 0 6px rgba(125,255,155,0.6)',
+          boxShadow: '0 0 6px rgba(43,217,106,0.6)',
         }}
       />
     </div>

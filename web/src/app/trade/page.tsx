@@ -6,7 +6,6 @@ import Chart from '@/components/trade/Chart';
 import OrderBook from '@/components/trade/OrderBook';
 import TradeForm from '@/components/trade/TradeForm';
 import PositionsTable from '@/components/trade/PositionsTable';
-import FundingChart from '@/components/trade/FundingChart';
 import AccountPanel from '@/components/trade/AccountPanel';
 import PrivacyPanel from '@/components/trade/PrivacyPanel';
 import GettingStarted from '@/components/trade/GettingStarted';
@@ -60,8 +59,6 @@ const MOBILE_TABS: { key: MobileTab; label: string; icon: React.ReactNode }[] = 
 export default function TradePage() {
   const [mobileTab, setMobileTab] = useState<MobileTab>('chart');
   const { market, tickers } = useStore();
-  const tradeMode = useStore((s) => s.tradeMode);
-  const isSpot = tradeMode === 'spot';
   // Watch TP/SL brackets and fire signed closing orders when triggers cross.
   useBrackets();
   // Watch price alerts and notify on crossings.
@@ -132,16 +129,13 @@ export default function TradePage() {
       </div>
 
       {/* Desktop layout - seamless grid with 1px shared borders, no rounded corners on inner panels */}
-      <div className="hidden md:grid flex-1 min-h-0 border-t border-border gap-px bg-border" style={{ gridTemplateColumns: 'minmax(0, 1fr) 220px 250px' }}>
+      <div className="hidden md:grid flex-1 min-h-0 border-t border-border gap-px bg-border" style={{ gridTemplateColumns: 'minmax(0, 1fr) 240px 280px' }}>
         <div className="flex flex-col gap-px min-h-0 min-w-0">
+          {/* Funding history moved out of the prime chart column — it lives in
+              the Funding tab of the positions panel below. */}
           <div className="flex-1 min-h-[200px] bg-surface">
             <Chart />
           </div>
-          {!isSpot && (
-            <div className="h-[110px] lg:h-[130px] bg-surface shrink-0">
-              <FundingChart />
-            </div>
-          )}
           <div className="h-[200px] lg:h-[240px] bg-surface shrink-0" data-tour="positions">
             <PositionsTable />
           </div>

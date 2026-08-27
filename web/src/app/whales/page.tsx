@@ -57,18 +57,18 @@ export default function WhalesPage() {
   };
 
   return (
-    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-5">
+    <div className="page-shell space-y-5">
       {/* Header */}
       <header className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight flex items-center gap-2">
+          <h1 className="page-title">
             Whale Tracker
             <span className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded bg-green/10 text-green text-[10px] font-semibold uppercase tracking-wider">
               <span className="w-1.5 h-1.5 rounded-full bg-green animate-pulse" />
               Live · 10s
             </span>
           </h1>
-          <p className="text-dim text-xs md:text-[13px] mt-0.5">Large trades and active whales across all markets</p>
+          <p className="page-sub">Large trades and active whales across all markets</p>
         </div>
         <div className="flex items-center gap-px bg-background rounded-md border border-border overflow-hidden">
           {THRESHOLDS.map((t) => (

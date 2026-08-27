@@ -42,12 +42,12 @@ export default function LeaderboardPage() {
   }, [period, sort]);
 
   return (
-    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-5">
+    <div className="page-shell space-y-5">
       {/* Header */}
       <header className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight">Leaderboard</h1>
-          <p className="text-dim text-xs md:text-[13px] mt-0.5">Top traders ranked by performance</p>
+          <h1 className="page-title">Leaderboard</h1>
+          <p className="page-sub">Top traders ranked by performance</p>
         </div>
       </header>
 

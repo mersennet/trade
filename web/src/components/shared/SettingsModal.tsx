@@ -159,7 +159,7 @@ export default function SettingsModal() {
                   className={cn(
                     'flex-1 py-2 text-xs font-medium rounded-lg transition-all',
                     slippage === v
-                      ? 'bg-primary/15 text-primary shadow-[inset_0_0_0_1px_rgba(125,255,155,0.25)]'
+                      ? 'bg-primary/15 text-primary shadow-[inset_0_0_0_1px_rgba(43,217,106,0.25)]'
                       : 'bg-surface-2 text-dim hover:text-muted'
                   )}
                 >{v}%</button>

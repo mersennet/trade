@@ -103,10 +103,10 @@ export default function StakingPage() {
   const totalNetwork = rows.reduce((s, r) => s + BigInt(r.selfStake) + BigInt(r.delegatedTotal), 0n);
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8">
+    <div className="page-shell">
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-foreground">Staking</h1>
-        <p className="text-sm text-dim mt-1 max-w-2xl">
+        <h1 className="page-title">Staking</h1>
+        <p className="page-sub">
           Delegate MRSN to a validator and earn a share of every block reward it
           proposes, minus the validator&apos;s commission. Undelegating starts a
           ~4 hour unbonding period before the principal is withdrawable.

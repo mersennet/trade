@@ -35,14 +35,14 @@ export default function PointsPage() {
     : 100;
 
   return (
-    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-5">
+    <div className="page-shell space-y-5">
       {/* Header */}
       <header>
         <div className="flex items-center gap-2 flex-wrap">
-          <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight">Points & Rewards</h1>
+          <h1 className="page-title">Points & Rewards</h1>
           <span className="px-1.5 py-0.5 bg-primary/10 text-primary rounded text-[9px] font-semibold uppercase tracking-wider">Season 1 · Live</span>
         </div>
-        <p className="text-dim text-xs md:text-[13px] mt-0.5">Earn points through trading, providing liquidity, and referrals</p>
+        <p className="page-sub">Earn points through trading, providing liquidity, and referrals</p>
       </header>
 
       {/* Trading points are live (accrued from on-chain volume). LP / referral /

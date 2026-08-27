@@ -99,7 +99,7 @@ export default function OptionsPage() {
   };
 
   return (
-    <div className="p-3 md:p-4 max-w-full space-y-4">
+    <div className="page-shell space-y-4">
       {/* Options settle in the API's database, not on-chain — labeled a
           preview like vault/funding-arb so nobody mistakes it for live. */}
       <div className="bg-yellow/10 border border-yellow/40 rounded-lg p-3 flex items-start gap-2.5">
@@ -117,7 +117,7 @@ export default function OptionsPage() {
       </div>
 
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-2">
-        <h2 className="text-xl font-bold text-foreground">Options</h2>
+        <h1 className="page-title">Options</h1>
         <div className="flex gap-1 bg-surface-2 rounded-lg p-1">
           {(['BTC', 'ETH'] as const).map((u) => (
             <button
@@ -125,7 +125,7 @@ export default function OptionsPage() {
               onClick={() => setUnderlying(u)}
               className={cn(
                 'px-4 py-1.5 rounded-md text-xs font-semibold transition-all duration-200',
-                underlying === u ? 'bg-primary/10 text-primary shadow-[inset_0_0_0_1px_rgba(125,255,155,0.2)]' : 'text-dim hover:text-muted'
+                underlying === u ? 'bg-primary/10 text-primary shadow-[inset_0_0_0_1px_rgba(43,217,106,0.2)]' : 'text-dim hover:text-muted'
               )}
             >{u}</button>
           ))}

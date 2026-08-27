@@ -85,10 +85,10 @@ export default function ApiPage() {
   };
 
   return (
-    <div className="p-4 max-w-full space-y-8">
+    <div className="page-shell space-y-8">
       <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-foreground mb-2">Mersennet Trade API</h2>
-        <p className="text-dim">REST + WebSocket API for trading bots and integrations</p>
+        <h1 className="page-title">Mersennet Trade API</h1>
+        <p className="page-sub">REST + WebSocket API for trading bots and integrations</p>
       </div>
 
       <div className="grid md:grid-cols-3 gap-4">

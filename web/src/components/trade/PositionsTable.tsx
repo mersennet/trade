@@ -253,9 +253,11 @@ export default function PositionsTable() {
           ))}
         </div>
         <div className="flex items-center gap-2 shrink-0 mr-2">
-          <label className="flex items-center gap-1.5 cursor-pointer select-none">
+          <label className="flex items-center gap-1.5 cursor-pointer select-none" title="Show only the selected market">
             <input type="checkbox" checked={hideOtherSymbols} onChange={(e) => setHideOtherSymbols(e.target.checked)} className="accent-primary w-3 h-3 rounded" />
-            <span className="text-[10px] text-dim whitespace-nowrap">Current Only</span>
+            {/* Label text hides at narrow widths so it never collides with the
+                scrolling tab strip; the checkbox + tooltip remain. */}
+            <span className="text-[10px] text-dim whitespace-nowrap hidden lg:inline">Current Only</span>
           </label>
           {tab === 'orders' && filteredOrders.length > 0 && (
             <button onClick={handleCancelAll} className="text-[10px] text-red hover:text-red/80 font-medium transition-colors whitespace-nowrap">

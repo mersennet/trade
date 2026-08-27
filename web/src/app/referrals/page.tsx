@@ -45,10 +45,10 @@ export default function ReferralsPage() {
   };
 
   return (
-    <div className="p-4 max-w-full space-y-6">
+    <div className="page-shell space-y-6">
       <div className="text-center mb-6">
-        <h2 className="text-2xl font-bold text-foreground mb-2">Referrals & Builder Codes</h2>
-        <p className="text-dim">Earn revenue share by referring traders or building integrations</p>
+        <h1 className="page-title">Referrals & Builder Codes</h1>
+        <p className="page-sub">Earn revenue share by referring traders or building integrations</p>
       </div>
 
       {/* Attribution from signed on-chain orders is not wired up yet, so
@@ -103,7 +103,7 @@ export default function ReferralsPage() {
           <div className="flex gap-2">
             <input value={newCode} onChange={(e) => setNewCode(e.target.value)} placeholder="Code (optional, auto-generated)" className="flex-1 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary transition-colors duration-200" />
             <input value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="Label" className="w-32 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary transition-colors duration-200" />
-            <button onClick={createCode} className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium hover:shadow-[0_0_16px_rgba(125,255,155,0.15)] transition-all duration-200">
+            <button onClick={createCode} className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium hover:shadow-[0_0_16px_rgba(43,217,106,0.15)] transition-all duration-200">
               Create
             </button>
           </div>

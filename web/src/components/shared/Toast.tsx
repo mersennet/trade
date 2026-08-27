@@ -40,7 +40,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               'px-4 py-3 rounded-lg text-xs font-medium shadow-lg backdrop-blur-xl border',
               t.type === 'success' && 'bg-green/10 text-green border-green/20 shadow-[0_0_16px_rgba(52,211,153,0.1)]',
               t.type === 'error' && 'bg-red/10 text-red border-red/20 shadow-[0_0_16px_rgba(255,82,64,0.12)]',
-              t.type === 'info' && 'bg-primary/10 text-primary border-primary/20 shadow-[0_0_16px_rgba(125,255,155,0.1)]',
+              t.type === 'info' && 'bg-primary/10 text-primary border-primary/20 shadow-[0_0_16px_rgba(43,217,106,0.1)]',
               t.type === 'warning' && 'bg-yellow/10 text-yellow border-yellow/20 shadow-[0_0_16px_rgba(255,154,60,0.1)]',
             )}
           >

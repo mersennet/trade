@@ -8,16 +8,16 @@ import TokenLogo from '@/components/TokenLogo';
  */
 export default function FaucetPage() {
   return (
-    <main className="min-h-[70vh] flex items-center justify-center px-4 py-12">
+    <main className="page-shell min-h-[70vh] flex items-center justify-center">
       <div className="w-full max-w-lg rounded-2xl border border-border bg-surface p-6 sm:p-8 text-center">
         <div className="mx-auto mb-5 inline-flex items-center justify-center w-14 h-14 rounded-full bg-primary/10">
           <TokenLogo symbol="MRSN" size={36} />
         </div>
 
-        <h1 className="text-[20px] font-semibold text-foreground tracking-tight mb-2">
+        <h1 className="page-title">
           Get testnet MRSN
         </h1>
-        <p className="text-[13px] text-dim leading-relaxed mb-5">
+        <p className="page-sub">
           Mersennet Trade settles in <strong className="text-foreground">native MRSN</strong> on the
           Mersennet testnet. Claim free MRSN from the faucet, then deposit it as trading
           collateral from the account panel.

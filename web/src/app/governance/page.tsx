@@ -111,10 +111,10 @@ export default function GovernancePage() {
   const filtered = proposals.filter((p) => filter === 'all' || p.status === filter);
 
   return (
-    <div className="p-4 max-w-full space-y-6">
+    <div className="page-shell space-y-6">
       <div className="text-center mb-6">
-        <h2 className="text-2xl font-bold text-foreground mb-2">Governance</h2>
-        <p className="text-dim text-sm">Vote on proposals to shape the future of Mersennet Trade</p>
+        <h1 className="page-title">Governance</h1>
+        <p className="page-sub">Vote on proposals to shape the future of Mersennet Trade</p>
       </div>
 
       {/* Voting power reads real on-chain delegations, but votes themselves
@@ -159,7 +159,7 @@ export default function GovernancePage() {
               className={cn(
                 'px-4 py-2 text-sm rounded-md transition-all duration-200 capitalize',
                 filter === f
-                  ? 'bg-primary/10 text-primary shadow-[inset_0_0_0_1px_rgba(125,255,155,0.2)]'
+                  ? 'bg-primary/10 text-primary shadow-[inset_0_0_0_1px_rgba(43,217,106,0.2)]'
                   : 'text-dim hover:text-muted'
               )}
             >
@@ -170,7 +170,7 @@ export default function GovernancePage() {
         {isConnected && (
           <button
             onClick={() => setShowCreate(!showCreate)}
-            className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-xs font-medium hover:shadow-[0_0_16px_rgba(125,255,155,0.15)] transition-all duration-200"
+            className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-xs font-medium hover:shadow-[0_0_16px_rgba(43,217,106,0.15)] transition-all duration-200"
           >
             {showCreate ? 'Cancel' : '+ New Proposal'}
           </button>

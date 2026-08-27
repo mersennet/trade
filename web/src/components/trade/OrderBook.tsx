@@ -298,6 +298,11 @@ export default function OrderBook() {
             // compact ladder centered on the spread instead of leaving a huge
             // void above the asks; dense sides still cap at half the panel.
             <div className="flex-1 overflow-hidden flex flex-col justify-center min-h-0">
+              {asks.length === 0 && (
+                <div className="py-4 text-center text-[10px] text-dim/70">
+                  No asks resting — sells fill instantly
+                </div>
+              )}
               <div className="overflow-y-auto flex flex-col-reverse min-h-0 max-h-[calc(50%-20px)]">
                 {asks.map((level, i) => (
                   <div
@@ -331,6 +336,11 @@ export default function OrderBook() {
                 </span>
               </div>
 
+              {bids.length === 0 && (
+                <div className="py-4 text-center text-[10px] text-dim/70">
+                  No bids resting — buys fill instantly
+                </div>
+              )}
               <div className="overflow-y-auto min-h-0 max-h-[calc(50%-20px)]">
                 {bids.map((level, i) => (
                   <div
