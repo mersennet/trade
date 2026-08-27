@@ -443,22 +443,24 @@ export default function TradeForm() {
 
       {/* Side toggle. Parent uses background color + gap-px so the 1px gap
           reads as a thin dark divider between cells. */}
-      <div className="flex gap-px bg-background rounded-md overflow-hidden border border-border">
+      {/* Side toggle — phosphor: the active side is a solid block with dark
+          text, the inactive side stays an outlined ghost. */}
+      <div className="flex gap-px bg-background overflow-hidden border border-border">
         <button
           onClick={() => setTrade({ side: 'buy' })}
           className={cn(
-            'flex-1 py-1.5 text-[13px] font-semibold transition-colors',
+            'flex-1 py-2 text-[11px] font-extrabold uppercase tracking-[0.18em] transition-colors',
             trade.side === 'buy'
-              ? 'bg-green/15 text-green'
+              ? 'bg-green text-[#02120a]'
               : 'bg-surface-2 text-dim hover:text-foreground'
           )}
         >{isSpot ? t('trade.buy', 'Buy') : t('trade.long', 'Long')}</button>
         <button
           onClick={() => setTrade({ side: 'sell' })}
           className={cn(
-            'flex-1 py-1.5 text-[13px] font-semibold transition-colors',
+            'flex-1 py-2 text-[11px] font-extrabold uppercase tracking-[0.18em] transition-colors',
             trade.side === 'sell'
-              ? 'bg-red/15 text-red'
+              ? 'bg-red text-[#160503]'
               : 'bg-surface-2 text-dim hover:text-foreground'
           )}
         >{isSpot ? t('trade.sell', 'Sell') : t('trade.short', 'Short')}</button>
@@ -522,7 +524,7 @@ export default function TradeForm() {
       {/* Price field */}
       {trade.orderType === 'limit' && (
         <div>
-          <label className="text-[11px] text-muted mb-1.5 block font-medium">{t('trade.price', 'Price')} ({market.quote})</label>
+          <label className="label-caps mb-1.5 flex justify-between"><span>{t('trade.price', 'Price')}</span><span>{market.quote}</span></label>
           <input
             type="number" value={trade.price}
             aria-label={`Price (${market.quote})`}
@@ -542,7 +544,7 @@ export default function TradeForm() {
       {/* Size */}
       <div>
         <div className="flex items-center justify-between mb-1.5">
-          <label className="text-[11px] text-muted font-medium">{t('trade.size', 'Size')} ({market.base})</label>
+          <label className="label-caps">{t('trade.size', 'Size')} · {market.base}</label>
           <button onClick={() => setShowCalc(!showCalc)} className="text-[10px] text-primary hover:text-primary-hover font-medium">
             {showCalc ? 'Hide Calc' : 'Size Calc'}
           </button>
@@ -630,8 +632,8 @@ export default function TradeForm() {
       {!isSpot && (
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-[11px] text-muted font-medium">{t('trade.leverage', 'Leverage')}</label>
-            <span className="text-xs font-mono font-semibold text-foreground">{trade.leverage}×</span>
+            <label className="label-caps">{t('trade.leverage', 'Leverage')}</label>
+            <span className="text-xs font-mono font-bold text-primary-bright">{trade.leverage}×</span>
           </div>
           <input
             type="range" min={1} max={market.maxLeverage} value={trade.leverage}
@@ -812,12 +814,12 @@ export default function TradeForm() {
         onClick={handleSubmit}
         disabled={loading || !isConnected}
         className={cn(
-          'w-full py-2.5 rounded-md text-[13px] font-semibold tracking-wide transition-colors disabled:cursor-not-allowed mt-0.5',
+          'w-full py-2.5 text-[11px] font-extrabold uppercase tracking-[0.2em] transition-colors disabled:cursor-not-allowed mt-0.5',
           !isConnected
             ? 'bg-surface-2 text-dim border border-border'
             : trade.side === 'buy'
-              ? 'bg-green hover:bg-green/90 text-white shadow-[0_0_14px_rgba(52,211,153,0.18)]'
-              : 'bg-red hover:bg-red/90 text-white shadow-[0_0_14px_rgba(255,82,64,0.15)]'
+              ? 'bg-green hover:bg-primary-bright text-[#02120a] shadow-[0_0_18px_rgba(43,217,106,0.25)]'
+              : 'bg-red hover:bg-red/90 text-[#160503] shadow-[0_0_18px_rgba(255,77,61,0.2)]'
         )}
       >
         {loading

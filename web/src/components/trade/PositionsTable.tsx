@@ -241,8 +241,8 @@ export default function PositionsTable() {
               key={t.key}
               onClick={() => setTab(t.key)}
               className={cn(
-                'px-2.5 md:px-3 py-2.5 text-[11px] md:text-xs font-medium transition-all duration-200 whitespace-nowrap shrink-0',
-                tab === t.key ? 'text-foreground border-b-2 border-primary' : 'text-dim hover:text-muted'
+                'px-2.5 md:px-3 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] transition-all duration-200 whitespace-nowrap shrink-0',
+                tab === t.key ? 'bg-[var(--primary-dim)] text-primary-bright' : 'text-dim hover:text-muted'
               )}
             >
               {t.label}

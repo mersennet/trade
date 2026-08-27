@@ -270,7 +270,7 @@ export default function MarketBar() {
               )}
             >
               <TokenLogo symbol={m.base} size={16} />
-              <span className={cn('font-semibold', active && 'text-primary')}>{m.base}</span>
+              <span className={cn('font-bold', active && 'text-primary-bright')}>{m.base}</span>
               <span className="font-mono tabular-nums text-foreground/70">
                 {t ? formatPrice(t.markPrice) : '—'}
               </span>
@@ -312,7 +312,7 @@ export default function MarketBar() {
                 <span className="text-[13px] font-semibold text-foreground tracking-tight">{market.base}</span>
                 <span className="text-[10px] text-dim">/{market.quote}</span>
               </div>
-              <span className="font-mono font-semibold tabular-nums text-foreground text-[18px] md:text-[20px] leading-none">
+              <span className="font-mono font-extrabold tabular-nums text-primary-bright crt-glow text-[18px] md:text-[21px] leading-none">
                 {formatPrice(stats.markPrice)}
               </span>
               <span className={cn(

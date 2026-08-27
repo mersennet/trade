@@ -60,15 +60,19 @@ export default function Header() {
 
   return (
     <header className="h-11 md:h-12 bg-surface/80 backdrop-blur-xl border-b border-border flex items-center justify-between px-3 md:px-4 sticky top-0 z-30">
-      <div className="flex items-center gap-2 min-w-0">
+      <div className="flex items-center gap-2.5 min-w-0">
         <Link href="/trade" className="md:hidden flex items-center">
-          <Image src="/logo.png" alt="Mersennet Trade" width={28} height={28} className="shrink-0" priority />
+          <Image src="/logo.png" alt="Mersennet Trade" width={26} height={26} className="shrink-0" priority />
         </Link>
-        <h1 className="text-xs md:text-sm font-semibold text-foreground tracking-tight truncate">{title}</h1>
+        {/* Command-bar path: MERSENNET is the wordmark in the sidebar; here the
+            page reads as a system location, e.g. "TRADE / MARKETS". */}
+        <h1 className="text-[11px] md:text-xs font-bold text-foreground uppercase tracking-[0.14em] truncate">
+          <span className="hidden md:inline text-dim font-medium">TRADE&nbsp;/&nbsp;</span>{title}
+        </h1>
         <Link
           href="/risk"
           title="Public testnet — trade with caution; bugs may exist. Read the risk disclosure."
-          className="shrink-0 px-1.5 py-[3px] rounded border border-yellow/30 bg-yellow/10 text-yellow text-[9px] font-semibold uppercase tracking-[0.08em] leading-none hover:bg-yellow/20 transition-colors"
+          className="shrink-0 px-1.5 py-[3px] border border-yellow/40 bg-yellow/5 text-yellow text-[9px] font-semibold uppercase tracking-[0.14em] leading-none hover:bg-yellow/15 transition-colors"
         >
           Testnet
         </Link>
@@ -95,7 +99,7 @@ export default function Header() {
               if (pathname !== '/trade') router.push('/trade');
               requestDeposit();
             }}
-            className="px-3 h-8 bg-primary/10 text-primary border border-primary/25 rounded-lg text-[11.5px] font-semibold hover:bg-primary/20 transition-colors"
+            className="px-3 h-8 bg-primary/10 text-primary border border-primary/40 text-[10px] font-bold uppercase tracking-[0.12em] hover:bg-primary/20 transition-colors"
           >Deposit</button>
         )}
         <div className="relative" ref={langRef}>

@@ -214,12 +214,12 @@ export default function OrderBook() {
           {/* "Book" not "Order Book": the panel is a fixed 220px and the long
               label forced a wrap that overlapped the unit/grouping chips. */}
           <button onClick={() => setActiveTab('book')} className={cn(
-            'px-2.5 py-2 text-[11px] font-medium transition-colors border-b-2 -mb-px whitespace-nowrap',
-            activeTab === 'book' ? 'text-foreground border-primary' : 'text-dim hover:text-muted border-transparent'
+            'px-2.5 py-[7px] text-[10px] font-bold uppercase tracking-[0.16em] transition-colors whitespace-nowrap',
+            activeTab === 'book' ? 'bg-[var(--primary-dim)] text-primary-bright' : 'text-dim hover:text-muted'
           )}>Book</button>
           <button onClick={() => setActiveTab('trades')} className={cn(
-            'px-2.5 py-2 text-[11px] font-medium transition-colors border-b-2 -mb-px whitespace-nowrap',
-            activeTab === 'trades' ? 'text-foreground border-primary' : 'text-dim hover:text-muted border-transparent'
+            'px-2.5 py-[7px] text-[10px] font-bold uppercase tracking-[0.16em] transition-colors whitespace-nowrap',
+            activeTab === 'trades' ? 'bg-[var(--primary-dim)] text-primary-bright' : 'text-dim hover:text-muted'
           )}>Trades</button>
         </div>
         {activeTab === 'book' && (
@@ -326,8 +326,8 @@ export default function OrderBook() {
 
               <div className="px-3 py-2 border-y border-border bg-surface-2/60 flex items-center justify-between shrink-0">
                 <span className={cn(
-                  'text-[15px] font-bold font-mono tabular-nums tracking-tight transition-colors duration-300',
-                  midDir === 'up' ? 'text-green' : midDir === 'down' ? 'text-red' : 'text-foreground'
+                  'text-[16px] font-extrabold font-mono tabular-nums tracking-tight transition-colors duration-300 crt-glow',
+                  midDir === 'up' ? 'text-green' : midDir === 'down' ? 'text-red' : 'text-primary-bright'
                 )}>
                   {midPrice ? formatPrice(midPrice) : '—'}
                 </span>

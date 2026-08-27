@@ -6,6 +6,7 @@ import Header from '@/components/layout/Header';
 import BottomBar from '@/components/layout/BottomBar';
 import ErrorBoundary from '@/components/shared/ErrorBoundary';
 import AnnouncementBar from '@/components/layout/AnnouncementBar';
+import StatusLine from '@/components/layout/StatusLine';
 import WrongNetworkModal from '@/components/shared/WrongNetworkModal';
 import WelcomeModal from '@/components/beta/WelcomeModal';
 import Footer from '@/components/beta/Footer';
@@ -71,12 +72,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
         <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#050806" />
+        <meta name="theme-color" content="#030604" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
       </head>
       <body className="antialiased overscroll-none">
         <Providers>
@@ -87,13 +88,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   banner is now a compact TESTNET pill inside the header. */}
               <Header />
               <AnnouncementBar />
-              <main className="page-glow flex-1 flex flex-col pb-[52px] md:pb-0">
+              <main className="page-glow flex-1 flex flex-col pb-[52px] md:pb-6">
                 <ErrorBoundary>{children}</ErrorBoundary>
                 <Footer />
               </main>
             </div>
           </div>
           <BottomBar />
+          <StatusLine />
           <WelcomeModal />
           <WrongNetworkModal />
         </Providers>

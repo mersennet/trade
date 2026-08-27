@@ -1,5 +1,5 @@
 @import "tailwindcss";
-/* Schibsted Grotesk (brand font) is loaded via <link> in app/layout.tsx — putting any @import after
+/* Schibsted Grotesk + JetBrains Mono are loaded via <link> in app/layout.tsx — putting any @import after
    `@import "tailwindcss"` makes Tailwind v4 silently drop its expanded output
    (the resulting bundle would have an @import after other rules, which is
    spec-invalid). Load fonts through layout.tsx or next/font instead. */
@@ -23,57 +23,71 @@
   --color-dim: var(--dim);
   --color-primary-bright: var(--primary-bright);
   --color-orange: #f97316;
-  --font-sans: "Schibsted Grotesk", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", "SF Mono", monospace;
+  /* PHOSPHOR: the terminal is monospace-first. Schibsted Grotesk survives
+     only as the display face for the wordmark / big symbols via .font-display. */
+  --font-sans: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  /* PHOSPHOR: hard corners everywhere. Zeroing the radius scale kills every
+     rounded-* utility in one move while rounded-full (calc(infinity*1px))
+     keeps dots, LEDs and token logos circular. */
+  --radius-xs: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-3xl: 0;
+  --radius-4xl: 0;
 }
 
-/* Mersennet brand — phosphor terminal, anchored on the brand greens.
-   Neutrals carry a faint green cast (never pure black / pure gray boxes):
-   the whole surface stack lives on the brand hue, which is what separates
-   "Mersennet's terminal" from "generic dark perp DEX template". Accent is
-   the brand mid-green (#2bd96a, from the media kit gradient) rather than
-   the toy-neon #7dff9b, which is reserved for small highlights via
-   --primary-bright. */
+/* Mersennet brand — PHOSPHOR TERMINAL. Bloomberg-terminal DNA reborn for an
+   on-chain CLOB: monospace everything, zero border radius, inverted-block
+   section titles, scanline atmosphere. Surfaces sit just above true black
+   with a green cast; hairlines are solid dark green, not translucent white,
+   so panels read as etched phosphor glass rather than floating cards. */
 :root {
-  --background: #050806;
-  --foreground: #e9efe9;
+  --background: #030604;
+  --foreground: #d6e4d6;
   --primary: #2bd96a;
   --primary-hover: #4ce383;
-  --primary-bright: #7dff9b;
+  --primary-bright: #8dffb0;
   --primary-glow: rgba(43, 217, 106, 0.12);
-  --surface: #0a0e0b;
-  --surface-2: #101511;
-  --surface-3: #171d18;
-  --border-color: rgba(190, 255, 210, 0.09);
-  --border-subtle: rgba(190, 255, 210, 0.045);
-  --green: #34d399;
-  --red: #ff5240;
-  --yellow: #ffab3c;
+  --primary-dim: #17512c; /* inverted section-header block */
+  --surface: #060b07;
+  --surface-2: #0a130c;
+  --surface-3: #0d1f12;
+  --border-color: #1b3322;
+  --border-subtle: #12241659;
+  --green: #2bd96a;
+  --red: #ff4d3d;
+  --yellow: #ffb02e;
   --cyan: #5b8cff;
-  --muted: #97a29a;
-  --dim: #6f7d74;
+  --muted: #9db3a0;
+  --dim: #5c6f60;
   color-scheme: dark;
 }
 
+/* Light = "paper terminal": warm paper, deep phosphor green ink. The CRT
+   overlay is disabled here (see body::after guard below). */
 [data-theme="light"] {
-  --background: #f7faf7;
-  --foreground: #0e120f;
-  /* brand deep green (#0c8f43) on light backgrounds */
+  --background: #f4f7f2;
+  --foreground: #10160f;
   --primary: #0c8f43;
   --primary-hover: #0fae62;
   --primary-bright: #0c8f43;
   --primary-glow: rgba(12, 143, 67, 0.1);
-  --surface: #ffffff;
-  --surface-2: #f0f4f0;
-  --surface-3: #e5ebe6;
-  --border-color: rgba(10, 40, 20, 0.1);
-  --border-subtle: rgba(10, 40, 20, 0.05);
-  --green: #16a34a;
-  --red: #dc2626;
-  --yellow: #c2710c;
+  --primary-dim: #d4e9d7;
+  --surface: #fbfdf9;
+  --surface-2: #ecf1e9;
+  --surface-3: #dfe7dc;
+  --border-color: #c3d2c1;
+  --border-subtle: #c3d2c159;
+  --green: #0c8f43;
+  --red: #d43324;
+  --yellow: #a86a0a;
   --cyan: #2563eb;
-  --muted: #6b756e;
-  --dim: #66716a;
+  --muted: #4d5a4c;
+  --dim: #68766a;
   color-scheme: light;
 }
 
@@ -85,14 +99,74 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: "Schibsted Grotesk", system-ui, sans-serif;
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* CRT atmosphere: scanlines + corner vignette. Fixed, non-interactive, and
+   subtle enough to survive screenshots. Killed in light mode. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 999;
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.13) 0 1px, transparent 1px 3px),
+    radial-gradient(130% 100% at 50% 0%, transparent 60%, rgba(0, 0, 0, 0.38) 100%);
+}
+[data-theme="light"] body::after {
+  display: none;
+}
+@media (max-width: 767px) {
+  /* Scanlines moiré on high-DPI phone screens; keep just the vignette. */
+  body::after {
+    background: radial-gradient(130% 100% at 50% 0%, transparent 60%, rgba(0, 0, 0, 0.3) 100%);
+  }
+}
+
+/* Display face — reserved for the wordmark and market symbols. */
+.font-display {
+  font-family: "Schibsted Grotesk", system-ui, sans-serif;
 }
 
 /* Numerals: always tabular so columns of prices/sizes never wobble. */
 .font-mono {
   font-variant-numeric: tabular-nums;
+}
+
+/* Phosphor glow for hero numbers (mid price, big quotes). */
+.crt-glow {
+  text-shadow: 0 0 8px rgba(43, 217, 106, 0.45);
+}
+[data-theme="light"] .crt-glow {
+  text-shadow: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* Section header — the signature move: an inverted phosphor block.    */
+/* Use on every panel title in the terminal and on page-section heads. */
+/* ------------------------------------------------------------------ */
+.sect {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--primary-dim);
+  color: var(--primary-bright);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+}
+[data-theme="light"] .sect {
+  color: var(--primary);
+}
+.sect-quiet {
+  background: var(--surface-2);
+  color: var(--dim);
 }
 
 /* ------------------------------------------------------------------ */
@@ -113,36 +187,37 @@ body {
 
 /* Page header: title + one-line subtitle, left-aligned, consistent scale. */
 .page-title {
-  font-size: 1.375rem;
+  font-size: 1.25rem;
   line-height: 1.2;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: var(--foreground);
 }
 @media (min-width: 768px) {
-  .page-title { font-size: 1.625rem; }
+  .page-title { font-size: 1.5rem; }
 }
 .page-sub {
   margin-top: 0.375rem;
-  font-size: 0.8125rem;
-  line-height: 1.55;
+  font-size: 0.75rem;
+  line-height: 1.6;
   color: var(--dim);
   max-width: 42rem;
 }
 
-/* Standard card: one surface step up, hairline border, consistent radius. */
+/* Standard card: one surface step up, hairline border, hard corners. */
 .card {
   background: var(--surface);
   border: 1px solid var(--border-color);
-  border-radius: 0.75rem;
+  border-radius: 0;
 }
 
-/* Micro section label — the only sanctioned ALL-CAPS style. */
+/* Micro section label. */
 .label-caps {
   font-size: 0.625rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.14em;
   color: var(--dim);
 }
 
@@ -179,33 +254,49 @@ input[type="number"] {
   color: var(--background);
 }
 
+kbd {
+  border: 1px solid var(--border-color);
+  padding: 0 4px;
+  font-family: inherit;
+  font-size: 0.9em;
+  color: var(--foreground);
+}
+
 .glass {
-  background: rgba(10, 10, 15, 0.7);
+  background: rgba(4, 9, 5, 0.78);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+}
+[data-theme="light"] .glass {
+  background: rgba(244, 247, 242, 0.85);
 }
 
 .glass-card {
   background: linear-gradient(
     135deg,
-    rgba(255, 255, 255, 0.03) 0%,
-    rgba(255, 255, 255, 0.01) 100%
+    rgba(141, 255, 176, 0.03) 0%,
+    rgba(141, 255, 176, 0.01) 100%
   );
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
 }
 
 .glow-green {
-  box-shadow: 0 0 12px rgba(52, 211, 153, 0.15);
+  box-shadow: 0 0 12px rgba(43, 217, 106, 0.18);
 }
 
 .glow-red {
-  box-shadow: 0 0 12px rgba(255, 82, 64, 0.15);
+  box-shadow: 0 0 12px rgba(255, 77, 61, 0.15);
 }
 
+/* Primary action fill — flat phosphor block, no gradient candy. */
 .premium-gradient {
-  background: linear-gradient(135deg, #2bd96a 0%, #7dff9b 50%, #c4ffd4 100%);
+  background: var(--primary);
+  color: #02120a;
+}
+.premium-gradient:hover {
+  background: var(--primary-bright);
 }
 
 .premium-border {
@@ -213,19 +304,17 @@ input[type="number"] {
 }
 
 .hover-lift {
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 .hover-lift:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  border-color: var(--primary-dim);
 }
 
 /* Skeleton shimmer — CSS-only loading placeholder */
 .skeleton {
   position: relative;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 3px;
+  background: rgba(141, 255, 176, 0.05);
 }
 .skeleton::after {
   content: "";
@@ -235,8 +324,8 @@ input[type="number"] {
   background: linear-gradient(
     90deg,
     transparent,
-    rgba(43, 217, 106, 0.05),
-    rgba(255, 255, 255, 0.06),
+    rgba(43, 217, 106, 0.06),
+    rgba(214, 228, 214, 0.06),
     transparent
   );
   animation: skeleton-shimmer 1.6s ease-in-out infinite;
@@ -256,7 +345,7 @@ select {
   -webkit-appearance: none;
   background-color: var(--surface-2);
   color: var(--foreground);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%237b7b8a' stroke-width='3' stroke-linecap='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%235c6f60' stroke-width='3' stroke-linecap='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 0.5rem center;
   padding-right: 1.75rem;
@@ -283,14 +372,21 @@ select option {
   outline-offset: 1px;
 }
 
-/* Range slider with a visible filled track + prominent thumb. The filled
-   portion is driven by the inline `--pct` custom property. Used for the
-   leverage control, where the default native slider was nearly invisible. */
+/* Text inputs get the phosphor focus treatment: brand hairline + faint bloom. */
+:where(input[type="text"], input[type="number"], input[type="email"], textarea):focus {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 1px var(--primary-dim), 0 0 12px rgba(43, 217, 106, 0.12);
+}
+[data-theme="light"] :where(input[type="text"], input[type="number"], input[type="email"], textarea):focus {
+  box-shadow: 0 0 0 1px var(--primary-dim);
+}
+
+/* Range slider with a visible filled track + squared thumb. The filled
+   portion is driven by the inline `--pct` custom property. */
 .range-fill {
   -webkit-appearance: none;
   appearance: none;
-  height: 6px;
-  border-radius: 999px;
+  height: 3px;
   background: linear-gradient(
     to right,
     var(--primary) 0%,
@@ -304,23 +400,23 @@ select option {
 .range-fill::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #ffffff;
-  border: 2px solid var(--primary);
-  box-shadow: 0 0 8px rgba(43, 217, 106, 0.5);
+  width: 11px;
+  height: 11px;
+  border-radius: 0;
+  background: var(--primary-bright);
+  border: none;
+  box-shadow: 0 0 8px rgba(43, 217, 106, 0.6);
   cursor: pointer;
   transition: transform 0.12s ease;
 }
-.range-fill::-webkit-slider-thumb:hover { transform: scale(1.15); }
+.range-fill::-webkit-slider-thumb:hover { transform: scale(1.2); }
 .range-fill::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #ffffff;
-  border: 2px solid var(--primary);
-  box-shadow: 0 0 8px rgba(43, 217, 106, 0.5);
+  width: 11px;
+  height: 11px;
+  border-radius: 0;
+  background: var(--primary-bright);
+  border: none;
+  box-shadow: 0 0 8px rgba(43, 217, 106, 0.6);
   cursor: pointer;
 }
 

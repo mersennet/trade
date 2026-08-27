@@ -74,8 +74,8 @@ export default function Sidebar() {
     <aside className="hidden md:flex flex-col h-screen bg-surface border-r border-border fixed left-0 top-0 z-40 w-[52px] xl:w-[180px] transition-all duration-200">
       <div className="h-12 border-b border-border flex items-center justify-center xl:justify-start gap-2 px-2 xl:px-3 shrink-0">
         <Link href="/trade" className="flex items-center gap-2 group">
-          <Image src="/logo.png" alt="Mersennet Trade" width={32} height={32} className="shrink-0 drop-shadow-[0_0_10px_rgba(43,217,106,0.35)]" priority />
-          <span className="hidden xl:block font-semibold text-foreground tracking-tight text-sm">Mersennet Trade</span>
+          <Image src="/logo.png" alt="Mersennet Trade" width={30} height={30} className="shrink-0 drop-shadow-[0_0_10px_rgba(43,217,106,0.35)]" priority />
+          <span className="hidden xl:block font-extrabold text-primary-bright tracking-[0.08em] text-[12px] crt-glow">MERSENNET</span>
         </Link>
       </div>
 
@@ -89,20 +89,21 @@ export default function Sidebar() {
               href={item.href}
               title={label}
               className={cn(
-                'flex items-center justify-center xl:justify-start gap-2.5 px-0 xl:px-3 py-2 text-[12px] rounded-lg transition-all duration-200',
+                'flex items-center justify-center xl:justify-start gap-2.5 px-0 xl:px-3 py-2 text-[10.5px] font-semibold uppercase tracking-[0.12em] transition-all duration-200',
                 active
-                  ? 'bg-primary/10 text-primary shadow-[inset_0_0_0_1px_rgba(43,217,106,0.15)] font-medium'
-                  : 'text-muted hover:text-foreground hover:bg-surface-2'
+                  ? 'bg-[var(--primary-dim)] text-primary-bright'
+                  : 'text-dim hover:text-foreground hover:bg-surface-2'
               )}
             >
-              <span className={cn('w-5 flex items-center justify-center shrink-0', active && 'text-primary')}>{item.icon}</span>
+              <span className={cn('w-5 flex items-center justify-center shrink-0', active && 'text-primary-bright')}>{item.icon}</span>
               <span className="hidden xl:block truncate">{label}</span>
             </Link>
           );
         })}
       </nav>
 
-      <div className="border-t border-border py-1.5 px-1.5 xl:px-2 space-y-0.5">
+      {/* pb-7 keeps the last item clear of the fixed 24px status line. */}
+      <div className="border-t border-border pt-1.5 pb-7 px-1.5 xl:px-2 space-y-0.5">
         {BOTTOM_ITEMS.map((item) => {
           const label = item.tKey ? t(item.tKey, item.label) : item.label;
           return (
@@ -111,10 +112,10 @@ export default function Sidebar() {
               href={item.href}
               title={label}
               className={cn(
-                'flex items-center justify-center xl:justify-start gap-2.5 px-0 xl:px-3 py-2 text-[12px] rounded-lg transition-all duration-200',
+                'flex items-center justify-center xl:justify-start gap-2.5 px-0 xl:px-3 py-2 text-[10.5px] font-semibold uppercase tracking-[0.12em] transition-all duration-200',
                 pathname === item.href
-                  ? 'text-primary bg-primary/10'
-                  : 'text-muted hover:text-foreground hover:bg-surface-2'
+                  ? 'bg-[var(--primary-dim)] text-primary-bright'
+                  : 'text-dim hover:text-foreground hover:bg-surface-2'
               )}
             >
               <span className="w-5 flex items-center justify-center shrink-0">{item.icon}</span>

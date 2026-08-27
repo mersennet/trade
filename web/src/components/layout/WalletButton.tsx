@@ -161,7 +161,7 @@ export default function WalletButton() {
         <button
           onClick={() => setShowConnectMenu(!showConnectMenu)}
           disabled={loading}
-          className="px-3.5 md:px-5 h-8 premium-gradient text-black rounded-lg text-[11.5px] font-semibold whitespace-nowrap transition-all hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-3.5 md:px-5 h-8 premium-gradient text-[10px] font-extrabold uppercase tracking-[0.14em] whitespace-nowrap transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? 'Connecting…' : 'Connect Wallet'}
         </button>
