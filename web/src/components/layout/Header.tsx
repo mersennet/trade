@@ -119,7 +119,11 @@ export default function Header() {
           )}
         </div>
         <NotificationCenter />
-        <ThemeToggle />
+        {/* Theme also lives in Settings; the standalone toggle hides on mobile
+            so the wallet button never wraps in the 390px header. */}
+        <div className="hidden md:block">
+          <ThemeToggle />
+        </div>
         <WalletButton />
       </div>
     </header>

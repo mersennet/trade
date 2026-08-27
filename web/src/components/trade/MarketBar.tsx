@@ -288,8 +288,11 @@ export default function MarketBar() {
           Hero = token logo + symbol + mark price + 24h change chip on the left.
           Secondary stats (Volume / Trades / Funding / Bid / Ask) on the right
           using label-above-value pairs so each pair reads as one unit. */}
+      {/* The stats bar is desktop-only: the mobile market selector row above
+          already shows symbol + price + change, and repeating them in a second
+          56px strip wasted a tenth of a phone screen. */}
       {!stats && (
-        <div className="flex items-center gap-4 md:gap-6 px-3 md:px-4 h-14 bg-surface border-b border-border" role="status" aria-label="Loading market stats">
+        <div className="hidden md:flex items-center gap-4 md:gap-6 px-3 md:px-4 h-14 bg-surface border-b border-border" role="status" aria-label="Loading market stats">
           <div className="skeleton w-7 h-7 rounded-full shrink-0" />
           <div className="skeleton h-5 w-40" />
           <div className="w-px h-7 bg-border shrink-0" />
@@ -300,7 +303,7 @@ export default function MarketBar() {
         </div>
       )}
       {stats && (
-        <div className="flex items-center gap-4 md:gap-6 px-3 md:px-4 h-14 bg-surface border-b border-border overflow-x-auto scrollbar-none">
+        <div className="hidden md:flex items-center gap-4 md:gap-6 px-3 md:px-4 h-14 bg-surface border-b border-border overflow-x-auto scrollbar-none">
           {/* Hero: token logo + symbol + mark price + 24h change pill */}
           <div className="flex items-center gap-3 shrink-0">
             <TokenLogo symbol={market.base} size={28} />
