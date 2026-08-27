@@ -7,7 +7,12 @@ import { useToast } from '@/components/shared/Toast';
 import { api } from '@/lib/api';
 import { formatNumber, cn } from '@/lib/utils';
 import { explorerTx, MERSENNET_TESTNET } from '@/lib/chain';
-import { depositToVault, withdrawFromVault } from '@/lib/vault';
+import {
+  depositToVault, withdrawFromVault,
+  getCollateralAssets, getTokenWalletBalance, getTokenCollateralBalance,
+  depositTokenToVault, withdrawTokenFromVault,
+  type CollateralAsset,
+} from '@/lib/vault';
 import EmptyState from '@/components/shared/EmptyState';
 
 export default function AccountPanel() {
@@ -20,7 +25,12 @@ export default function AccountPanel() {
   const [transferMode, setTransferMode] = useState<'deposit' | 'withdraw'>('deposit');
   const [transferAmount, setTransferAmount] = useState('');
   const [transferring, setTransferring] = useState(false);
-  const [usdcWalletBalance, setUsdcWalletBalance] = useState(0);
+  const [walletMrsn, setWalletMrsn] = useState(0);
+  // Registered ERC-20 collateral (USDC today; the chain allowlist is dynamic).
+  const [tokenAssets, setTokenAssets] = useState<CollateralAsset[]>([]);
+  const [tokenBalances, setTokenBalances] = useState<Record<string, { wallet: number; deposited: number }>>({});
+  // 'MRSN' or a registered token symbol — which asset the transfer panel moves.
+  const [transferAsset, setTransferAsset] = useState('MRSN');
   const [feeTier, setFeeTier] = useState<{ name: string; makerFee: number; takerFee: number } | null>(null);
   const [points, setPoints] = useState<{ total: number; tier: string } | null>(null);
 
@@ -54,8 +64,8 @@ export default function AccountPanel() {
     setShowTransfer(true);
   }, [depositRequestTs]);
 
-  const refreshUsdc = useCallback(async () => {
-    if (!address || !provider) { setUsdcWalletBalance(0); return; }
+  const refreshBalances = useCallback(async () => {
+    if (!address || !provider) { setWalletMrsn(0); setTokenBalances({}); return; }
     try {
       const { ethers } = await import('ethers');
       type EthersLike = typeof import('ethers');
@@ -65,16 +75,31 @@ export default function AccountPanel() {
       // (Rabby right after an add/switch).
       const rpc = new e.providers.JsonRpcProvider(MERSENNET_TESTNET.rpcUrls[0]);
       const bal = await rpc.getBalance(address);
-      setUsdcWalletBalance(Number(e.utils.formatEther(bal)));
+      setWalletMrsn(Number(e.utils.formatEther(bal)));
+    } catch { /* ignore */ }
+    // Registered token collateral (USDC): wallet balance + deposited margin.
+    try {
+      const assets = await getCollateralAssets();
+      setTokenAssets(assets);
+      const entries = await Promise.all(
+        assets.map(async (a) => {
+          const [wallet, deposited] = await Promise.all([
+            getTokenWalletBalance(address, a).catch(() => 0),
+            getTokenCollateralBalance(address, a).catch(() => 0),
+          ]);
+          return [a.symbol, { wallet, deposited }] as const;
+        }),
+      );
+      setTokenBalances(Object.fromEntries(entries));
     } catch { /* ignore */ }
   }, [address, provider]);
 
   useEffect(() => {
-    refreshUsdc();
+    refreshBalances();
     if (!address) return;
-    const t = setInterval(refreshUsdc, 12_000);
+    const t = setInterval(refreshBalances, 12_000);
     return () => clearInterval(t);
-  }, [address, refreshUsdc]);
+  }, [address, refreshBalances]);
 
   const stats = useMemo(() => {
     const totalUnrealizedPnl = positions.reduce((sum, p) => sum + (p.unrealizedPnl || 0), 0);
@@ -158,11 +183,29 @@ export default function AccountPanel() {
           <span className="text-[11px] text-dim">Wallet (gas)</span>
           <span className={cn(
             'text-xs font-mono font-medium',
-            usdcWalletBalance < 1 ? 'text-yellow' : 'text-foreground',
+            walletMrsn < 1 ? 'text-yellow' : 'text-foreground',
           )}>
-            {formatNumber(usdcWalletBalance, usdcWalletBalance >= 1 ? 2 : 4)} MRSN
+            {formatNumber(walletMrsn, walletMrsn >= 1 ? 2 : 4)} MRSN
           </span>
         </div>
+        {/* Registered token collateral (multi-collateral margin, e.g. USDC at
+            90% weight). One row per asset: deposited margin + wallet balance. */}
+        {tokenAssets.map((a) => {
+          const b = tokenBalances[a.symbol];
+          if (!b) return null;
+          return (
+            <div
+              key={a.token}
+              className="flex items-center justify-between"
+              title={`${a.symbol} margin collateral, counted at ${(a.weightBps / 100).toFixed(0)}% of value · wallet balance ${formatNumber(b.wallet, 2)}`}
+            >
+              <span className="text-[11px] text-dim">{a.symbol} Collateral <span className="text-dim/60">({(a.weightBps / 100).toFixed(0)}%)</span></span>
+              <span className="text-xs font-mono font-medium text-foreground">
+                {formatNumber(b.deposited, 2)} <span className="text-dim">/ {formatNumber(b.wallet, 2)} wallet</span>
+              </span>
+            </div>
+          );
+        })}
         {feeTier && (
           <div className="flex items-center justify-between" title="Your fee tier from 30d trading volume">
             <span className="text-[11px] text-dim">Fee Tier</span>
@@ -205,6 +248,21 @@ export default function AccountPanel() {
               transferMode === 'withdraw' ? 'bg-red/10 text-red' : 'text-dim'
             )}>Withdraw</button>
           </div>
+          {/* Asset selector — native MRSN plus registered token collateral. */}
+          {tokenAssets.length > 0 && (
+            <div className="flex gap-0.5 p-0.5 bg-surface rounded-md">
+              {['MRSN', ...tokenAssets.map((a) => a.symbol)].map((sym) => (
+                <button
+                  key={sym}
+                  onClick={() => setTransferAsset(sym)}
+                  className={cn(
+                    'flex-1 py-1 text-[11px] font-semibold rounded transition-all',
+                    transferAsset === sym ? 'bg-primary/10 text-primary' : 'text-dim hover:text-foreground'
+                  )}
+                >{sym}</button>
+              ))}
+            </div>
+          )}
           <div className="relative">
             <input
               type="number"
@@ -214,7 +272,14 @@ export default function AccountPanel() {
               className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm font-mono text-foreground outline-none focus:border-primary/40"
             />
             <button
-              onClick={() => setTransferAmount(transferMode === 'deposit' ? usdcWalletBalance.toFixed(2) : collateral.toFixed(2))}
+              onClick={() => {
+                if (transferAsset === 'MRSN') {
+                  setTransferAmount(transferMode === 'deposit' ? walletMrsn.toFixed(2) : collateral.toFixed(2));
+                } else {
+                  const b = tokenBalances[transferAsset];
+                  setTransferAmount((transferMode === 'deposit' ? b?.wallet ?? 0 : b?.deposited ?? 0).toFixed(2));
+                }
+              }}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-primary font-medium hover:underline"
             >MAX</button>
           </div>
@@ -227,14 +292,19 @@ export default function AccountPanel() {
               setTransferring(true);
               try {
                 let res;
+                const tokenAsset = tokenAssets.find((a) => a.symbol === transferAsset);
                 if (transferMode === 'deposit') {
-                  res = await depositToVault(provider, address, transferAmount);
-                  toast(`Deposited ${transferAmount} MRSN`, 'success');
-                  useStore.getState().addNotification('info', 'Deposit confirmed', `${transferAmount} MRSN added to trading collateral`);
+                  res = tokenAsset
+                    ? await depositTokenToVault(provider, tokenAsset, transferAmount)
+                    : await depositToVault(provider, address, transferAmount);
+                  toast(`Deposited ${transferAmount} ${transferAsset}`, 'success');
+                  useStore.getState().addNotification('info', 'Deposit confirmed', `${transferAmount} ${transferAsset} added to trading collateral`);
                 } else {
-                  res = await withdrawFromVault(provider, address, transferAmount);
-                  toast(`Withdrew ${transferAmount} MRSN`, 'success');
-                  useStore.getState().addNotification('info', 'Withdrawal confirmed', `${transferAmount} MRSN returned to your wallet`);
+                  res = tokenAsset
+                    ? await withdrawTokenFromVault(provider, tokenAsset, transferAmount)
+                    : await withdrawFromVault(provider, address, transferAmount);
+                  toast(`Withdrew ${transferAmount} ${transferAsset}`, 'success');
+                  useStore.getState().addNotification('info', 'Withdrawal confirmed', `${transferAmount} ${transferAsset} returned to your wallet`);
                 }
                 if (typeof window !== 'undefined' && res?.vaultTx) {
                   console.log('[collateral] tx:', explorerTx(res.vaultTx));
@@ -243,7 +313,7 @@ export default function AccountPanel() {
                 setShowTransfer(false);
                 const r = await api.getCollateral(address);
                 setWallet({ collateral: String(Number(r.collateral) || 0) });
-                refreshUsdc();
+                refreshBalances();
               } catch (e) {
                 const msg = (e as Error).message || '';
                 const friendly = /user (rejected|denied)/i.test(msg)

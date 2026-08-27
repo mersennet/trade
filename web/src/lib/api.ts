@@ -54,8 +54,8 @@ export const api = {
     apiFetch<{ orders: Order[] }>(`/orders/${addr}/history?limit=${limit}`),
   submitOrder: (data: OrderSubmit | SignedOrderSubmit) =>
     apiFetch<{ result: unknown }>('/orders', { method: 'POST', body: JSON.stringify(data) }),
-  cancelOrder: (id: number) =>
-    apiFetch<{ result: unknown }>(`/orders/${id}`, { method: 'DELETE' }),
+  // NOTE: on-chain orders are cancelled with a signed tx via
+  // cancelOrderOnChain (lib/orderSigning.ts) — there is no server-side cancel.
   getCollateral: (addr: string) =>
     apiFetch<{ collateral: number; free: number; collateralRaw: string; decimals: number }>(`/collateral/${addr}`),
   // The collateral endpoints return calldata + the raw amount; the FRONTEND
@@ -67,21 +67,13 @@ export const api = {
       approve: { token: string; spender: string; amount: string };
       amountRaw: string; decimals: number;
     }>('/collateral/deposit', { method: 'POST', body: JSON.stringify({ owner, amount }) }),
-  // Gasless deposit — credits collateral server-side (no wallet tx). The chain's
-  // non-standard tx hashing prevents wallets from tracking a signed deposit, so
-  // this is the working path on the faucet testnet.
-  creditCollateral: (owner: string, amount: string) =>
-    apiFetch<{ ok: boolean; owner: string; credited: string; free: number; decimals: number }>(
-      '/collateral/credit',
-      { method: 'POST', body: JSON.stringify({ owner, amount }) },
-    ),
   buildWithdraw: (owner: string, amount: string) =>
     apiFetch<{
       tx: { to: string; data: string; value: string };
       amountRaw: string; decimals: number;
     }>('/collateral/withdraw', { method: 'POST', body: JSON.stringify({ owner, amount }) }),
-  cancelAllOrders: (address: string) =>
-    apiFetch<{ result: unknown }>(`/orders/cancel-all/${address}`, { method: 'POST' }),
+  // NOTE: cancel-all only clears server-side conditional orders and is used by
+  // the dead-man switch via sendBeacon (DeadManSwitch.tsx), not through here.
   getConditionalOrders: (addr: string) =>
     apiFetch<{ orders: ConditionalOrder[] }>(`/orders/${addr}/conditional`),
   cancelConditional: (orderId: number) =>
@@ -242,9 +234,8 @@ export const api = {
   // Portfolio margin
   getPortfolioMargin: (address: string) => apiFetch<PortfolioMarginData>(`/positions/${address}?mode=portfolio`),
 
-  // Auth
-  sendMagicLink: (email: string) => apiFetch<{ sent: boolean }>('/auth/magic-link', { method: 'POST', body: JSON.stringify({ email }) }),
-  verifyMagicLink: (token: string) => apiFetch<{ session: string; address: string }>('/auth/verify', { method: 'POST', body: JSON.stringify({ token }) }),
+  // Email login is "coming soon" in the wallet menu — magic-link client
+  // methods will be added alongside the server implementation, not before.
 };
 
 export function createWsConnection() {

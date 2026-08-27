@@ -95,7 +95,6 @@ interface AppState {
   sessionKey: string | null;
   slippage: number;
   showSettings: boolean;
-  gaslessEnabled: boolean;
   paperMode: boolean;
   tradeMode: 'perps' | 'spot';
   /** Shielded trading: route orders through the ZK privacy layer. Only
@@ -132,7 +131,6 @@ interface AppState {
   setSessionKey: (k: string | null) => void;
   setSlippage: (v: number) => void;
   setShowSettings: (v: boolean) => void;
-  setGasless: (v: boolean) => void;
   setPaperMode: (v: boolean) => void;
   setTradeMode: (m: 'perps' | 'spot') => void;
   setPrivateMode: (v: boolean) => void;
@@ -176,7 +174,6 @@ export const useStore = create<AppState>()(
       sessionKey: null,
       slippage: 0.5,
       showSettings: false,
-      gaslessEnabled: false,
       paperMode: false,
       tradeMode: 'perps',
       privateMode: false,
@@ -213,7 +210,6 @@ export const useStore = create<AppState>()(
       setSessionKey: (sessionKey) => set({ sessionKey }),
       setSlippage: (slippage) => set({ slippage }),
       setShowSettings: (showSettings) => set({ showSettings }),
-      setGasless: (gaslessEnabled) => set({ gaslessEnabled }),
       setPaperMode: (paperMode) => set({ paperMode }),
       setTradeMode: (tradeMode) => set({ tradeMode }),
       setPrivateMode: (privateMode) => set({ privateMode }),
@@ -255,7 +251,6 @@ export const useStore = create<AppState>()(
         deadManEnabled: state.deadManEnabled,
         marginMode: state.marginMode,
         slippage: state.slippage,
-        gaslessEnabled: state.gaslessEnabled,
         paperMode: state.paperMode,
         brackets: state.brackets,
         notifications: state.notifications,

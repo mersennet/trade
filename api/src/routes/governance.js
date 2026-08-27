@@ -1,7 +1,19 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
+const chain = require('../services/chain');
 
 const router = Router();
+
+// Voting power is the address's real on-chain delegation via the staking
+// precompile (0x…0400). The legacy DB-simulated staking_balance table is not
+// consulted — real delegations never wrote to it.
+async function votingPowerOf(address) {
+  try {
+    return await chain.getOnChainVotingPower(address.toLowerCase());
+  } catch {
+    return 0;
+  }
+}
 
 router.get('/proposals', async (req, res) => {
   try {
@@ -44,13 +56,9 @@ router.post('/proposals', async (req, res) => {
       return res.status(400).json({ error: 'title, description, and proposer required' });
     }
     const addr = proposer.toLowerCase();
-    const staked = await pool.query(
-      'SELECT COALESCE(staked, 0) as staked FROM staking_balance WHERE address = $1',
-      [addr]
-    );
-    const power = Number(staked.rows[0]?.staked || 0);
+    const power = await votingPowerOf(addr);
     if (power < 100) {
-      return res.status(400).json({ error: 'Minimum 100 MRSN staked to create proposals' });
+      return res.status(400).json({ error: 'Minimum 100 MRSN delegated (staking precompile) to create proposals' });
     }
 
     const days = Math.min(30, Math.max(3, Number(end_days) || 7));
@@ -74,11 +82,10 @@ router.post('/proposals/:id/vote', async (req, res) => {
     if (!voter || !direction) return res.status(400).json({ error: 'voter and direction required' });
     if (!['for', 'against'].includes(direction)) return res.status(400).json({ error: 'direction must be for or against' });
 
-    const staked = await pool.query(
-      'SELECT COALESCE(staked, 0) as staked FROM staking_balance WHERE address = $1',
-      [voter.toLowerCase()]
-    );
-    const votingPower = Number(staked.rows[0]?.staked || 0);
+    const votingPower = await votingPowerOf(voter);
+    if (votingPower <= 0) {
+      return res.status(400).json({ error: 'No voting power — delegate MRSN via the staking page first' });
+    }
 
     const existing = await pool.query(
       'SELECT id FROM governance_votes WHERE proposal_id = $1 AND voter = $2',
@@ -106,16 +113,8 @@ router.post('/proposals/:id/vote', async (req, res) => {
 });
 
 router.get('/voting-power/:address', async (req, res) => {
-  try {
-    const addr = req.params.address.toLowerCase();
-    const staked = await pool.query(
-      'SELECT COALESCE(staked, 0) as staked FROM staking_balance WHERE address = $1',
-      [addr]
-    );
-    res.json({ address: addr, votingPower: Number(staked.rows[0]?.staked || 0) });
-  } catch (e) {
-    res.json({ address: req.params.address, votingPower: 0 });
-  }
+  const addr = req.params.address.toLowerCase();
+  res.json({ address: addr, votingPower: await votingPowerOf(addr) });
 });
 
 module.exports = router;

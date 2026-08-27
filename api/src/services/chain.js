@@ -91,7 +91,9 @@ async function refreshMarkets() {
   }
 }
 
-refreshMarkets();
+// Deferred a tick: rpcCall's `let _rpcId` is declared below and would be in
+// its temporal dead zone if called synchronously at module load.
+setImmediate(refreshMarkets);
 const _marketsTimer = setInterval(refreshMarkets, 30_000);
 if (_marketsTimer.unref) _marketsTimer.unref();
 
@@ -383,6 +385,39 @@ function withdrawCalldata(amount) {
   return PRECOMPILE_IFACE.encodeFunctionData('withdrawCollateral', [amount]);
 }
 
+// ---------------------------------------------------------------------
+// Staking precompile reads (0x…0400) — used for governance voting power
+// ---------------------------------------------------------------------
+
+const STAKING_PRECOMPILE = '0x0000000000000000000000000000000000000400';
+const STAKING_IFACE = new ethers.utils.Interface([
+  'function getDelegation(address delegator, address validator) view returns (uint256 amount, uint256 pending)',
+]);
+
+/**
+ * Real on-chain voting power: the address's total MRSN delegated across all
+ * validators via the staking precompile, in whole MRSN. Replaces the deprecated
+ * DB-simulated staking_balance table, which real delegations never touch.
+ */
+async function getOnChainVotingPower(address) {
+  const validators = await rpcCall('mersennet_staking_getValidators', []);
+  if (!Array.isArray(validators) || validators.length === 0) return 0;
+  const amounts = await Promise.all(
+    validators.map(async (v) => {
+      try {
+        const data = STAKING_IFACE.encodeFunctionData('getDelegation', [address, v.address]);
+        const ret = await rpcCall('eth_call', [{ to: STAKING_PRECOMPILE, data }, 'latest']);
+        const [amount] = STAKING_IFACE.decodeFunctionResult('getDelegation', ret);
+        return BigInt(amount.toString());
+      } catch {
+        return 0n;
+      }
+    }),
+  );
+  const totalWei = amounts.reduce((s, a) => s + a, 0n);
+  return Number(totalWei / 10n ** 18n);
+}
+
 module.exports = {
   MARKETS,
   rpcCall,
@@ -404,6 +439,7 @@ module.exports = {
   getVaultTvlUsd,
   isLiquidatable,
   getMarketConfig,
+  getOnChainVotingPower,
   // Order book (on-chain CLOB)
   getOrderBook,
   getOpenOrders,

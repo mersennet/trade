@@ -30,32 +30,53 @@ export function useBrackets() {
 
   async function fireBracket(b: Bracket, leg: 'tp' | 'sl') {
     const label = leg === 'tp' ? 'Take-profit' : 'Stop-loss';
-    try {
-      const { placeOrderOnChain, marketableLimitPrice } = await import('@/lib/orderSigning');
-      const isBuy = !b.isLong; // closing a long sells, closing a short buys
-      const price = await marketableLimitPrice(
-        b.marketId,
-        isBuy,
-        useStore.getState().slippage || 1,
-        tickers[b.marketId]?.markPrice || 0,
-      );
-      await placeOrderOnChain(provider, {
-        marketId: b.marketId,
-        isBuy,
-        priceUsd: price,
-        sizeBase: b.size,
-        tif: 'Ioc',
-        sessionKey: oneClickEnabled ? sessionKey || undefined : undefined,
-      });
-      toast(`${label} triggered — closing ${b.size} (market ${b.marketId})`, 'success');
-      useStore.getState().addNotification('fill', `${label} triggered`, `Closed ${b.size} on market ${b.marketId} @ ${tickers[b.marketId]?.markPrice ?? '—'}`);
-    } catch (e) {
-      toast(`${label} trigger failed: ${(e as Error).message}`, 'error');
-      useStore.getState().addNotification('warning', `${label} failed`, (e as Error).message);
-    } finally {
-      // Either way the bracket is spent — a failed fire must not loop.
-      removeBracket(b.id);
+    const { placeOrderOnChain, marketableLimitPrice } = await import('@/lib/orderSigning');
+    const isBuy = !b.isLong; // closing a long sells, closing a short buys
+
+    // A transient failure (RPC hiccup, brief nonce race) must not silently
+    // consume the user's protection: retry with backoff before giving up. An
+    // explicit wallet rejection is respected immediately — the user said no.
+    const MAX_ATTEMPTS = 3;
+    let lastErr: Error | null = null;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        const price = await marketableLimitPrice(
+          b.marketId,
+          isBuy,
+          useStore.getState().slippage || 1,
+          useStore.getState().tickers[b.marketId]?.markPrice || 0,
+        );
+        await placeOrderOnChain(provider, {
+          marketId: b.marketId,
+          isBuy,
+          priceUsd: price,
+          sizeBase: b.size,
+          tif: 'Ioc',
+          sessionKey: oneClickEnabled ? sessionKey || undefined : undefined,
+        });
+        toast(`${label} triggered — closing ${b.size} (market ${b.marketId})`, 'success');
+        useStore.getState().addNotification('fill', `${label} triggered`, `Closed ${b.size} on market ${b.marketId} @ ${tickers[b.marketId]?.markPrice ?? '—'}`);
+        removeBracket(b.id);
+        return;
+      } catch (e) {
+        lastErr = e as Error;
+        if (/user (rejected|denied)/i.test(lastErr.message || '')) break;
+        if (attempt < MAX_ATTEMPTS) {
+          await new Promise((r) => setTimeout(r, 2000 * attempt));
+        }
+      }
     }
+    // All attempts failed — the bracket is spent (leaving it would loop forever
+    // against a persistent failure), so make the loss of protection loud: a
+    // persistent notification plus an error toast, not just a transient toast.
+    removeBracket(b.id);
+    const msg = lastErr?.message || 'unknown error';
+    toast(`${label} trigger FAILED after ${MAX_ATTEMPTS} attempts — your position is UNPROTECTED: ${msg}`, 'error');
+    useStore.getState().addNotification(
+      'warning',
+      `${label} failed — position unprotected`,
+      `Market ${b.marketId}: the closing order could not be placed (${msg}). Re-add TP/SL from the positions table or close manually.`,
+    );
   }
 
   useEffect(() => {

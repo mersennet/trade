@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useStore } from '@/stores/useStore';
 import { useWallet } from '@/hooks/useWallet';
 import { useToast } from '@/components/shared/Toast';
@@ -52,6 +52,21 @@ export default function TradeForm() {
     return positions.find((p) => p.marketId === market.id);
   }, [positions, market.id]);
 
+  // Real fee tier from 30d volume — same source AccountPanel uses. Falls back
+  // to the Base tier so the confirm sheet never shows a hardcoded stale rate.
+  const [feeRates, setFeeRates] = useState<{ maker: number; taker: number }>({ maker: 0.0002, taker: 0.0005 });
+  useEffect(() => {
+    if (!address) return;
+    Promise.all([api.getStats(), api.getTraderProfile(address)])
+      .then(([stats, profile]) => {
+        const tiers = (stats.feeTiers || []) as { name: string; minVolume: number; makerFee: number; takerFee: number }[];
+        const vol = Number(profile?.stats?.['30d']?.volume ?? profile?.stats?.['all']?.volume ?? 0);
+        const tier = [...tiers].sort((a, b) => b.minVolume - a.minVolume).find((t) => vol >= t.minVolume) || tiers[0];
+        if (tier) setFeeRates({ maker: tier.makerFee, taker: tier.takerFee });
+      })
+      .catch(() => {});
+  }, [address]);
+
   const orderSummary = useMemo(() => {
     const ticker = tickers[market.id];
     const price = trade.orderType === 'market'
@@ -62,17 +77,17 @@ export default function TradeForm() {
 
     const notional = price * size;
     const marginRequired = notional / trade.leverage;
+    // Indicative only: the testnet currently enforces 0 bps maintenance margin
+    // on-chain, so this estimate assumes a conventional 0.5% for guidance.
     const maintenanceMargin = notional * 0.005;
     const liqDistance = (marginRequired - maintenanceMargin) / size;
     const liquidationPrice = trade.side === 'buy'
       ? Math.max(0, price - liqDistance)
       : price + liqDistance;
-    const takerFee = notional * 0.0005;
-    const makerFee = notional * 0.0002;
-    const fee = trade.orderType === 'market' ? takerFee : makerFee;
+    const fee = notional * (trade.orderType === 'market' ? feeRates.taker : feeRates.maker);
 
     return { notional, marginRequired, liquidationPrice, fee };
-  }, [tickers, market.id, trade]);
+  }, [tickers, market.id, trade, feeRates]);
 
   const calcSize = () => {
     const r = parseFloat(riskPct) / 100;
@@ -813,7 +828,7 @@ export default function TradeForm() {
           )}
           <div className="flex items-center justify-between text-[10px]">
             <span className="text-dim">Est. Fee</span>
-            <span className="font-mono text-foreground/60">{formatNumber(orderSummary.fee, 4)} MRSN</span>
+            <span className="font-mono text-foreground/60">{formatNumber(orderSummary.fee, 4)} {market.quote}</span>
           </div>
         </div>
       )}
