@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { startPoll } from '@/lib/poll';
 
 /**
  * Live chain status chip for the footer: block height + measured API latency
@@ -31,11 +32,11 @@ export default function ChainStatusChip() {
       } catch { /* keep last good */ }
     };
     tick();
-    const t = setInterval(tick, 5000);
+    const stopPoll = startPoll(tick, 5000);
     const age = setInterval(() => {
       if (lastBlockAt) setBlockAgeMs(Date.now() - lastBlockAt);
     }, 1000);
-    return () => { mounted = false; clearInterval(t); clearInterval(age); };
+    return () => { mounted = false; stopPoll(); clearInterval(age); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [block, lastBlockAt]);
 

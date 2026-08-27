@@ -7,6 +7,7 @@ import { formatPrice, formatNumber, cn } from '@/lib/utils';
 import { useToast } from '@/components/shared/Toast';
 import EmptyState, { SkeletonRows } from '@/components/shared/EmptyState';
 import { playSound } from '@/lib/sounds';
+import { startPoll } from '@/lib/poll';
 import { useStore as useAppStore } from '@/stores/useStore';
 
 type Tab = 'positions' | 'orders' | 'trades' | 'funding' | 'history';
@@ -58,8 +59,7 @@ export default function PositionsTable() {
       }
     };
     fetchData();
-    const interval = setInterval(fetchData, 5000);
-    return () => clearInterval(interval);
+    return startPoll(fetchData, 5000);
   }, [address, isConnected, setPositions, setOrders]);
 
   useEffect(() => {

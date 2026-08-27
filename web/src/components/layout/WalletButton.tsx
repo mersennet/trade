@@ -7,6 +7,7 @@ import { useToast } from '@/components/shared/Toast';
 import { api } from '@/lib/api';
 import { shortenAddress, formatNumber } from '@/lib/utils';
 import { useDismissable } from '@/hooks/useDismissable';
+import { startPoll } from '@/lib/poll';
 
 export default function WalletButton() {
   const { address, balance, provider, isConnected, connect, connectWalletConnect, disconnect } = useWallet();
@@ -48,7 +49,7 @@ export default function WalletButton() {
       .catch(() => {});
     refreshTokens();
 
-    const interval = setInterval(() => {
+    return startPoll(() => {
       api.getCollateral(address)
         .then((r) => {
           const val = Number(r.collateral) || 0;
@@ -58,7 +59,6 @@ export default function WalletButton() {
         .catch(() => {});
       refreshTokens();
     }, 10000);
-    return () => clearInterval(interval);
   }, [address, isConnected, setWallet, refreshTokens]);
 
   const handleConnect = async (method: 'injected' | 'walletconnect') => {

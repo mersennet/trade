@@ -9,6 +9,7 @@ import TokenLogo from '@/components/TokenLogo';
 import EmptyState, { SkeletonRows } from '@/components/shared/EmptyState';
 import EquityCurve from '@/components/shared/EquityCurve';
 import { buildEquityCurve } from '@/lib/pnl';
+import { startPoll } from '@/lib/poll';
 
 type MarginMode = 'cross' | 'isolated' | 'portfolio';
 
@@ -85,8 +86,7 @@ export default function PortfolioPage() {
     refresh();
     if (address) {
       api.getTraderProfile(address).then(setProfile).catch(() => {});
-      const interval = setInterval(refresh, 10000);
-      return () => clearInterval(interval);
+      return startPoll(refresh, 10000);
     }
   }, [refresh, address]);
 

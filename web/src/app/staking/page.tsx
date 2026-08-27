@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useWallet } from '@/hooks/useWallet';
 import { useToast } from '@/components/shared/Toast';
 import { cn, shortenAddress } from '@/lib/utils';
+import { startPoll } from '@/lib/poll';
 import {
   claimRewards,
   delegate,
@@ -79,8 +80,8 @@ export default function StakingPage() {
         await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
       }
     })();
-    const t = setInterval(refresh, 15_000);
-    return () => { cancelled = true; clearInterval(t); };
+    const stopPoll = startPoll(refresh, 15_000);
+    return () => { cancelled = true; stopPoll(); };
   }, [refresh]);
 
   const act = async (key: string, fn: () => Promise<string>, okMsg: string) => {

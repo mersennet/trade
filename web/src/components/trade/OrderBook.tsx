@@ -4,6 +4,7 @@ import { useStore } from '@/stores/useStore';
 import { api, type Trade } from '@/lib/api';
 import { formatPrice, formatNumber, cn } from '@/lib/utils';
 import { useWebSocket } from '@/hooks/useWebSocket';
+import { startPoll } from '@/lib/poll';
 import EmptyState, { SkeletonRows } from '@/components/shared/EmptyState';
 
 interface BookLevel { price: number; size: number; total: number; pct: number; }
@@ -96,9 +97,10 @@ export default function OrderBook() {
 
     fetchBook();
     // WS is the primary feed (snapshots are timestamp-ordered, so stale
-    // payloads are dropped). The 3s REST poll only runs as a fallback while
-    // the socket is down.
-    const interval = connected ? null : setInterval(fetchBook, 3000);
+    // payloads are dropped). The REST poll only runs as a fallback while the
+    // socket is down — jittered + backoff so a WS outage across many open
+    // tabs doesn't stampede the API (see lib/poll.ts).
+    const stopPoll = connected ? null : startPoll(fetchBook, 3000);
 
     const unsub = subscribe(`orderbook:${market.id}`, (data: unknown) => {
       const d = data as { bids?: [number, number][]; asks?: [number, number][]; timestamp?: number };
@@ -106,7 +108,7 @@ export default function OrderBook() {
       applyBook(d.bids, d.asks, d.timestamp || Date.now());
     });
 
-    return () => { mounted = false; if (interval) clearInterval(interval); unsub(); };
+    return () => { mounted = false; stopPoll?.(); unsub(); };
      
   }, [market.id, subscribe, connected]);
 

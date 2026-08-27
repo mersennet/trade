@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { cn, formatNumber } from '@/lib/utils';
 import { api, type FundingComparison, type FundingOpportunity } from '@/lib/api';
+import { startPoll } from '@/lib/poll';
 
 function formatRate(rate: number) {
   const pct = (rate * 100).toFixed(4);
@@ -30,8 +31,7 @@ export default function FundingArbPage() {
       }
     }
     load();
-    const interval = setInterval(load, 30000);
-    return () => clearInterval(interval);
+    return startPoll(load, 30000);
   }, []);
 
   const sortedOpps = [...opportunities].sort((a, b) =>

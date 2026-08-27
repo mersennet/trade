@@ -3,6 +3,7 @@ import { useEffect, useRef, useMemo, useCallback } from 'react';
 import { useStore } from '@/stores/useStore';
 import { api } from '@/lib/api';
 import { formatPrice, formatNumber } from '@/lib/utils';
+import { startPoll } from '@/lib/poll';
 
 interface Level { price: number; size: number; cumulative: number; }
 
@@ -48,8 +49,7 @@ export default function DepthChart() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 3000);
-    return () => clearInterval(interval);
+    return startPoll(fetchData, 3000);
   }, [fetchData]);
 
   const draw = useCallback(() => {

@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { useWebSocket } from '@/hooks/useWebSocket';
+import { startPoll } from '@/lib/poll';
 
 /**
  * Terminal status line — the fixed strip along the bottom of the desktop
@@ -34,8 +35,8 @@ export default function StatusLine() {
       } catch { /* keep last good values */ }
     };
     tick();
-    const poll = setInterval(tick, 5000);
-    return () => { mounted = false; clearInterval(poll); };
+    const stopPoll = startPoll(tick, 5000);
+    return () => { mounted = false; stopPoll(); };
   }, []);
 
   useEffect(() => {

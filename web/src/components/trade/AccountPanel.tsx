@@ -14,6 +14,7 @@ import {
   type CollateralAsset,
 } from '@/lib/vault';
 import EmptyState from '@/components/shared/EmptyState';
+import { startPoll } from '@/lib/poll';
 
 export default function AccountPanel() {
   const { positions, marginMode } = useStore();
@@ -97,8 +98,7 @@ export default function AccountPanel() {
   useEffect(() => {
     refreshBalances();
     if (!address) return;
-    const t = setInterval(refreshBalances, 12_000);
-    return () => clearInterval(t);
+    return startPoll(refreshBalances, 12_000);
   }, [address, refreshBalances]);
 
   const stats = useMemo(() => {

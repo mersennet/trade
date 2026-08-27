@@ -7,6 +7,7 @@ import { formatPrice, formatNumber, cn } from '@/lib/utils';
 import TokenLogo from '@/components/TokenLogo';
 import EmptyState from '@/components/shared/EmptyState';
 import MiniChart from '@/components/shared/MiniChart';
+import { startPoll } from '@/lib/poll';
 
 type SortKey = 'market' | 'price' | 'change' | 'volume' | 'trades' | 'funding' | 'oi';
 
@@ -40,8 +41,9 @@ export default function MarketsPage() {
       setTickers((prev) => ({ ...prev, ...next }));
     };
     fetchTickers();
-    const interval = setInterval(fetchTickers, 5000);
-    return () => clearInterval(interval);
+    // N requests per sweep (one per market) — jitter + hidden-tab pause matter
+    // most here.
+    return startPoll(fetchTickers, 5000);
   }, [markets]);
 
   const filtered = filter === 'favorites'

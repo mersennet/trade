@@ -2,6 +2,7 @@
 import { useRef, useEffect, useCallback } from 'react';
 import { useStore } from '@/stores/useStore';
 import { api } from '@/lib/api';
+import { startPoll } from '@/lib/poll';
 
 export default function DepthHeatmap() {
   const { market, theme } = useStore();
@@ -150,10 +151,10 @@ export default function DepthHeatmap() {
 
   useEffect(() => {
     fetchData().then(draw);
-    const iv = setInterval(() => fetchData().then(draw), 5000);
+    const stopPoll = startPoll(() => fetchData().then(draw), 5000);
     const observer = new ResizeObserver(() => draw());
     if (containerRef.current) observer.observe(containerRef.current);
-    return () => { clearInterval(iv); observer.disconnect(); };
+    return () => { stopPoll(); observer.disconnect(); };
   }, [fetchData, draw]);
 
   return (

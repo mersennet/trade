@@ -4,6 +4,7 @@ import { useWallet } from '@/hooks/useWallet';
 import { useToast } from '@/components/shared/Toast';
 import { api, type SpotMarket, type SpotTrade, type SpotBalance } from '@/lib/api';
 import { formatPrice, formatNumber, formatTimeAgo, cn } from '@/lib/utils';
+import { startPoll } from '@/lib/poll';
 
 export default function SpotPage() {
   const { address, isConnected } = useWallet();
@@ -38,8 +39,7 @@ export default function SpotPage() {
 
   useEffect(() => {
     refreshBook();
-    const iv = setInterval(refreshBook, 3000);
-    return () => clearInterval(iv);
+    return startPoll(refreshBook, 3000);
   }, [refreshBook]);
 
   useEffect(() => {

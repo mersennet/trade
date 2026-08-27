@@ -6,6 +6,7 @@ import { api, type WhaleTrade, type WhaleWallet, type WhaleAlert, type Market } 
 import { formatNumber, formatTimeAgo, shortenAddress, cn } from '@/lib/utils';
 import AddressAvatar from '@/components/AddressAvatar';
 import TokenLogo from '@/components/TokenLogo';
+import { startPoll } from '@/lib/poll';
 
 const THRESHOLDS = [
   { value: '10000',   label: '10K+' },
@@ -33,8 +34,7 @@ export default function WhalesPage() {
 
   useEffect(() => {
     refresh();
-    const iv = setInterval(refresh, 10000);
-    return () => clearInterval(iv);
+    return startPoll(refresh, 10000);
   }, [refresh]);
 
   useEffect(() => {
