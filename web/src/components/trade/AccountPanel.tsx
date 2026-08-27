@@ -74,9 +74,9 @@ export default function AccountPanel() {
       // Native MRSN balance, read from the Mersennet RPC directly so it is
       // correct even when the wallet provider briefly serves another chain
       // (Rabby right after an add/switch).
-      const rpc = new e.providers.JsonRpcProvider(MERSENNET_TESTNET.rpcUrls[0]);
+      const rpc = new e.JsonRpcProvider(MERSENNET_TESTNET.rpcUrls[0]);
       const bal = await rpc.getBalance(address);
-      setWalletMrsn(Number(e.utils.formatEther(bal)));
+      setWalletMrsn(Number(e.formatEther(bal)));
     } catch { /* ignore */ }
     // Registered token collateral (USDC): wallet balance + deposited margin.
     try {

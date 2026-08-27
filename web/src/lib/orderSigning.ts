@@ -111,7 +111,7 @@ export async function marketableLimitPrice(
 /**
  * Place an order directly on the on-chain CLOB via a wallet transaction.
  *
- * @param signerSource  ethers Web3Provider, OR ignored when `sessionKey` set
+ * @param signerSource  ethers BrowserProvider, OR ignored when `sessionKey` set
  * @param params        human-readable order params (price, size as decimal strings)
  */
 export async function placeOrderOnChain(
@@ -134,14 +134,14 @@ export async function placeOrderOnChain(
   const e = ethers as EthersLike;
 
   // Pick the signer: session key (no popup) wins over provider.
-  let signer: InstanceType<EthersLike['Signer']>;
+  let signer: InstanceType<EthersLike['Wallet']> | InstanceType<EthersLike['JsonRpcSigner']>;
   if (params.sessionKey) {
-    const rpc = new e.providers.JsonRpcProvider(getDefaultChain().rpcUrls[0]);
+    const rpc = new e.JsonRpcProvider(getDefaultChain().rpcUrls[0]);
     signer = new e.Wallet(params.sessionKey, rpc);
   } else {
     if (!signerSource) throw new Error('No signer (connect wallet or enable one-click)');
-    const p = signerSource as InstanceType<EthersLike['providers']['Web3Provider']>;
-    signer = p.getSigner() as unknown as InstanceType<EthersLike['Signer']>;
+    const p = signerSource as InstanceType<EthersLike['BrowserProvider']>;
+    signer = await p.getSigner();
   }
 
   const tif: Tif = params.tif ?? 'Gtc';
@@ -150,7 +150,7 @@ export async function placeOrderOnChain(
   if (BigInt(size) <= BigInt(0)) throw new Error('Size must be > 0');
   if (BigInt(price) <= BigInt(0)) throw new Error('Price must be > 0');
 
-  const iface = new e.utils.Interface(PLACE_ORDER_ABI);
+  const iface = new e.Interface(PLACE_ORDER_ABI);
   const usesExt = !!(params.maker && (params.maker.postOnly || params.maker.expireAtBlock));
   const data = usesExt
     ? iface.encodeFunctionData('placeOrderExt', [
@@ -204,8 +204,8 @@ export async function createMarketOnChain(
   const e = ethers as EthersLike;
 
   if (!signerSource) throw new Error('No signer (connect wallet)');
-  const p = signerSource as InstanceType<EthersLike['providers']['Web3Provider']>;
-  const signer = p.getSigner();
+  const p = signerSource as InstanceType<EthersLike['BrowserProvider']>;
+  const signer = await p.getSigner();
 
   const symbol = params.symbol.trim().toUpperCase();
   if (!symbol || symbol.length > 20) throw new Error('Symbol must be 1–20 characters');
@@ -214,8 +214,8 @@ export async function createMarketOnChain(
   if (BigInt(tick) <= 0n || BigInt(lot) <= 0n) throw new Error('Tick and lot must be > 0');
 
   // bytes32 = right-padded ASCII.
-  const symbolBytes32 = e.utils.formatBytes32String(symbol);
-  const iface = new e.utils.Interface(PLACE_ORDER_ABI);
+  const symbolBytes32 = e.encodeBytes32String(symbol);
+  const iface = new e.Interface(PLACE_ORDER_ABI);
   const data = iface.encodeFunctionData('createMarket', [symbolBytes32, tick, lot]);
 
   const tx = await signer.sendTransaction({
@@ -228,8 +228,13 @@ export async function createMarketOnChain(
   // Decode the returned marketId from the call (best-effort via eth_call replay).
   let marketId = 0;
   try {
-    const rpc = new e.providers.JsonRpcProvider(getDefaultChain().rpcUrls[0]);
-    const ret = await rpc.call({ to: MERSENNET_ORDERS_PRECOMPILE, data, from: await signer.getAddress() }, receipt.blockNumber);
+    const rpc = new e.JsonRpcProvider(getDefaultChain().rpcUrls[0]);
+    const ret = await rpc.call({
+      to: MERSENNET_ORDERS_PRECOMPILE,
+      data,
+      from: await signer.getAddress(),
+      blockTag: receipt?.blockNumber,
+    });
     const [id] = iface.decodeFunctionResult('createMarket', ret);
     marketId = Number(id);
   } catch {
@@ -249,10 +254,10 @@ export async function cancelOrderOnChain(
   const e = ethers as EthersLike;
 
   if (!signerSource) throw new Error('No signer (connect wallet)');
-  const p = signerSource as InstanceType<EthersLike['providers']['Web3Provider']>;
-  const signer = p.getSigner();
+  const p = signerSource as InstanceType<EthersLike['BrowserProvider']>;
+  const signer = await p.getSigner();
 
-  const iface = new e.utils.Interface(PLACE_ORDER_ABI);
+  const iface = new e.Interface(PLACE_ORDER_ABI);
   const data = iface.encodeFunctionData('cancelOrder', [orderId]);
 
   const tx = await signer.sendTransaction({

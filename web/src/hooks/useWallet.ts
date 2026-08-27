@@ -89,13 +89,13 @@ export function useWallet() {
     }
 
     const { ethers } = await import('ethers');
-    const provider = new ethers.providers.Web3Provider(eip as never);
-    const signer = provider.getSigner(address);
+    const provider = new ethers.BrowserProvider(eip as never);
+    const signer = await provider.getSigner(address);
     // Read the balance from the Mersennet RPC directly, NOT the wallet
     // provider: right after a chain add/switch some wallets (Rabby) still
     // briefly serve the previous chain, which made the header show the
     // address's mainnet balance (0) instead of its Mersennet balance.
-    const rpc = new ethers.providers.JsonRpcProvider(MERSENNET_TESTNET.rpcUrls[0]);
+    const rpc = new ethers.JsonRpcProvider(MERSENNET_TESTNET.rpcUrls[0]);
     const balance = (await rpc.getBalance(address)).toString();
 
     eipRef.current = eip;

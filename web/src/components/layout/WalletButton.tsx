@@ -28,7 +28,7 @@ export default function WalletButton() {
       const e = ethers as EthersLike;
       // Native MRSN balance, read from the Mersennet RPC directly so it is
       // correct regardless of which chain the wallet provider is pointed at.
-      const rpc = new e.providers.JsonRpcProvider(MERSENNET_TESTNET.rpcUrls[0]);
+      const rpc = new e.JsonRpcProvider(MERSENNET_TESTNET.rpcUrls[0]);
       const bal = await rpc.getBalance(address);
       // Keep the store copy fresh too — the header chip and account panel
       // read wallet.balance, which was previously only set once at connect.

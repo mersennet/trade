@@ -37,7 +37,7 @@ async function ethers(): Promise<EthersLike> {
 
 function signerFrom(e: EthersLike, signerSource: unknown) {
   if (!signerSource) throw new Error('No signer (connect wallet)');
-  const p = signerSource as InstanceType<EthersLike['providers']['Web3Provider']>;
+  const p = signerSource as InstanceType<EthersLike['BrowserProvider']>;
   return p.getSigner();
 }
 
@@ -48,8 +48,8 @@ async function sendStaking(
   gasLimit: number,
 ): Promise<string> {
   const e = await ethers();
-  const signer = signerFrom(e, signerSource);
-  const iface = new e.utils.Interface(STAKING_ABI);
+  const signer = await signerFrom(e, signerSource);
+  const iface = new e.Interface(STAKING_ABI);
   const data = iface.encodeFunctionData(fn, args);
   const tx = await signer.sendTransaction({ to: MERSENNET_STAKING_PRECOMPILE, data, gasLimit });
   await tx.wait(1);
@@ -106,8 +106,8 @@ export interface UnbondingView {
 
 async function callView(fn: string, args: unknown[]): Promise<unknown[]> {
   const e = await ethers();
-  const rpc = new e.providers.JsonRpcProvider(getDefaultChain().rpcUrls[0]);
-  const iface = new e.utils.Interface(STAKING_ABI);
+  const rpc = new e.JsonRpcProvider(getDefaultChain().rpcUrls[0]);
+  const iface = new e.Interface(STAKING_ABI);
   const data = iface.encodeFunctionData(fn, args);
   const ret = await rpc.call({ to: MERSENNET_STAKING_PRECOMPILE, data });
   return iface.decodeFunctionResult(fn, ret) as unknown[];

@@ -102,7 +102,7 @@ function targetPrice(isBuy: boolean, bid: bigint, ask: bigint): bigint {
 
 async function signerFor(state: ChaseState) {
   const { ethers } = await import('ethers');
-  const provider = new ethers.providers.JsonRpcProvider(getDefaultChain().rpcUrls[0]);
+  const provider = new ethers.JsonRpcProvider(getDefaultChain().rpcUrls[0]);
   return new ethers.Wallet(state.params.sessionKey, provider);
 }
 
@@ -110,7 +110,7 @@ async function signerFor(state: ChaseState) {
 async function placeAt(state: ChaseState, price: bigint): Promise<void> {
   const { ethers } = await import('ethers');
   const wallet = await signerFor(state);
-  const iface = new ethers.utils.Interface(ABI);
+  const iface = new ethers.Interface(ABI);
   const data = iface.encodeFunctionData('placeOrderExt', [
     state.params.marketId,
     state.params.isBuy,
@@ -152,7 +152,7 @@ async function cancelCurrent(state: ChaseState): Promise<void> {
   if (state.orderId === null) return;
   const { ethers } = await import('ethers');
   const wallet = await signerFor(state);
-  const iface = new ethers.utils.Interface(ABI);
+  const iface = new ethers.Interface(ABI);
   const data = iface.encodeFunctionData('cancelOrder', [state.orderId.toString()]);
   const tx = await wallet.sendTransaction({
     to: MERSENNET_ORDERS_PRECOMPILE,

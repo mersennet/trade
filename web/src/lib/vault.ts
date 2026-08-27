@@ -37,8 +37,8 @@ async function getSigner(provider: unknown) {
   type EthersLike = typeof import('ethers');
   const e = ethers as EthersLike;
   if (!provider) throw new Error('Connect your wallet first');
-  const p = provider as InstanceType<EthersLike['providers']['Web3Provider']>;
-  return { e, signer: p.getSigner() };
+  const p = provider as InstanceType<EthersLike['BrowserProvider']>;
+  return { e, signer: await p.getSigner() };
 }
 
 /**
@@ -53,7 +53,7 @@ export async function depositToVault(
 ): Promise<VaultTxResult> {
   const { e, signer } = await getSigner(provider);
   const amount = toChainAmount(humanAmount);
-  const iface = new e.utils.Interface(PRECOMPILE_ABI);
+  const iface = new e.Interface(PRECOMPILE_ABI);
   const data = iface.encodeFunctionData('depositCollateral', [amount]);
   const tx = await signer.sendTransaction({ to: MERSENNET_ORDERS_PRECOMPILE, data, gasLimit: 200_000 });
   await tx.wait(1);
@@ -72,7 +72,7 @@ export async function withdrawFromVault(
 ): Promise<VaultTxResult> {
   const { e, signer } = await getSigner(provider);
   const amount = toChainAmount(humanAmount);
-  const iface = new e.utils.Interface(PRECOMPILE_ABI);
+  const iface = new e.Interface(PRECOMPILE_ABI);
   const data = iface.encodeFunctionData('withdrawCollateral', [amount]);
   const tx = await signer.sendTransaction({ to: MERSENNET_ORDERS_PRECOMPILE, data, gasLimit: 200_000 });
   await tx.wait(1);
@@ -102,7 +102,7 @@ async function readProvider() {
   const { ethers } = await import('ethers');
   type EthersLike = typeof import('ethers');
   const e = ethers as EthersLike;
-  return { e, rpc: new e.providers.JsonRpcProvider(getDefaultChain().rpcUrls[0]) };
+  return { e, rpc: new e.JsonRpcProvider(getDefaultChain().rpcUrls[0]) };
 }
 
 /**
@@ -135,7 +135,7 @@ export async function getTokenWalletBalance(account: string, asset: CollateralAs
   const { e, rpc } = await readProvider();
   const c = new e.Contract(asset.token, ERC20_ABI, rpc);
   const bal = await c.balanceOf(account);
-  return Number(e.utils.formatUnits(bal, asset.decimals));
+  return Number(e.formatUnits(bal, asset.decimals));
 }
 
 /** Deposited token collateral held by the CLOB precompile, in human units. */
@@ -143,7 +143,7 @@ export async function getTokenCollateralBalance(account: string, asset: Collater
   const { e, rpc } = await readProvider();
   const c = new e.Contract(MERSENNET_ORDERS_PRECOMPILE, PRECOMPILE_ABI, rpc);
   const amt = await c.getTokenCollateral(account, asset.token);
-  return Number(e.utils.formatUnits(amt, asset.decimals));
+  return Number(e.formatUnits(amt, asset.decimals));
 }
 
 function toTokenUnits(human: string, decimals: number): bigint {
@@ -163,7 +163,7 @@ export async function depositTokenToVault(
 ): Promise<VaultTxResult> {
   const { e, signer } = await getSigner(provider);
   const amount = toTokenUnits(humanAmount, asset.decimals);
-  const iface = new e.utils.Interface(PRECOMPILE_ABI);
+  const iface = new e.Interface(PRECOMPILE_ABI);
   const data = iface.encodeFunctionData('depositTokenCollateral', [asset.token, amount]);
   const tx = await signer.sendTransaction({ to: MERSENNET_ORDERS_PRECOMPILE, data, gasLimit: 250_000 });
   await tx.wait(1);
@@ -178,7 +178,7 @@ export async function withdrawTokenFromVault(
 ): Promise<VaultTxResult> {
   const { e, signer } = await getSigner(provider);
   const amount = toTokenUnits(humanAmount, asset.decimals);
-  const iface = new e.utils.Interface(PRECOMPILE_ABI);
+  const iface = new e.Interface(PRECOMPILE_ABI);
   const data = iface.encodeFunctionData('withdrawTokenCollateral', [asset.token, amount]);
   const tx = await signer.sendTransaction({ to: MERSENNET_ORDERS_PRECOMPILE, data, gasLimit: 250_000 });
   await tx.wait(1);
