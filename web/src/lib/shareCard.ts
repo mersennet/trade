@@ -26,7 +26,7 @@ export async function downloadShareCard(data: ShareCardData): Promise<void> {
   if (!ctx) throw new Error('Canvas not supported');
 
   const win = data.pnl >= 0;
-  const accent = win ? '#34d399' : '#ff5240';
+  const accent = win ? '#2bd96a' : '#ff5240';
   const bg = '#0a0e0b';
   const panel = '#101511';
   const dim = '#7b7b8a';
@@ -58,7 +58,7 @@ export async function downloadShareCard(data: ShareCardData): Promise<void> {
   const sideText = data.isLong ? 'LONG' : 'SHORT';
   ctx.font = '700 26px system-ui, sans-serif';
   const sideW = ctx.measureText(sideText).width + 40;
-  ctx.fillStyle = win ? 'rgba(52,211,153,0.12)' : 'rgba(255,82,64,0.12)';
+  ctx.fillStyle = win ? 'rgba(43,217,106,0.12)' : 'rgba(255,82,64,0.12)';
   ctx.fillRect(64, 210, sideW, 48);
   ctx.fillStyle = accent;
   ctx.fillText(sideText + (data.leverage ? ` ${data.leverage}×` : ''), 84, 243);

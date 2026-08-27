@@ -36,7 +36,7 @@ export default function EquityCurve({ data, height = 180 }: { data: { time: numb
     });
 
     const series = chart.addSeries(LineSeries, {
-      color: data[data.length - 1].value >= 0 ? '#34d399' : '#ef4444',
+      color: data[data.length - 1].value >= 0 ? '#2bd96a' : '#ef4444',
       lineWidth: 2,
       crosshairMarkerRadius: 4,
       priceFormat: { type: 'price', precision: 2, minMove: 0.01 },

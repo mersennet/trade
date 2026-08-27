@@ -123,8 +123,8 @@ export default function OTCPage() {
             <div>
               <label className="text-[10px] text-dim uppercase tracking-wider font-medium block mb-1">Side</label>
               <div className="flex gap-1 bg-surface-2 rounded-lg p-1">
-                <button onClick={() => setSide('buy')} className={cn('flex-1 py-2 rounded-md text-xs font-semibold transition-all duration-200', side === 'buy' ? 'bg-green/15 text-green shadow-[inset_0_0_0_1px_rgba(52,211,153,0.2)]' : 'text-dim hover:text-muted')}>Buy</button>
-                <button onClick={() => setSide('sell')} className={cn('flex-1 py-2 rounded-md text-xs font-semibold transition-all duration-200', side === 'sell' ? 'bg-red/15 text-red shadow-[inset_0_0_0_1px_rgba(248,113,113,0.2)]' : 'text-dim hover:text-muted')}>Sell</button>
+                <button onClick={() => setSide('buy')} className={cn('flex-1 py-2 rounded-md text-xs font-semibold transition-all duration-200', side === 'buy' ? 'bg-green/15 text-green shadow-[inset_0_0_0_1px_rgba(43,217,106,0.2)]' : 'text-dim hover:text-muted')}>Buy</button>
+                <button onClick={() => setSide('sell')} className={cn('flex-1 py-2 rounded-md text-xs font-semibold transition-all duration-200', side === 'sell' ? 'bg-red/15 text-red shadow-[inset_0_0_0_1px_rgba(255,77,61,0.2)]' : 'text-dim hover:text-muted')}>Sell</button>
               </div>
             </div>
 
@@ -216,7 +216,7 @@ export default function OTCPage() {
                     {live && (
                       <button
                         onClick={() => handleAccept(q.id)}
-                        className="w-full py-2 bg-green/80 hover:bg-green text-white rounded-lg text-xs font-semibold shadow-[0_0_12px_rgba(52,211,153,0.1)] transition-all duration-200"
+                        className="w-full py-2 bg-green/80 hover:bg-green text-white rounded-lg text-xs font-semibold shadow-[0_0_12px_rgba(43,217,106,0.1)] transition-all duration-200"
                       >
                         Accept Quote ({secsLeft}s)
                       </button>

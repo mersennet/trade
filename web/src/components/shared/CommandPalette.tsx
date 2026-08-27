@@ -55,17 +55,22 @@ export default function CommandPalette() {
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
-        className="relative w-full max-w-md bg-surface border border-border rounded-xl shadow-[0_0_40px_rgba(0,0,0,0.5)] overflow-hidden"
+        className="relative w-full max-w-md bg-surface border border-border shadow-[0_0_40px_rgba(0,0,0,0.6),0_0_24px_rgba(43,217,106,0.08)] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <input
-          ref={inputRef}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          aria-label="Search commands"
-          placeholder="Type a command..."
-          className="w-full px-4 py-3 bg-transparent text-foreground text-sm border-b border-border outline-none placeholder:text-dim"
-        />
+        <div className="sect">Command</div>
+        <div className="flex items-center border-b border-border">
+          {/* Terminal prompt glyph ahead of the query field. */}
+          <span className="pl-4 text-primary-bright font-bold select-none" aria-hidden>&gt;</span>
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Search commands"
+            placeholder="type a command…"
+            className="w-full px-2.5 py-3 bg-transparent text-foreground text-sm outline-none placeholder:text-dim"
+          />
+        </div>
         <div className="max-h-64 overflow-y-auto py-1">
           {filtered.map((cmd) => (
             <button

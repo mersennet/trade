@@ -141,8 +141,12 @@ export default function BottomBar() {
             : pathname === item.href;
           const label = item.tKey ? t(item.tKey, item.label) : item.label;
           const className = cn(
-            'flex-1 flex flex-col items-center justify-center gap-0.5 py-2 transition-colors',
-            isActive ? 'text-primary' : 'text-muted active:text-foreground'
+            'relative flex-1 flex flex-col items-center justify-center gap-0.5 py-2 transition-colors',
+            // Active tab: phosphor bright + a 2px indicator bar along the top
+            // edge (the mobile echo of the desktop inverted section header).
+            isActive
+              ? 'text-primary-bright before:absolute before:top-0 before:inset-x-3 before:h-[2px] before:bg-primary'
+              : 'text-dim active:text-foreground'
           );
 
           if (isMore) {
@@ -156,16 +160,16 @@ export default function BottomBar() {
                 aria-label="More navigation"
                 className={className}
               >
-                <span className={cn(isActive && 'text-primary')}>{item.icon}</span>
-                <span className="text-[9px] font-medium">{label}</span>
+                <span className={cn(isActive && 'text-primary-bright')}>{item.icon}</span>
+                <span className="text-[8.5px] font-semibold uppercase tracking-[0.12em]">{label}</span>
               </button>
             );
           }
 
           return (
             <Link key={item.href} href={item.href} className={className}>
-              <span className={cn(isActive && 'text-primary')}>{item.icon}</span>
-              <span className="text-[9px] font-medium">{label}</span>
+              <span className={cn(isActive && 'text-primary-bright')}>{item.icon}</span>
+              <span className="text-[8.5px] font-semibold uppercase tracking-[0.12em]">{label}</span>
             </Link>
           );
         })}

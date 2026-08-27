@@ -201,14 +201,14 @@ export default function SpotPage() {
               onClick={() => setSide('buy')}
               className={cn(
                 'flex-1 py-2 rounded-md text-xs font-semibold transition-all duration-200',
-                side === 'buy' ? 'bg-green/15 text-green shadow-[inset_0_0_0_1px_rgba(52,211,153,0.2)]' : 'text-dim hover:text-muted'
+                side === 'buy' ? 'bg-green/15 text-green shadow-[inset_0_0_0_1px_rgba(43,217,106,0.2)]' : 'text-dim hover:text-muted'
               )}
             >Buy</button>
             <button
               onClick={() => setSide('sell')}
               className={cn(
                 'flex-1 py-2 rounded-md text-xs font-semibold transition-all duration-200',
-                side === 'sell' ? 'bg-red/15 text-red shadow-[inset_0_0_0_1px_rgba(248,113,113,0.2)]' : 'text-dim hover:text-muted'
+                side === 'sell' ? 'bg-red/15 text-red shadow-[inset_0_0_0_1px_rgba(255,77,61,0.2)]' : 'text-dim hover:text-muted'
               )}
             >Sell</button>
           </div>
@@ -245,8 +245,8 @@ export default function SpotPage() {
               className={cn(
                 'w-full py-3 rounded-lg text-sm font-semibold transition-all duration-200 disabled:opacity-50',
                 side === 'buy'
-                  ? 'bg-green/80 hover:bg-green text-white shadow-[0_0_16px_rgba(52,211,153,0.1)]'
-                  : 'bg-red/80 hover:bg-red text-white shadow-[0_0_16px_rgba(248,113,113,0.1)]'
+                  ? 'bg-green/80 hover:bg-green text-white shadow-[0_0_16px_rgba(43,217,106,0.1)]'
+                  : 'bg-red/80 hover:bg-red text-white shadow-[0_0_16px_rgba(255,77,61,0.1)]'
               )}
             >
               {!isConnected ? 'Connect Wallet' : submitting ? 'Placing...' : `${side === 'buy' ? 'Buy' : 'Sell'} ${selected?.base || ''}`}

@@ -38,16 +38,17 @@ export default function AnnouncementBar() {
   };
 
   return (
-    <div className="bg-primary/[0.06] border-b border-primary/15 px-3 md:px-4 py-1.5 flex items-center justify-center gap-2 text-[11px] relative">
-      <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse shrink-0" />
-      <p className="text-foreground/80 truncate">{current.text}</p>
+    // Terminal system-message line: left-aligned, prompt-prefixed, quiet.
+    <div className="bg-surface border-b border-border px-3 md:px-4 py-1.5 flex items-center gap-2 text-[10.5px] relative">
+      <span className="text-primary font-bold shrink-0 select-none">&gt;&gt;</span>
+      <p className="text-muted truncate">{current.text}</p>
       {current.link && (
-        <Link href={current.link.href} className="text-primary font-medium hover:underline shrink-0">
-          {current.link.label}
+        <Link href={current.link.href} className="text-primary-bright font-semibold uppercase tracking-[0.08em] text-[10px] hover:underline shrink-0">
+          {current.link.label} →
         </Link>
       )}
       {active.length > 1 && (
-        <span className="text-[9px] text-dim font-mono shrink-0">{index % active.length + 1}/{active.length}</span>
+        <span className="text-[9px] text-dim shrink-0">{index % active.length + 1}/{active.length}</span>
       )}
       <button
         onClick={dismiss}

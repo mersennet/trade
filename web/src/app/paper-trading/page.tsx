@@ -203,8 +203,8 @@ export default function PaperTradingPage() {
               className={cn(
                 'w-full py-2.5 rounded-lg text-sm font-medium transition-all duration-200 disabled:opacity-50',
                 side === 'buy'
-                  ? 'bg-green hover:bg-green/80 text-white shadow-[0_0_12px_rgba(52,211,153,0.1)]'
-                  : 'bg-red hover:bg-red/80 text-white shadow-[0_0_12px_rgba(248,113,113,0.1)]'
+                  ? 'bg-green hover:bg-green/80 text-white shadow-[0_0_12px_rgba(43,217,106,0.1)]'
+                  : 'bg-red hover:bg-red/80 text-white shadow-[0_0_12px_rgba(255,77,61,0.1)]'
               )}
             >
               {submitting ? 'Placing...' : `${side === 'buy' ? 'Long' : 'Short'} ${selectedMarket?.symbol || ''}`}

@@ -41,6 +41,8 @@ const PAGE_TITLE_KEYS: Record<string, { key: string; fallback: string }> = {
   '/paper-trading': { key: 'nav.paperTrading', fallback: 'Paper Trading' },
   '/funding-arb': { key: 'nav.fundingArb', fallback: 'Funding Arb' },
   '/testnet': { key: 'nav.testnet', fallback: 'Testnet' },
+  '/staking': { key: 'nav.staking', fallback: 'Staking' },
+  '/feedback': { key: 'nav.feedback', fallback: 'Feedback' },
 };
 
 export default function Header() {
@@ -50,7 +52,12 @@ export default function Header() {
   const locale = useLocale((s) => s.locale);
   const setLocale = useLocale((s) => s.setLocale);
   const entry = PAGE_TITLE_KEYS[pathname];
-  const title = entry ? t(entry.key, entry.fallback) : 'Mersennet Trade';
+  const marketSymbol = useStore((s) => s.market.symbol);
+  // On the terminal itself the path segment is the active market
+  // ("TRADE / MRSN-USD"), not the redundant "TRADE / TRADE".
+  const title = pathname === '/trade'
+    ? marketSymbol.replace('/', '-')
+    : entry ? t(entry.key, entry.fallback) : 'Mersennet Trade';
   const setShowSettings = useStore((s) => s.setShowSettings);
   const paperMode = useStore((s) => s.paperMode);
   const isConnected = useStore((s) => !!s.wallet.address);
@@ -66,7 +73,9 @@ export default function Header() {
         </Link>
         {/* Command-bar path: MERSENNET is the wordmark in the sidebar; here the
             page reads as a system location, e.g. "TRADE / MARKETS". */}
-        <h1 className="text-[11px] md:text-xs font-bold text-foreground uppercase tracking-[0.14em] truncate">
+        {/* Phones: the logo carries the brand and the crowded 390px header
+            truncated this to one letter — show the path from sm: up. */}
+        <h1 className="hidden sm:block text-[11px] md:text-xs font-bold text-foreground uppercase tracking-[0.14em] truncate">
           <span className="hidden md:inline text-dim font-medium">TRADE&nbsp;/&nbsp;</span>{title}
         </h1>
         <Link

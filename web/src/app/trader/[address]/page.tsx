@@ -70,7 +70,7 @@ function EquityCurveChart({ data }: { data: { time: number; value: number }[] })
       timeScale: { borderColor: 'rgba(255,255,255,0.06)' },
     });
     const series = chart.addSeries(LineSeries, {
-      color: data[data.length - 1].value >= 0 ? '#34d399' : '#ef4444',
+      color: data[data.length - 1].value >= 0 ? '#2bd96a' : '#ef4444',
       lineWidth: 2,
     });
     const deduped = data.reduce<{ time: number; value: number }[]>((acc, d) => {

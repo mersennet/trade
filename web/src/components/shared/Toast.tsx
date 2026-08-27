@@ -33,18 +33,28 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={{ toast }}>
       {children}
       <div role="status" aria-live="polite" className="fixed bottom-20 md:bottom-6 right-6 z-50 flex flex-col gap-2 max-w-sm">
+        {/* Terminal log lines: solid surface, colored left rule, status word. */}
         {toasts.map((t) => (
           <div
             key={t.id}
             className={cn(
-              'px-4 py-3 rounded-lg text-xs font-medium shadow-lg backdrop-blur-xl border',
-              t.type === 'success' && 'bg-green/10 text-green border-green/20 shadow-[0_0_16px_rgba(52,211,153,0.1)]',
-              t.type === 'error' && 'bg-red/10 text-red border-red/20 shadow-[0_0_16px_rgba(255,82,64,0.12)]',
-              t.type === 'info' && 'bg-primary/10 text-primary border-primary/20 shadow-[0_0_16px_rgba(43,217,106,0.1)]',
-              t.type === 'warning' && 'bg-yellow/10 text-yellow border-yellow/20 shadow-[0_0_16px_rgba(255,154,60,0.1)]',
+              'flex items-start gap-2.5 px-3.5 py-2.5 text-xs bg-surface border border-border shadow-[0_8px_24px_rgba(0,0,0,0.5)] border-l-2',
+              t.type === 'success' && 'border-l-green',
+              t.type === 'error' && 'border-l-red',
+              t.type === 'info' && 'border-l-primary',
+              t.type === 'warning' && 'border-l-yellow',
             )}
           >
-            {t.message}
+            <span className={cn(
+              'text-[9px] font-extrabold uppercase tracking-[0.16em] mt-[1.5px] shrink-0',
+              t.type === 'success' && 'text-green',
+              t.type === 'error' && 'text-red',
+              t.type === 'info' && 'text-primary',
+              t.type === 'warning' && 'text-yellow',
+            )}>
+              {t.type === 'success' ? 'OK' : t.type === 'error' ? 'ERR' : t.type === 'warning' ? 'WARN' : 'INFO'}
+            </span>
+            <span className="text-foreground/90 leading-snug">{t.message}</span>
           </div>
         ))}
       </div>

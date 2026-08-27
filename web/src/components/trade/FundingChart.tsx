@@ -112,8 +112,8 @@ export default function FundingChart() {
       time: Math.floor(new Date(r.timestamp).getTime() / 1000) as any,
       value: r.rate,
       color: r.rate >= 0
-        ? (isDark ? 'rgba(52,211,153,0.7)' : 'rgba(22,163,74,0.7)')
-        : (isDark ? 'rgba(248,113,113,0.7)' : 'rgba(220,38,38,0.7)'),
+        ? (isDark ? 'rgba(43,217,106,0.7)' : 'rgba(22,163,74,0.7)')
+        : (isDark ? 'rgba(255,77,61,0.7)' : 'rgba(220,38,38,0.7)'),
     }));
 
     histogramSeries.setData(chartData);

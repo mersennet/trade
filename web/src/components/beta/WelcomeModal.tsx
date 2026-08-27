@@ -70,7 +70,8 @@ export default function WelcomeModal() {
       aria-labelledby="welcome-title"
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
     >
-      <div className="w-full max-w-lg rounded-2xl border border-border bg-surface shadow-2xl">
+      <div className="w-full max-w-lg border border-border bg-surface shadow-[0_0_60px_rgba(0,0,0,0.7),0_0_30px_rgba(43,217,106,0.07)]">
+        <div className="sect">System notice · Public beta</div>
         <div className="p-6 sm:p-7">
           {/* Brand header */}
           <div className="flex items-center gap-3 mb-4">
@@ -134,13 +135,13 @@ export default function WelcomeModal() {
           <button
             onClick={accept}
             disabled={!acknowledged}
-            className={`w-full py-2.5 rounded-md text-[13px] font-semibold tracking-wide transition ${
+            className={`w-full py-2.5 text-[11px] font-extrabold uppercase tracking-[0.18em] transition ${
               acknowledged
-                ? 'premium-gradient text-black hover:brightness-110 shadow-[0_0_20px_rgba(43,217,106,0.25)]'
+                ? 'premium-gradient shadow-[0_0_20px_rgba(43,217,106,0.25)]'
                 : 'bg-surface-2 text-dim border border-border cursor-not-allowed'
             }`}
           >
-            {acknowledged ? 'Enter beta' : 'Acknowledge the terms to continue'}
+            {acknowledged ? 'Enter terminal' : 'Acknowledge the terms to continue'}
           </button>
         </div>
       </div>

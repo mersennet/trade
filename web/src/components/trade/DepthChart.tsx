@@ -15,10 +15,10 @@ export default function DepthChart() {
   const isDark = theme === 'dark';
   const colors = useMemo(() => ({
     bg: isDark ? '#050507' : '#ffffff',
-    bidFill: isDark ? 'rgba(52,211,153,0.12)' : 'rgba(22,163,74,0.12)',
-    bidLine: isDark ? '#34d399' : '#16a34a',
-    askFill: isDark ? 'rgba(248,113,113,0.12)' : 'rgba(220,38,38,0.12)',
-    askLine: isDark ? '#f87171' : '#dc2626',
+    bidFill: isDark ? 'rgba(43,217,106,0.12)' : 'rgba(22,163,74,0.12)',
+    bidLine: isDark ? '#2bd96a' : '#16a34a',
+    askFill: isDark ? 'rgba(255,77,61,0.12)' : 'rgba(220,38,38,0.12)',
+    askLine: isDark ? '#ff4d3d' : '#dc2626',
     grid: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.06)',
     text: isDark ? '#6e6b7b' : '#71717a',
     midLine: isDark ? 'rgba(43,217,106,0.4)' : 'rgba(15,174,98,0.4)',

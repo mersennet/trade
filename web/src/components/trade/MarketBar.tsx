@@ -155,8 +155,8 @@ export default function MarketBar() {
           <div className="absolute top-full left-0 right-0 z-50 bg-surface border-b border-border shadow-xl max-h-[70vh] overflow-hidden flex flex-col">
             {/* Terminal is perps-only; spot has a dedicated page. */}
             <div className="flex items-center gap-1 px-3 py-2 border-b border-border shrink-0">
-              <span className="flex-1 py-1.5 text-[11px] font-semibold rounded-md text-center bg-primary/15 text-primary">Perps</span>
-              <Link href="/spot" className="flex-1 py-1.5 text-[11px] font-semibold rounded-md text-center text-dim bg-surface-2">
+              <span className="flex-1 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-center bg-[var(--primary-dim)] text-primary-bright">Perps</span>
+              <Link href="/spot" className="flex-1 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-center text-dim bg-surface-2">
                 Spot
               </Link>
             </div>
@@ -250,8 +250,8 @@ export default function MarketBar() {
             its own page rather than a mode toggle, so the order form can never
             send a perp-encoded transaction for a spot market. */}
         <div className="flex items-center gap-0.5 mr-2 ml-1 shrink-0">
-          <span className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-primary/15 text-primary">Perps</span>
-          <Link href="/spot" className="px-2.5 py-1 text-[11px] font-semibold rounded-md text-dim hover:text-muted transition-all">Spot</Link>
+          <span className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] bg-[var(--primary-dim)] text-primary-bright">Perps</span>
+          <Link href="/spot" className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-dim hover:text-muted transition-all">Spot</Link>
         </div>
         <div className="w-px h-5 bg-border shrink-0 mr-1" />
         {activeMarkets.map((m) => {

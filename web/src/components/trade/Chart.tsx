@@ -255,13 +255,13 @@ export default function Chart() {
     const chart = lc.createChart(containerRef.current, {
       layout: {
         background: { type: lc.ColorType.Solid, color: isDark ? '#070b08' : '#ffffff' },
-        textColor: isDark ? '#6e6b7b' : '#71717a',
-        fontFamily: 'Schibsted Grotesk, sans-serif',
+        textColor: isDark ? '#5c6f60' : '#68766a',
+        fontFamily: 'JetBrains Mono, monospace',
         fontSize: 11,
       },
       grid: {
-        vertLines: { color: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.04)' },
-        horzLines: { color: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.04)' },
+        vertLines: { color: isDark ? 'rgba(141,255,176,0.035)' : 'rgba(10,40,20,0.05)' },
+        horzLines: { color: isDark ? 'rgba(141,255,176,0.035)' : 'rgba(10,40,20,0.05)' },
       },
       crosshair: {
         mode: 0,
@@ -269,11 +269,11 @@ export default function Chart() {
         horzLine: { color: isDark ? 'rgba(43,217,106,0.3)' : 'rgba(15,174,98,0.3)', style: 2 },
       },
       rightPriceScale: {
-        borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)',
+        borderColor: isDark ? 'rgba(141,255,176,0.07)' : 'rgba(0,0,0,0.08)',
         scaleMargins: { top: 0.05, bottom: hasSubPane ? 0.3 : 0.15 },
       },
       timeScale: {
-        borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)',
+        borderColor: isDark ? 'rgba(141,255,176,0.07)' : 'rgba(0,0,0,0.08)',
         timeVisible: true,
       },
       handleScroll: { vertTouchDrag: false },
@@ -292,9 +292,9 @@ export default function Chart() {
     let mainSeries: any;
     if (chartType === 'candles') {
       mainSeries = chart.addSeries(lc.CandlestickSeries, {
-        upColor: '#34d399', downColor: '#f87171',
-        borderUpColor: '#34d399', borderDownColor: '#f87171',
-        wickUpColor: '#34d39980', wickDownColor: '#f8717180',
+        upColor: '#2bd96a', downColor: '#ff4d3d',
+        borderUpColor: '#2bd96a', borderDownColor: '#ff4d3d',
+        wickUpColor: '#2bd96a80', wickDownColor: '#ff4d3d80',
         priceFormat: priceFormatOpt,
       });
     } else if (chartType === 'line') {
@@ -354,13 +354,13 @@ export default function Chart() {
         color: '#22d3ee', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
       });
       seriesRefs.current.ichiKijun = chart.addSeries(lc.LineSeries, {
-        color: '#f87171', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+        color: '#ff4d3d', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
       });
       seriesRefs.current.ichiSenkouA = chart.addSeries(lc.LineSeries, {
-        color: 'rgba(52,211,153,0.4)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+        color: 'rgba(43,217,106,0.4)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
       });
       seriesRefs.current.ichiSenkouB = chart.addSeries(lc.LineSeries, {
-        color: 'rgba(248,113,113,0.4)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+        color: 'rgba(255,77,61,0.4)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
       });
     }
 
@@ -369,13 +369,13 @@ export default function Chart() {
       seriesRefs.current.rsi = chart.addSeries(lc.LineSeries, {
         color: '#2bd96a', lineWidth: 2, priceScaleId: 'rsi', priceLineVisible: false, lastValueVisible: true,
       });
-      chart.priceScale('rsi').applyOptions({ scaleMargins: { top: 0.75, bottom: 0.02 }, borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)' });
+      chart.priceScale('rsi').applyOptions({ scaleMargins: { top: 0.75, bottom: 0.02 }, borderColor: isDark ? 'rgba(141,255,176,0.07)' : 'rgba(0,0,0,0.08)' });
       seriesRefs.current.rsiOB = chart.addSeries(lc.LineSeries, {
-        color: isDark ? 'rgba(248,113,113,0.3)' : 'rgba(220,38,38,0.3)', lineWidth: 1, lineStyle: 2, priceScaleId: 'rsi',
+        color: isDark ? 'rgba(255,77,61,0.3)' : 'rgba(220,38,38,0.3)', lineWidth: 1, lineStyle: 2, priceScaleId: 'rsi',
         priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
       });
       seriesRefs.current.rsiOS = chart.addSeries(lc.LineSeries, {
-        color: isDark ? 'rgba(52,211,153,0.3)' : 'rgba(22,163,74,0.3)', lineWidth: 1, lineStyle: 2, priceScaleId: 'rsi',
+        color: isDark ? 'rgba(43,217,106,0.3)' : 'rgba(22,163,74,0.3)', lineWidth: 1, lineStyle: 2, priceScaleId: 'rsi',
         priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
       });
     }
@@ -415,7 +415,7 @@ export default function Chart() {
       });
       chart.priceScale('macd').applyOptions({
         scaleMargins: { top: showRSI ? 0.6 : 0.75, bottom: 0.02 },
-        borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)',
+        borderColor: isDark ? 'rgba(141,255,176,0.07)' : 'rgba(0,0,0,0.08)',
       });
     }
 
@@ -457,7 +457,7 @@ export default function Chart() {
           const low = Math.min(p1.price, price);
           const id = `fib-${Date.now()}`;
           const ratios = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
-          const colors = ['#34d399', '#22d3ee', '#3b82f6', '#b07cff', '#f59e0b', '#f87171', '#ef4444'];
+          const colors = ['#2bd96a', '#22d3ee', '#3b82f6', '#b07cff', '#f59e0b', '#ff4d3d', '#ef4444'];
           const levels = ratios.map((ratio, idx) => {
             const lvlPrice = high - ratio * (high - low);
             const ref = mainSeries.createPriceLine({
@@ -493,7 +493,7 @@ export default function Chart() {
       } catch {}
     }
     for (const fb of fibLevels) {
-      const colors = ['#34d399', '#22d3ee', '#3b82f6', '#b07cff', '#f59e0b', '#f87171', '#ef4444'];
+      const colors = ['#2bd96a', '#22d3ee', '#3b82f6', '#b07cff', '#f59e0b', '#ff4d3d', '#ef4444'];
       fb.levels.forEach((lvl, idx) => {
         try {
           const lvlPrice = fb.high - lvl.ratio * (fb.high - fb.low);
@@ -565,7 +565,7 @@ export default function Chart() {
         (b) => b.marketId === market.id && (!walletAddress || b.owner.toLowerCase() === walletAddress.toLowerCase())
       );
       if (br) {
-        if (br.tp) add(Number(br.tp), '#34d399', 'TP');
+        if (br.tp) add(Number(br.tp), '#2bd96a', 'TP');
         if (br.sl) add(Number(br.sl), '#ff9a3c', 'SL');
       }
       return true;
@@ -654,7 +654,7 @@ export default function Chart() {
           }
           refs.volume?.update({
             time: updated.time, value: updated.volume,
-            color: updated.close >= updated.open ? 'rgba(52,211,153,0.25)' : 'rgba(248,113,113,0.25)',
+            color: updated.close >= updated.open ? 'rgba(43,217,106,0.25)' : 'rgba(255,77,61,0.25)',
           });
         } catch {}
       };
@@ -720,7 +720,7 @@ export default function Chart() {
 
     refs.volume?.setData(candles.map((c: any) => ({
       time: c.time, value: c.volume ?? 0,
-      color: c.close >= c.open ? 'rgba(52,211,153,0.25)' : 'rgba(248,113,113,0.25)',
+      color: c.close >= c.open ? 'rgba(43,217,106,0.25)' : 'rgba(255,77,61,0.25)',
     })));
 
     const closes = candles.map((c: any) => c.close);
@@ -748,7 +748,7 @@ export default function Chart() {
       const m = calcMACD(closes);
       refs.macdLine.setData(toSeries(m.macd));
       refs.macdSignal.setData(toSeries(m.signal));
-      refs.macdHist.setData(m.histogram.map((v, i) => v !== null ? { time: times[i], value: v, color: v >= 0 ? 'rgba(52,211,153,0.5)' : 'rgba(248,113,113,0.5)' } : null).filter(Boolean));
+      refs.macdHist.setData(m.histogram.map((v, i) => v !== null ? { time: times[i], value: v, color: v >= 0 ? 'rgba(43,217,106,0.5)' : 'rgba(255,77,61,0.5)' } : null).filter(Boolean));
     }
 
     if (refs.vwap) refs.vwap.setData(toSeries(calcVWAP(candles)));

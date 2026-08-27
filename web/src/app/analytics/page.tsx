@@ -160,7 +160,7 @@ function EquityCurveChart({ data }: { data: { time: number; value: number }[] })
     });
 
     const series = chart.addSeries(LineSeries, {
-      color: data[data.length - 1].value >= 0 ? '#34d399' : '#ef4444',
+      color: data[data.length - 1].value >= 0 ? '#2bd96a' : '#ef4444',
       lineWidth: 2,
       crosshairMarkerRadius: 4,
       priceFormat: { type: 'price', precision: 2, minMove: 0.01 },

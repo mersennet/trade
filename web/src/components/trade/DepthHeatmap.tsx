@@ -77,9 +77,9 @@ export default function DepthHeatmap() {
 
     if (cumBids.length > 1) {
       const grad = ctx.createLinearGradient(0, padding.top + chartH, 0, padding.top);
-      grad.addColorStop(0, 'rgba(52,211,153,0.02)');
-      grad.addColorStop(0.5, 'rgba(52,211,153,0.15)');
-      grad.addColorStop(1, 'rgba(52,211,153,0.35)');
+      grad.addColorStop(0, 'rgba(43,217,106,0.02)');
+      grad.addColorStop(0.5, 'rgba(43,217,106,0.15)');
+      grad.addColorStop(1, 'rgba(43,217,106,0.35)');
       ctx.beginPath();
       ctx.moveTo(priceToX(cumBids[0].price), depthToY(0));
       for (const pt of cumBids) ctx.lineTo(priceToX(pt.price), depthToY(pt.cumSize));
@@ -92,16 +92,16 @@ export default function DepthHeatmap() {
         const x = priceToX(cumBids[i].price), y = depthToY(cumBids[i].cumSize);
         i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
       }
-      ctx.strokeStyle = 'rgba(52,211,153,0.8)';
+      ctx.strokeStyle = 'rgba(43,217,106,0.8)';
       ctx.lineWidth = 1.5;
       ctx.stroke();
     }
 
     if (cumAsks.length > 1) {
       const grad = ctx.createLinearGradient(0, padding.top + chartH, 0, padding.top);
-      grad.addColorStop(0, 'rgba(248,113,113,0.02)');
-      grad.addColorStop(0.5, 'rgba(248,113,113,0.15)');
-      grad.addColorStop(1, 'rgba(248,113,113,0.35)');
+      grad.addColorStop(0, 'rgba(255,77,61,0.02)');
+      grad.addColorStop(0.5, 'rgba(255,77,61,0.15)');
+      grad.addColorStop(1, 'rgba(255,77,61,0.35)');
       ctx.beginPath();
       ctx.moveTo(priceToX(cumAsks[0].price), depthToY(0));
       for (const pt of cumAsks) ctx.lineTo(priceToX(pt.price), depthToY(pt.cumSize));
@@ -114,7 +114,7 @@ export default function DepthHeatmap() {
         const x = priceToX(cumAsks[i].price), y = depthToY(cumAsks[i].cumSize);
         i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
       }
-      ctx.strokeStyle = 'rgba(248,113,113,0.8)';
+      ctx.strokeStyle = 'rgba(255,77,61,0.8)';
       ctx.lineWidth = 1.5;
       ctx.stroke();
     }

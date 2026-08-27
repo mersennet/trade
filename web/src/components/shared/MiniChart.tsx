@@ -35,7 +35,7 @@ export default function MiniChart({ marketId, height = 64 }: { marketId: number;
         chart = c;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const series = (c as any).addSeries(LineSeries, {
-          color: rising ? '#34d399' : '#f87171',
+          color: rising ? '#2bd96a' : '#ff4d3d',
           lineWidth: 1,
           priceLineVisible: false,
           lastValueVisible: false,
