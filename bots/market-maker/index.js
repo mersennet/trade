@@ -45,12 +45,9 @@ const CONFIG = {
   // per-sender mempool) before the next batch — prevents the backlog that
   // starved later markets.
   refreshInterval: 10_000,
-  // Orders now settle through consensus (mined over blocks), so cancelling
-  // and re-placing every cycle churns the book faster than it can rest and
-  // leaves it shallow. Refresh on a longer cadence and cancel only
-  // periodically so resting liquidity accumulates into a visible book.
-  cancelBeforeRefresh: (process.env.MM_CANCEL_EVERY_CYCLE || 'false') === 'true',
-  cancelEveryNCycles: Number(process.env.MM_CANCEL_EVERY_N || 12),
+  // Off-ladder orders (mid moved, or leftovers) are retired at most this many
+  // per cycle so a cancel sweep can never flood the mempool again.
+  cancelPerCycle: Number(process.env.MM_CANCEL_PER_CYCLE || 25),
   // Collateral deposited for the maker wallet on startup (integer units — the
   // precompile uses unscaled collateral/price/size and notional = price*size).
   seedCollateral: process.env.MM_COLLATERAL || '1000000000000',
@@ -172,27 +169,35 @@ function buildOrders(marketId, mid) {
   return orders;
 }
 
-async function cancelAllOrders() {
-  try {
-    const openOrders = await rpcCall('mersennet_orders_getOpenOrders', [CONFIG.owner]);
-    if (!openOrders || !Array.isArray(openOrders) || openOrders.length === 0) return 0;
-    const ids = openOrders.map(o => o.order_id || o.id).filter(Boolean).slice(0, 3000);
-    if (ids.length === 0) return 0;
+/** Identity of a quote level: one resting order per (market, side, price). */
+function quoteKey(o) {
+  return `${o.marketId}:${o.side}:${o.price}`;
+}
 
-    const batchSize = 200;
-    let cancelled = 0;
-    for (let i = 0; i < ids.length; i += batchSize) {
-      const batch = ids.slice(i, i + batchSize);
-      const results = await Promise.allSettled(
-        batch.map(id => maker.cancelOrder(id))
-      );
-      cancelled += results.filter(r => r.status === 'fulfilled').length;
-    }
-    return cancelled;
+/** The maker's resting orders, normalised to { id, marketId, side, price }. */
+async function openOrders() {
+  try {
+    const raw = await rpcCall('mersennet_orders_getOpenOrders', [CONFIG.owner]);
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((o) => ({
+        id: BigInt(o.order_id ?? o.id ?? 0),
+        marketId: hexToNum(o.market_id ?? o.marketId),
+        side: String(o.side || '').toLowerCase() === 'sell' ? 'sell' : 'buy',
+        price: hexToNum(o.price),
+      }))
+      .filter((o) => o.id > 0n);
   } catch (e) {
-    console.error(`[mm] cancelAllOrders failed: ${e.message}`);
-    return 0;
+    console.error(`[mm] openOrders failed: ${e.message}`);
+    return [];
   }
+}
+
+/** Cancel the given orders (already bounded by the caller); returns how many were sent. */
+async function cancelOrders(orders) {
+  if (orders.length === 0) return 0;
+  const results = await Promise.allSettled(orders.map((o) => maker.cancelOrder(o.id)));
+  return results.filter((r) => r.status === 'fulfilled' && r.value).length;
 }
 
 const pendingReports = [];
@@ -252,13 +257,6 @@ async function refreshQuotes() {
   const start = Date.now();
 
   try {
-    // Cancel stale orders periodically (not every cycle) so consensus-
-    // settled resting orders have time to accumulate into a deep book.
-    let cancelled = 0;
-    if (CONFIG.cancelBeforeRefresh || cycleCount % CONFIG.cancelEveryNCycles === 0) {
-      cancelled = await cancelAllOrders();
-    }
-
     // Fetch live mid prices, anchored toward seed
     await Promise.all(CONFIG.markets.map(async (mId) => {
       const chainMid = await fetchMidPrice(mId);
@@ -278,13 +276,37 @@ async function refreshQuotes() {
     const perMarket = CONFIG.markets.map((marketId) =>
       buildOrders(marketId, liveMid[marketId] || MARKETS[marketId].seed),
     );
-    const allOrders = [];
+    const ladder = [];
     const maxLen = Math.max(0, ...perMarket.map((o) => o.length));
     for (let i = 0; i < maxLen; i++) {
       for (const orders of perMarket) {
-        if (i < orders.length) allOrders.push(orders[i]);
+        if (i < orders.length) ladder.push(orders[i]);
       }
     }
+
+    // Quote maintenance instead of blind re-quoting. Every order is a mined
+    // tx, so re-placing the full ladder each cycle and bulk-cancelling every
+    // Nth cycle grew the open-order set into the thousands and then fired a
+    // thousand-cancel burst that flooded the mempool. Instead, diff the
+    // resting orders against the desired ladder: keep levels already quoted,
+    // place only the missing ones (typically what the taker just consumed),
+    // and retire a bounded number of off-ladder orders per cycle.
+    const resting = await openOrders();
+    const wanted = new Set(ladder.map(quoteKey));
+    // One resting order per level: the oldest keeps its price-time priority,
+    // any newer duplicate at the same level is surplus and gets retired along
+    // with off-ladder orders (oldest first, bounded per cycle).
+    const keeper = new Map();
+    for (const o of resting) {
+      const k = quoteKey(o);
+      if (wanted.has(k) && (!keeper.has(k) || o.id < keeper.get(k).id)) keeper.set(k, o);
+    }
+    const quoted = new Set(keeper.keys());
+    const allOrders = ladder.filter((o) => !quoted.has(quoteKey(o)));
+    const stale = resting
+      .filter((o) => keeper.get(quoteKey(o)) !== o)
+      .sort((a, b) => (a.id < b.id ? -1 : 1));
+    const cancelled = await cancelOrders(stale.slice(0, CONFIG.cancelPerCycle));
 
     const placeStart = Date.now();
     const results = await Promise.allSettled(
@@ -320,7 +342,7 @@ async function refreshQuotes() {
     // Account nonce is the ground truth for "orders actually mined": if it
     // stops advancing while place>0, the wallet is wedged (signer.js resyncs).
     const w = maker.stats();
-    console.log(`[mm] #${cycleCount}: cancel=${cancelled} place=${placed}/${allOrders.length} fills=${fills} nonce=${w.mined}/${w.local} skipped=${w.skipped} ${opsPerSec}ops/s ${totalTime}ms | ${midStr}`);
+    console.log(`[mm] #${cycleCount}: resting=${resting.length} quoted=${ladder.length - allOrders.length}/${ladder.length} place=${placed}/${allOrders.length} cancel=${cancelled}/${stale.length} fills=${fills} nonce=${w.mined}/${w.local} skipped=${w.skipped} ${opsPerSec}ops/s ${totalTime}ms | ${midStr}`);
 
     // Self-heal: if the chain lost its markets (e.g. a state reset/re-seed),
     // every submit fails with "unknown market" and the book goes empty. Re-seed
@@ -342,7 +364,7 @@ async function main() {
   console.log('[mm] Mersennet Trade Market Maker — Dense Liquidity');
   console.log(`[mm] RPC: ${RPC_URL}`);
   console.log(`[mm] Markets: ${CONFIG.markets.map(id => MARKETS[id].symbol).join(', ')}`);
-  console.log(`[mm] Refresh: ${CONFIG.refreshInterval / 1000}s | Cancel+Replace each cycle`);
+  console.log(`[mm] Refresh: ${CONFIG.refreshInterval / 1000}s | quote maintenance (place missing levels, retire <=${CONFIG.cancelPerCycle} off-ladder/duplicate orders per cycle)`);
 
   await ensureMarkets();
   await ensureCollateral();
