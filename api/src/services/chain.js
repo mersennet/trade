@@ -130,7 +130,7 @@ async function ethCall(data, from) {
 // ABI helpers (precompile uses standard Solidity ABI encoding)
 // ---------------------------------------------------------------------
 
-const PRECOMPILE_IFACE = new ethers.utils.Interface([
+const PRECOMPILE_IFACE = new ethers.Interface([
   'function placeOrder(uint64 marketId, bool isBuy, uint256 price, uint256 size, uint8 tif) returns (uint256, uint256, uint256)',
   'function cancelOrder(uint256 orderId) returns (bool)',
   'function depositCollateral(uint256 amount) returns (bool)',
@@ -390,7 +390,7 @@ function withdrawCalldata(amount) {
 // ---------------------------------------------------------------------
 
 const STAKING_PRECOMPILE = '0x0000000000000000000000000000000000000400';
-const STAKING_IFACE = new ethers.utils.Interface([
+const STAKING_IFACE = new ethers.Interface([
   'function getDelegation(address delegator, address validator) view returns (uint256 amount, uint256 pending)',
 ]);
 

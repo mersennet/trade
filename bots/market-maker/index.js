@@ -123,7 +123,11 @@ async function submitOrder(marketId, side, price, size) {
     // read from the resulting order book / reported by the taker path, so we
     // return the tx hash for logging rather than a synchronous outcome.
     const txHash = await maker.placeOrder(marketId, side, price, size, 'gtc');
-    return { txHash, trades: [] };
+    // A null hash means the wallet skipped the send (in-flight backoff). Return
+    // null so the cycle log counts only orders that actually reached the node —
+    // wrapping a null hash in an object made "place=30/30" read as healthy while
+    // every send was being skipped.
+    return txHash ? { txHash, trades: [] } : null;
   } catch (e) {
     if (e.message && e.message.includes('unknown market')) marketMissing = true;
     if (!submitErrLogged) {
@@ -313,7 +317,10 @@ async function refreshQuotes() {
     const opsPerSec = placeTime > 0 ? Math.round(allOrders.length / (placeTime / 1000)) : 0;
 
     const midStr = CONFIG.markets.map(id => `${MARKETS[id].symbol}=${liveMid[id] || '?'}`).join(' ');
-    console.log(`[mm] #${cycleCount}: cancel=${cancelled} place=${placed}/${allOrders.length} fills=${fills} ${opsPerSec}ops/s ${totalTime}ms | ${midStr}`);
+    // Account nonce is the ground truth for "orders actually mined": if it
+    // stops advancing while place>0, the wallet is wedged (signer.js resyncs).
+    const w = maker.stats();
+    console.log(`[mm] #${cycleCount}: cancel=${cancelled} place=${placed}/${allOrders.length} fills=${fills} nonce=${w.mined}/${w.local} skipped=${w.skipped} ${opsPerSec}ops/s ${totalTime}ms | ${midStr}`);
 
     // Self-heal: if the chain lost its markets (e.g. a state reset/re-seed),
     // every submit fails with "unknown market" and the book goes empty. Re-seed

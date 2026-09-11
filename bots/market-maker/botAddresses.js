@@ -9,7 +9,7 @@ const BOT_SEED = process.env.BOT_SEED || 'mersennet-bot-v1';
 const NUM_TAKERS = Number(process.env.NUM_TAKERS || 20);
 
 function deriveKey(label) {
-  return ethers.utils.keccak256(ethers.utils.toUtf8Bytes(`${BOT_SEED}:${label}`));
+  return ethers.keccak256(ethers.toUtf8Bytes(`${BOT_SEED}:${label}`));
 }
 
 function deriveAddress(label) {

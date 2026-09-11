@@ -19,7 +19,7 @@ const PRECOMPILE = '0x0000000000000000000000000000000000000100';
 const CHAIN_ID = Number(process.env.CHAIN_ID || 131071);
 const BOT_SEED = process.env.BOT_SEED || 'mersennet-bot-v1';
 
-const IFACE = new ethers.utils.Interface([
+const IFACE = new ethers.Interface([
   'function placeOrder(uint64 marketId, bool isBuy, uint256 price, uint256 size, uint8 tif) returns (uint256, uint256, uint256)',
   'function cancelOrder(uint256 orderId) returns (bool)',
   'function depositCollateral(uint256 amount) returns (bool)',
@@ -35,9 +35,30 @@ const TIF_CODE = { gtc: 0, ioc: 1, fok: 2, Gtc: 0, Ioc: 1, Fok: 2 };
 // and never approach it.
 const MAX_INFLIGHT = Number(process.env.BOT_MAX_INFLIGHT || 40);
 
+// If we are backed off (local nonce > MAX_INFLIGHT ahead of the account
+// nonce) and the account nonce has not advanced for this long, the "in
+// flight" txs are phantoms — accepted by the RPC but dropped before mining
+// (pool eviction, gossip loss, a rate-limited window). Resync to the account
+// nonce so we start sending again. Without this the wallet wedges forever:
+// skipped sends never reach the node, so no nonce error ever triggers a
+// resync (this is exactly how the maker sat idle for two weeks).
+const STALL_RESYNC_MS = Number(process.env.BOT_STALL_RESYNC_MS || 20_000);
+
+// How long cached chain reads (account nonce, gas price) are reused across a
+// burst of sends. One cycle fires ~30 sends; refetching both per send tripled
+// the request count and tripped the node's 100 req/s per-IP limiter.
+const NONCE_CACHE_MS = 400;
+const GAS_PRICE_CACHE_MS = 10_000;
+
+// Minimum gap between consecutive sends from one wallet. Tx gossip between
+// nodes is UDP; a 30-tx burst in ~200ms is exactly the pattern that dropped
+// datagrams and orphaned nonces. ~8 tx/s still lands a full ladder well
+// within a 10s refresh cycle.
+const SEND_SPACING_MS = Number(process.env.BOT_SEND_SPACING_MS || 120);
+
 /** Deterministic bot private key for a labelled slot (e.g. "maker", "taker-3"). */
 function deriveKey(label) {
-  return ethers.utils.keccak256(ethers.utils.toUtf8Bytes(`${BOT_SEED}:${label}`));
+  return ethers.keccak256(ethers.toUtf8Bytes(`${BOT_SEED}:${label}`));
 }
 
 /**
@@ -55,6 +76,15 @@ class BotWallet {
     // Serialize sends so sequential nonces are assigned without races even
     // when callers fire many placeOrder() promises concurrently.
     this._chain = Promise.resolve();
+    // Progress tracking for stall detection + read caches.
+    this._mined = null;
+    this._minedAt = 0;
+    this._lastProgressAt = Date.now();
+    this._gasPrice = null;
+    this._gasPriceAt = 0;
+    this._stallResyncs = 0;
+    this._skipped = 0;
+    this._lastSendAt = 0;
   }
 
   async rpc(method, params = []) {
@@ -75,10 +105,39 @@ class BotWallet {
     }
   }
 
+  /**
+   * Account (mined) nonce, cached briefly. The node's eth_getTransactionCount
+   * ignores the block tag and always returns the executed nonce, so this is
+   * the ground truth for "how many of our txs actually landed".
+   */
+  async minedNonce(force = false) {
+    const now = Date.now();
+    if (!force && this._mined != null && now - this._minedAt < NONCE_CACHE_MS) return this._mined;
+    const hex = await this.rpc('eth_getTransactionCount', [this.address, 'latest']);
+    const mined = Number(BigInt(hex));
+    if (this._mined == null || mined !== this._mined) this._lastProgressAt = now;
+    this._mined = mined;
+    this._minedAt = now;
+    return mined;
+  }
+
+  async gasPrice() {
+    const now = Date.now();
+    if (this._gasPrice != null && now - this._gasPriceAt < GAS_PRICE_CACHE_MS) return this._gasPrice;
+    const hex = await this.rpc('eth_gasPrice', []);
+    this._gasPrice = BigInt(hex || '0x1');
+    this._gasPriceAt = now;
+    return this._gasPrice;
+  }
+
   async syncNonce() {
-    const hex = await this.rpc('eth_getTransactionCount', [this.address, 'pending']);
-    this._nonce = Number(BigInt(hex));
+    this._nonce = await this.minedNonce(true);
     return this._nonce;
+  }
+
+  /** Snapshot for log lines: account nonce, local nonce, sends skipped, resyncs. */
+  stats() {
+    return { mined: this._mined, local: this._nonce, skipped: this._skipped, stallResyncs: this._stallResyncs };
   }
 
   _send(data, gasLimit) {
@@ -92,22 +151,39 @@ class BotWallet {
       // re-send nonces that are already in flight/mined (a churn loop that
       // wedges the wallet). Instead, back off: when too many txs are
       // outstanding, skip this send and let the backlog drain.
-      const minedHex = await this.rpc('eth_getTransactionCount', [this.address, 'latest']);
-      const mined = Number(BigInt(minedHex));
+      const mined = await this.minedNonce();
       if (this._nonce - mined > MAX_INFLIGHT) {
-        // Drop this order silently; the caller treats a null hash as "not
-        // placed" and the next cycle retries once the chain catches up.
-        return null;
+        // ...unless nothing has mined for a while: then the backlog is not
+        // draining because it does not exist, and only a resync recovers.
+        if (Date.now() - this._lastProgressAt > STALL_RESYNC_MS) {
+          const fresh = await this.minedNonce(true);
+          if (this._nonce - fresh > MAX_INFLIGHT && Date.now() - this._lastProgressAt > STALL_RESYNC_MS) {
+            console.warn(`[${this.label}] nonce stalled: local=${this._nonce} account=${fresh} for ${Math.round((Date.now() - this._lastProgressAt) / 1000)}s — resyncing`);
+            this._nonce = fresh;
+            this._stallResyncs++;
+            this._lastProgressAt = Date.now();
+          }
+        }
+        if (this._nonce - mined > MAX_INFLIGHT) {
+          // Drop this order silently; the caller treats a null hash as "not
+          // placed" and the next cycle retries once the chain catches up.
+          this._skipped++;
+          return null;
+        }
       }
-      const gasPriceHex = await this.rpc('eth_gasPrice', []);
+      const gasPrice = await this.gasPrice();
+      const wait = this._lastSendAt + SEND_SPACING_MS - Date.now();
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+      this._lastSendAt = Date.now();
       const tx = {
+        type: 0,
         to: PRECOMPILE,
         data,
         nonce: this._nonce,
-        gasLimit: ethers.BigNumber.from(gasLimit),
-        gasPrice: ethers.BigNumber.from(gasPriceHex || '0x1'),
+        gasLimit: BigInt(gasLimit),
+        gasPrice,
         chainId: CHAIN_ID,
-        value: 0,
+        value: 0n,
       };
       const raw = await this.wallet.signTransaction(tx);
       try {
