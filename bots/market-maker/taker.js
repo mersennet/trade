@@ -87,6 +87,34 @@ function pickMarket() {
 
 const rawTop = {}; // marketId -> { bid, ask } straight from the chain book
 
+// Live reference (same sources as the maker). When the book's mid is more
+// than 5% away from the reference the book is stale/polluted and the
+// reference wins, so takers never chase forgotten orders.
+const REF_SYMBOLS = { 2: { coinbase: 'BTC-USD', binance: 'BTCUSDT' }, 3: { coinbase: 'ETH-USD', binance: 'ETHUSDT' }, 4: { coinbase: 'SOL-USD', binance: 'SOLUSDT' } };
+const refPrice = {}; // marketId -> { price, at }
+async function fetchJson(url) {
+  const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+  if (!res.ok) throw new Error(String(res.status));
+  return res.json();
+}
+async function refreshReferencePrices() {
+  await Promise.all(Object.entries(REF_SYMBOLS).map(async ([id, sym]) => {
+    const q = [];
+    await Promise.all([
+      fetchJson(`https://api.coinbase.com/v2/prices/${sym.coinbase}/spot`).then((j) => q.push(Number(j?.data?.amount))).catch(() => {}),
+      fetchJson(`https://api.binance.com/api/v3/ticker/price?symbol=${sym.binance}`).then((j) => q.push(Number(j?.price))).catch(() => {}),
+    ]);
+    const v = q.filter((x) => Number.isFinite(x) && x > 0).sort((a, b) => a - b);
+    if (v.length) refPrice[id] = { price: v.length === 2 ? (v[0] + v[1]) / 2 : v[0], at: Date.now() };
+  }));
+}
+function referenceFor(id) {
+  const r = refPrice[id];
+  return r && Date.now() - r.at < 5 * 60_000 ? r.price : null;
+}
+setInterval(() => refreshReferencePrices().catch(() => {}), 30_000);
+refreshReferencePrices().catch(() => {});
+
 async function fetchMidPrices() {
   for (const [id, m] of Object.entries(MARKETS)) {
     try {
@@ -112,6 +140,8 @@ async function fetchMidPrices() {
       else if (bestAsk > 0) liveMid[id] = bestAsk;
       else if (bestBid > 0) liveMid[id] = bestBid;
       else liveMid[id] = seed;
+      const ref = referenceFor(id);
+      if (ref && Math.abs(liveMid[id] - ref) / ref > 0.05) liveMid[id] = Math.round(ref);
     } catch {}
   }
 }
