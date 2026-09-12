@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: web (Next.js) — lint, build, audit
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: web }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: web/package-lock.json }
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - run: npm audit --audit-level=high
+
+  api:
+    name: api — syntax, load, audit
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: api }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: api/package-lock.json }
+      - run: npm ci
+      - name: Syntax-check every source file
+        run: find src -name '*.js' -print0 | xargs -0 -n1 node --check
+      - name: Modules load (no DB needed at require time)
+        run: node -e "require('./src/services/chain.js'); require('./src/routes/feedback.js'); console.log('ok')"
+      - run: npm audit --audit-level=high
+
+  bots:
+    name: bots — syntax, address derivation, audit
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: bots/market-maker }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: bots/market-maker/package-lock.json }
+      - run: npm ci
+      - run: find . -maxdepth 1 -name '*.js' -print0 | xargs -0 -n1 node --check
+      - name: Deterministic bot addresses (guards the key-derivation path)
+        run: |
+          JSON=1 BOT_SEED=ci-seed node bot-addresses.js 3 | python3 -c "import json,sys; a=json.load(sys.stdin); assert len(a)==4 and all(x.startswith('0x') and len(x)==42 for x in a); print('derived', len(a))"
+      - run: npm audit --audit-level=high
+
+  indexer:
+    name: indexer — syntax, audit
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: indexer }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: indexer/package-lock.json }
+      - run: npm ci
+      - run: find . -maxdepth 2 -name '*.js' -not -path './node_modules/*' -print0 | xargs -0 -n1 node --check
+      - run: npm audit --audit-level=high
