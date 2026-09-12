@@ -13,7 +13,9 @@ const pool = require('../db/pool');
 const router = Router();
 
 const MAX_MESSAGE = 4000;
-const ALLOWED_CATEGORIES = new Set(['bug', 'feature', 'security', 'other']);
+// 'validator' = prospective node operators registering interest from the docs
+// (docs.mersennet.com proxies POST /api/v1/feedback to this service).
+const ALLOWED_CATEGORIES = new Set(['bug', 'feature', 'security', 'validator', 'other']);
 
 async function ensureTable() {
   await pool.query(`
@@ -44,7 +46,20 @@ function hashIp(req) {
   return crypto.createHash('sha256').update(ip + (process.env.FEEDBACK_IP_SALT || 'mersennet-trade')).digest('hex').slice(0, 16);
 }
 
-router.post('/', async (req, res) => {
+// Behind Caddy, req.ip is the proxy; key the limiter on the forwarded client
+// address instead so one abusive source cannot exhaust everyone's quota.
+const rateLimit = require('express-rate-limit');
+const postLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 8,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  validate: false,
+  keyGenerator: (req) => req.headers['x-real-ip'] || req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || 'unknown',
+  message: { error: 'too many submissions, try again later' },
+});
+
+router.post('/', postLimiter, async (req, res) => {
   await tableReady;
   try {
     let { category, message, contact, wallet, userAgent, page } = req.body || {};

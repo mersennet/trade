@@ -32,7 +32,7 @@ const maker = new BotWallet(RPC_URL, 'maker', process.env.MM_PRIVATE_KEY);
 // per-cycle order count at/under what mines in one refresh interval.
 const MARKETS = {
   1: { symbol: 'MRSN', seed: 115,   tick: 1,    baseSize: 50,  levels: 3 },
-  2: { symbol: 'BTC',  seed: 74500, tick: 10,   baseSize: 2,   levels: 3 },
+  2: { symbol: 'BTC',  seed: 74500, tick: 10,   baseSize: 3,   levels: 5 }, // busiest market: deeper ask side so takers don't empty it between cycles
   3: { symbol: 'ETH',  seed: 3730,  tick: 1,    baseSize: 8,   levels: 3 },
   4: { symbol: 'SOL',  seed: 148,   tick: 1,    baseSize: 25,  levels: 3 },
   5: { symbol: 'ARB',  seed: 100,   tick: 1,    baseSize: 500, levels: 3 },
@@ -41,10 +41,10 @@ const MARKETS = {
 const CONFIG = {
   owner: maker.address,
   markets: [1, 2, 3, 4, 5],
-  // Slower cadence so each cycle's order txs fully mine (drain the
-  // per-sender mempool) before the next batch — prevents the backlog that
-  // starved later markets.
-  refreshInterval: 10_000,
+  // With quote maintenance a cycle only replaces the few levels takers
+  // consumed (~6-12 txs), so 5s keeps the book two-sided between waves
+  // without approaching the per-sender in-flight cap.
+  refreshInterval: Number(process.env.MM_REFRESH_MS || 5_000),
   // Off-ladder orders (mid moved, or leftovers) are retired at most this many
   // per cycle so a cancel sweep can never flood the mempool again.
   cancelPerCycle: Number(process.env.MM_CANCEL_PER_CYCLE || 25),
