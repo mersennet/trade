@@ -104,6 +104,8 @@ interface AppState {
   /** Timestamp of the last "Deposit" request from the header — AccountPanel
    * watches it and opens its transfer panel in deposit mode. */
   depositRequestTs: number;
+  /** Bumped by "Connect" CTAs outside the header; WalletButton opens its menu. */
+  connectRequestTs: number;
   /** Client-side TP/SL brackets (persisted per wallet). */
   brackets: Bracket[];
   /** Notification center feed (persisted, capped at 50). */
@@ -136,6 +138,7 @@ interface AppState {
   setPrivateMode: (v: boolean) => void;
   setPrivacyForkActive: (v: boolean) => void;
   requestDeposit: () => void;
+  requestConnect: () => void;
   setBracket: (b: Bracket) => void;
   removeBracket: (id: string) => void;
   addNotification: (type: AppNotification['type'], title: string, message: string) => void;
@@ -179,6 +182,7 @@ export const useStore = create<AppState>()(
       privateMode: false,
       privacyForkActive: false,
       depositRequestTs: 0,
+      connectRequestTs: 0,
       brackets: [],
       notifications: [],
       priceAlerts: [],
@@ -219,6 +223,7 @@ export const useStore = create<AppState>()(
         privateMode: privacyForkActive ? s.privateMode : false,
       })),
       requestDeposit: () => set({ depositRequestTs: Date.now() }),
+      requestConnect: () => set({ connectRequestTs: Date.now() }),
       // One bracket per wallet+market: setting replaces any previous one.
       setBracket: (b) => set((s) => ({
         brackets: [

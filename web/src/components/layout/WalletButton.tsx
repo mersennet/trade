@@ -16,6 +16,8 @@ export default function WalletButton() {
   const [loading, setLoading] = useState(false);
   const [collateral, setCollateral] = useState<number>(0);
   const [showConnectMenu, setShowConnectMenu] = useState(false);
+  const connectRequestTs = useStore((s) => s.connectRequestTs);
+  useEffect(() => { if (connectRequestTs) setShowConnectMenu(true); }, [connectRequestTs]);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const connectMenuRef = useDismissable<HTMLDivElement>(showConnectMenu, () => setShowConnectMenu(false));
   const accountMenuRef = useDismissable<HTMLDivElement>(showAccountMenu, () => setShowAccountMenu(false));

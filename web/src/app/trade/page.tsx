@@ -12,6 +12,7 @@ import GettingStarted from '@/components/trade/GettingStarted';
 import OnboardingTour from '@/components/trade/OnboardingTour';
 import { useBrackets } from '@/hooks/useBrackets';
 import { usePriceAlerts } from '@/hooks/usePriceAlerts';
+import { useAccountEvents } from '@/hooks/useAccountEvents';
 import { cn, formatPrice } from '@/lib/utils';
 import { useStore } from '@/stores/useStore';
 
@@ -63,6 +64,7 @@ export default function TradePage() {
   useBrackets();
   // Watch price alerts and notify on crossings.
   usePriceAlerts();
+  useAccountEvents();
 
   useEffect(() => {
     const ticker = tickers[market.id];
