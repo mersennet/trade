@@ -65,7 +65,9 @@ const liveMid = {};
 // 30s; a source older than 5 min is ignored and the market falls back to seed.
 const REF_SYMBOLS = { 2: { coinbase: 'BTC-USD', binance: 'BTCUSDT' }, 3: { coinbase: 'ETH-USD', binance: 'ETHUSDT' }, 4: { coinbase: 'SOL-USD', binance: 'SOLUSDT' } };
 const REF_TTL_MS = 5 * 60_000;
+const STALE_BAND = 0.02;        // resting liquidity >2% through our mid is treated as stale
 const refPrice = {};            // marketId -> { price, at }
+const rawTop = {};              // marketId -> { bid, ask } straight from the chain book
 const lastAnchor = {};          // marketId -> anchor used last cycle (for jump detection)
 
 async function fetchJson(url) {
@@ -125,6 +127,11 @@ async function fetchMidPrice(marketId) {
     const bids = ob.bids || [];
     const asks = ob.asks || [];
     const seed = MARKETS[marketId]?.seed || 100;
+    // Raw top of book (no outlier filter) for the stale-liquidity guard.
+    rawTop[marketId] = {
+      bid: bids.length ? hexToNum(bids[0].price) : 0,
+      ask: asks.length ? hexToNum(asks[0].price) : 0,
+    };
 
     // Find best bid/ask that are within 50% of seed to filter outliers
     let bestBid = 0;
@@ -195,11 +202,20 @@ function buildOrders(marketId, mid) {
     const bidPrice = mid - depth * tick;
     const askPrice = mid + depth * tick;
 
-    if (bidPrice >= 1) {
+    // Stale-liquidity guard. A resting bid far above (or ask far below) the
+    // reference price is not a market — it is someone's forgotten order (the
+    // old GTC takers left 141k of them). Quoting into it fills instantly at
+    // the wrong price and prints it on the tape; the drain job removes such
+    // orders, we simply do not trade with them.
+    const top = rawTop[marketId] || { bid: 0, ask: 0 };
+    const skipAsks = top.bid > 0 && top.bid > mid * (1 + STALE_BAND);
+    const skipBids = top.ask > 0 && top.ask < mid * (1 - STALE_BAND);
+
+    if (bidPrice >= 1 && !skipBids) {
       orders.push({ marketId, side: 'buy',  price: bidPrice, size });
     }
     if (askPrice >= 2) {
-      orders.push({ marketId, side: 'sell', price: askPrice, size });
+      if (!skipAsks) orders.push({ marketId, side: 'sell', price: askPrice, size });
     }
   }
 
