@@ -127,23 +127,22 @@ async function fetchMidPrice(marketId) {
     const bids = ob.bids || [];
     const asks = ob.asks || [];
     const seed = MARKETS[marketId]?.seed || 100;
+    // The RPC returns levels in ascending price order on both sides, so the
+    // best bid is the *last* bid, not bids[0]. Use max/min explicitly.
+    const bidPrices = bids.map((b) => hexToNum(b.price)).filter((p) => p > 0);
+    const askPrices = asks.map((a) => hexToNum(a.price)).filter((p) => p > 0);
     // Raw top of book (no outlier filter) for the stale-liquidity guard.
     rawTop[marketId] = {
-      bid: bids.length ? hexToNum(bids[0].price) : 0,
-      ask: asks.length ? hexToNum(asks[0].price) : 0,
+      bid: bidPrices.length ? Math.max(...bidPrices) : 0,
+      ask: askPrices.length ? Math.min(...askPrices) : 0,
     };
 
-    // Find best bid/ask that are within 50% of seed to filter outliers
-    let bestBid = 0;
-    for (const b of bids) {
-      const p = hexToNum(b.price);
-      if (p > seed * 0.3 && p < seed * 3) { bestBid = p; break; }
-    }
-    let bestAsk = 0;
-    for (const a of asks) {
-      const p = hexToNum(a.price);
-      if (p > seed * 0.3 && p < seed * 3) { bestAsk = p; break; }
-    }
+    // Best bid/ask within a sanity band around the seed (filters outliers).
+    const inBand = (p) => p > seed * 0.3 && p < seed * 3;
+    const bandBids = bidPrices.filter(inBand);
+    const bandAsks = askPrices.filter(inBand);
+    const bestBid = bandBids.length ? Math.max(...bandBids) : 0;
+    const bestAsk = bandAsks.length ? Math.min(...bandAsks) : 0;
 
     if (bestBid > 0 && bestAsk > 0) return Math.round((bestBid + bestAsk) / 2);
     if (bestAsk > 0) return bestAsk;
