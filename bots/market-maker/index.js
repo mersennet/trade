@@ -32,9 +32,9 @@ const maker = new BotWallet(RPC_URL, 'maker', process.env.MM_PRIVATE_KEY);
 // per-cycle order count at/under what mines in one refresh interval.
 const MARKETS = {
   1: { symbol: 'MRSN', seed: 115,   tick: 1,    baseSize: 50,  levels: 3 },
-  2: { symbol: 'BTC',  seed: 74500, tick: 10,   baseSize: 3,   levels: 5 }, // busiest market: deeper ask side so takers don't empty it between cycles
-  3: { symbol: 'ETH',  seed: 3730,  tick: 1,    baseSize: 8,   levels: 3 },
-  4: { symbol: 'SOL',  seed: 148,   tick: 1,    baseSize: 25,  levels: 3 },
+  2: { symbol: 'BTC',  seed: 77000, tick: 10,   baseSize: 3,   levels: 5 }, // busiest market: deeper ask side so takers don't empty it between cycles
+  3: { symbol: 'ETH',  seed: 2500,  tick: 1,    baseSize: 8,   levels: 3 },
+  4: { symbol: 'SOL',  seed: 100,   tick: 1,    baseSize: 25,  levels: 3 },
   5: { symbol: 'ARB',  seed: 100,   tick: 1,    baseSize: 500, levels: 3 },
 };
 
@@ -57,6 +57,43 @@ let rpcId = 1;
 let isRefreshing = false;
 let cycleCount = 0;
 const liveMid = {};
+
+// ---- Live reference prices ------------------------------------------------
+// The CLOB quotes in integer USD ticks, so BTC/ETH/SOL can track their real
+// prices; MRSN has no external market and ARB (~$0.14) is below one tick, so
+// both keep their seeds. Median of Coinbase + Binance spot, refreshed every
+// 30s; a source older than 5 min is ignored and the market falls back to seed.
+const REF_SYMBOLS = { 2: { coinbase: 'BTC-USD', binance: 'BTCUSDT' }, 3: { coinbase: 'ETH-USD', binance: 'ETHUSDT' }, 4: { coinbase: 'SOL-USD', binance: 'SOLUSDT' } };
+const REF_TTL_MS = 5 * 60_000;
+const refPrice = {};            // marketId -> { price, at }
+const lastAnchor = {};          // marketId -> anchor used last cycle (for jump detection)
+
+async function fetchJson(url) {
+  const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+  if (!res.ok) throw new Error(`${url} -> ${res.status}`);
+  return res.json();
+}
+
+async function refreshReferencePrices() {
+  await Promise.all(Object.entries(REF_SYMBOLS).map(async ([id, sym]) => {
+    const quotes = [];
+    await Promise.all([
+      fetchJson(`https://api.coinbase.com/v2/prices/${sym.coinbase}/spot`).then((j) => quotes.push(Number(j?.data?.amount))).catch(() => {}),
+      fetchJson(`https://api.binance.com/api/v3/ticker/price?symbol=${sym.binance}`).then((j) => quotes.push(Number(j?.price))).catch(() => {}),
+    ]);
+    const valid = quotes.filter((q) => Number.isFinite(q) && q > 0).sort((a, b) => a - b);
+    if (valid.length === 0) return;
+    const median = valid.length === 2 ? (valid[0] + valid[1]) / 2 : valid[Math.floor(valid.length / 2)];
+    refPrice[id] = { price: median, at: Date.now() };
+  }));
+}
+
+/** Price anchor for a market: live reference when fresh, else the seed. */
+function anchorFor(marketId) {
+  const ref = refPrice[marketId];
+  if (ref && Date.now() - ref.at < REF_TTL_MS) return ref.price;
+  return MARKETS[marketId].seed;
+}
 
 // Node 20 global fetch — protocol/port aware, so http:// and https:// (incl.
 // rpc.mersennet.com on 443) both work without per-scheme plumbing.
@@ -257,16 +294,19 @@ async function refreshQuotes() {
   const start = Date.now();
 
   try {
-    // Fetch live mid prices, anchored toward seed
+    // Anchor each market to its live reference price (or seed), blended
+    // 70/30 with the chain's own mid so the book follows reality without
+    // whipsawing on a single print. A jump of >5% in the anchor (first live
+    // fetch after a restart, or a real market move) invalidates every resting
+    // order on that market so the old ladder is not crossed by the new one.
+    const jumped = new Set();
     await Promise.all(CONFIG.markets.map(async (mId) => {
       const chainMid = await fetchMidPrice(mId);
-      const seed = MARKETS[mId].seed;
-      if (chainMid && chainMid > 0) {
-        // Blend: 70% toward seed, 30% chain — prevents wild drift
-        liveMid[mId] = Math.round(seed * 0.7 + chainMid * 0.3);
-      } else {
-        liveMid[mId] = seed;
-      }
+      const anchor = anchorFor(mId);
+      if (lastAnchor[mId] && Math.abs(anchor - lastAnchor[mId]) / lastAnchor[mId] > 0.05) jumped.add(mId);
+      lastAnchor[mId] = anchor;
+      const nearAnchor = chainMid && chainMid > 0 && Math.abs(chainMid - anchor) / anchor < 0.05;
+      liveMid[mId] = Math.round(nearAnchor ? anchor * 0.7 + chainMid * 0.3 : anchor);
     }));
 
     // Interleave orders across markets (round-robin by depth level) so no
@@ -302,9 +342,10 @@ async function refreshQuotes() {
       if (wanted.has(k) && (!keeper.has(k) || o.id < keeper.get(k).id)) keeper.set(k, o);
     }
     const quoted = new Set(keeper.keys());
+    if (jumped.size) for (const k of [...quoted]) { if (jumped.has(Number(k.split(':')[0]))) quoted.delete(k); }
     const allOrders = ladder.filter((o) => !quoted.has(quoteKey(o)));
     const stale = resting
-      .filter((o) => keeper.get(quoteKey(o)) !== o)
+      .filter((o) => keeper.get(quoteKey(o)) !== o || jumped.has(o.marketId))
       .sort((a, b) => (a.id < b.id ? -1 : 1));
     const cancelled = await cancelOrders(stale.slice(0, CONFIG.cancelPerCycle));
 
@@ -368,6 +409,10 @@ async function main() {
 
   await ensureMarkets();
   await ensureCollateral();
+
+  await refreshReferencePrices().catch(() => {});
+  setInterval(() => refreshReferencePrices().catch(() => {}), 30_000);
+  console.log(`[mm] reference prices: ${Object.keys(REF_SYMBOLS).map((id) => `${MARKETS[id].symbol}=${refPrice[id] ? Math.round(refPrice[id].price) : 'seed'}`).join(' ')}`);
 
   await refreshQuotes();
   setInterval(refreshQuotes, CONFIG.refreshInterval);

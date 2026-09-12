@@ -14,9 +14,9 @@ const RPC_URL = process.env.RPC_URL || 'https://rpc.mersennet.com';
 // same price regime (ARB in particular quotes around 100, not 1).
 const MARKETS = {
   1:  { symbol: 'MRSN',  weight: 3.0, seed: 115,   tick: 1,  sizeRange: [1, 10]  },
-  2:  { symbol: 'BTC',   weight: 5.0, seed: 74500, tick: 10, sizeRange: [1, 2]   },
-  3:  { symbol: 'ETH',   weight: 4.0, seed: 3730,  tick: 1,  sizeRange: [1, 5]   },
-  4:  { symbol: 'SOL',   weight: 3.0, seed: 148,   tick: 1,  sizeRange: [1, 8]   },
+  2:  { symbol: 'BTC',   weight: 5.0, seed: 77000, tick: 10, sizeRange: [1, 2]   },
+  3:  { symbol: 'ETH',   weight: 4.0, seed: 2500,  tick: 1,  sizeRange: [1, 5]   },
+  4:  { symbol: 'SOL',   weight: 3.0, seed: 100,   tick: 1,  sizeRange: [1, 8]   },
   5:  { symbol: 'ARB',   weight: 1.5, seed: 100,   tick: 1,  sizeRange: [5, 40]  },
 };
 const liveMid = {};
@@ -182,7 +182,9 @@ async function submitTrade(trade) {
   try {
     const wallet = walletByAddress[trade.taker];
     if (!wallet) return { accepted: false };
-    const txHash = await wallet.placeOrder(trade.marketId, trade.side, trade.price, trade.size, 'gtc');
+    // IOC: an unfilled remainder must not rest. The GTC version left ~141k stale
+    // bot orders on the books over three weeks, distorting every best bid.
+    const txHash = await wallet.placeOrder(trade.marketId, trade.side, trade.price, trade.size, 'ioc');
     return { accepted: !!txHash };
   } catch (e) {
     if (!submitErrLogged) {

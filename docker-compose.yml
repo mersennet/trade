@@ -29,6 +29,8 @@ services:
       context: ./api
       dockerfile: Dockerfile
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       PORT: "4005"
       DATABASE_URL: postgresql://mersennet:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/mersennet_trade
@@ -51,6 +53,8 @@ services:
       context: ./indexer
       dockerfile: Dockerfile
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       DATABASE_URL: postgresql://mersennet:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/mersennet_trade
       RPC_URL: ${RPC_URL:-https://rpc.mersennet.com}
@@ -88,6 +92,8 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     command: ["node", "index.js"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       RPC_URL: ${RPC_URL:-https://rpc.mersennet.com}
       INDEXER_URL: http://indexer:4010/trades
@@ -107,6 +113,8 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     command: ["node", "taker.js"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       RPC_URL: ${RPC_URL:-https://rpc.mersennet.com}
       INDEXER_URL: http://indexer:4010/trades
