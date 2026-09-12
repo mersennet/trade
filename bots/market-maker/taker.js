@@ -85,6 +85,8 @@ function pickMarket() {
   return Number(entries[0][0]);
 }
 
+const rawTop = {}; // marketId -> { bid, ask } straight from the chain book
+
 async function fetchMidPrices() {
   for (const [id, m] of Object.entries(MARKETS)) {
     try {
@@ -94,17 +96,17 @@ async function fetchMidPrices() {
       const asks = ob.asks || [];
       const seed = m.seed;
 
-      // Filter outlier prices (within 50% - 200% of seed)
-      let bestBid = 0;
-      for (const b of bids) {
-        const p = hexToNum(b.price);
-        if (p > seed * 0.3 && p < seed * 3) { bestBid = p; break; }
-      }
-      let bestAsk = 0;
-      for (const a of asks) {
-        const p = hexToNum(a.price);
-        if (p > seed * 0.3 && p < seed * 3) { bestAsk = p; break; }
-      }
+      // Levels arrive in ascending price order on both sides: best bid is the
+      // highest bid, best ask the lowest ask. Raw top of book feeds the
+      // stale-liquidity guard; the banded values feed the mid.
+      const bidPrices = bids.map((b) => hexToNum(b.price)).filter((p) => p > 0);
+      const askPrices = asks.map((a) => hexToNum(a.price)).filter((p) => p > 0);
+      rawTop[id] = { bid: bidPrices.length ? Math.max(...bidPrices) : 0, ask: askPrices.length ? Math.min(...askPrices) : 0 };
+      const inBand = (p) => p > seed * 0.3 && p < seed * 3;
+      const bandBids = bidPrices.filter(inBand);
+      const bandAsks = askPrices.filter(inBand);
+      const bestBid = bandBids.length ? Math.max(...bandBids) : 0;
+      const bestAsk = bandAsks.length ? Math.min(...bandAsks) : 0;
 
       if (bestBid > 0 && bestAsk > 0) liveMid[id] = Math.round((bestBid + bestAsk) / 2);
       else if (bestAsk > 0) liveMid[id] = bestAsk;
@@ -182,6 +184,12 @@ async function submitTrade(trade) {
   try {
     const wallet = walletByAddress[trade.taker];
     if (!wallet) return { accepted: false };
+    // Stale-liquidity guard: a sell would cross a forgotten bid far above the
+    // market (or a buy a forgotten ask far below) and print that price on the
+    // tape. Those orders are being drained; do not trade with them.
+    const top = rawTop[trade.marketId] || { bid: 0, ask: 0 };
+    if (trade.side === 'sell' && top.bid > trade.price * 1.02) return { accepted: false, skipped: 'stale bid wall' };
+    if (trade.side === 'buy' && top.ask > 0 && top.ask < trade.price * 0.98) return { accepted: false, skipped: 'stale ask wall' };
     // IOC: an unfilled remainder must not rest. The GTC version left ~141k stale
     // bot orders on the books over three weeks, distorting every best bid.
     const txHash = await wallet.placeOrder(trade.marketId, trade.side, trade.price, trade.size, 'ioc');
