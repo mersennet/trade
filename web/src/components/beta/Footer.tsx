@@ -10,6 +10,8 @@ const FOOTER_LINKS = [
       { label: 'Trade', href: '/trade' },
       { label: 'Markets', href: '/markets' },
       { label: 'Vault', href: '/vault' },
+      { label: 'Staking & validators', href: '/staking' },
+      { label: 'Points', href: '/points' },
     ],
   },
   {
@@ -29,6 +31,9 @@ const FOOTER_LINKS = [
     links: [
       { label: 'Explorer', href: 'https://explorer.mersennet.com', external: true },
       { label: 'Faucet', href: '/faucet' },
+      { label: 'Testnet', href: '/testnet' },
+      { label: 'Run a node', href: 'https://docs.mersennet.com/validators/run-a-node/', external: true },
+      { label: 'Downloads', href: 'https://mersennet.com/downloads/', external: true },
       { label: 'Feedback', href: '/feedback' },
     ],
   },

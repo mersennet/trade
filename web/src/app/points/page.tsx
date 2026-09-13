@@ -43,7 +43,7 @@ export default function PointsPage() {
           <h1 className="page-title">Points & Rewards</h1>
           <span className="px-1.5 py-0.5 bg-primary/10 text-primary rounded text-[9px] font-semibold uppercase tracking-wider">Season 1 · Live</span>
         </div>
-        <p className="page-sub">Earn points through trading, providing liquidity, and referrals</p>
+        <p className="page-sub">Earn points by trading and by running a verified node — liquidity and referral points are next</p>
       </header>
 
       {/* Trading points are live (accrued from on-chain volume). LP / referral /
@@ -53,8 +53,8 @@ export default function PointsPage() {
           <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" />
         </svg>
         <p className="text-[12px] leading-relaxed text-foreground/80">
-          <span className="text-primary font-semibold">Trading points are live</span>{' '}
-          and accrue automatically from your on-chain trading volume (updated every few minutes).
+          <span className="text-primary font-semibold">Trading and node-runner points are live.</span>{' '}
+          Trading points accrue automatically from your on-chain volume (updated every few minutes); a verified node earns 500 points a day while it is online (see below).
           LP, referral, and competition points are coming soon and currently read zero.
         </p>
       </div>

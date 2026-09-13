@@ -163,6 +163,30 @@ export default function TestnetPage() {
         </a>
       </div>
 
+      {/* Operate the network: node, validator, points, status */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <a href="https://docs.mersennet.com/validators/run-a-node/" target="_blank" rel="noopener noreferrer" className="bg-surface border border-border rounded-xl p-5 hover:border-primary/20 transition-colors duration-200">
+          <p className="text-[10px] font-mono text-primary mb-2">one command · in sync in ~1 min</p>
+          <h3 className="text-sm font-semibold text-foreground mb-1">Run a node</h3>
+          <p className="text-xs text-dim leading-relaxed"><code className="font-mono text-[11px] text-foreground/80">curl -fsSL https://mersennet.com/downloads/install.sh | sudo bash</code></p>
+        </a>
+        <Link href="/staking" className="bg-surface border border-border rounded-xl p-5 hover:border-primary/20 transition-colors duration-200">
+          <p className="text-[10px] font-mono text-primary mb-2">open set · 1,000 MRSN</p>
+          <h3 className="text-sm font-semibold text-foreground mb-1">Become a validator</h3>
+          <p className="text-xs text-dim leading-relaxed">Register your verified node in one click and produce blocks from the next hourly epoch.</p>
+        </Link>
+        <Link href="/points" className="bg-surface border border-border rounded-xl p-5 hover:border-primary/20 transition-colors duration-200">
+          <p className="text-[10px] font-mono text-primary mb-2">500 points / day</p>
+          <h3 className="text-sm font-semibold text-foreground mb-1">Earn points</h3>
+          <p className="text-xs text-dim leading-relaxed">Trading volume and verified node runners earn points; verification is automatic.</p>
+        </Link>
+        <a href="https://status.mersennet.com/status/mersennet" target="_blank" rel="noopener noreferrer" className="bg-surface border border-border rounded-xl p-5 hover:border-primary/20 transition-colors duration-200">
+          <p className="text-[10px] font-mono text-primary mb-2">two public RPC nodes · failover</p>
+          <h3 className="text-sm font-semibold text-foreground mb-1">Network status</h3>
+          <p className="text-xs text-dim leading-relaxed">Live uptime of RPC, explorer, faucet, terminal and the snapshot server.</p>
+        </a>
+      </div>
+
       {/* Note */}
       <div className={cn('bg-surface border border-border rounded-xl px-5 py-4')}>
         <p className="text-[11px] text-dim leading-relaxed">

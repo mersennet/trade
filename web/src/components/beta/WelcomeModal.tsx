@@ -104,6 +104,10 @@ export default function WelcomeModal() {
             <Bullet tone="green">
               Matching and settlement happen atomically on-chain in the Mersennet order-book engine, with no off-chain sequencer.
             </Bullet>
+            <Bullet tone="green">
+              Earn <Link href="/points" className="underline text-primary hover:text-primary-hover">points</Link> by trading or by running a node — and with 1,000 MRSN you can{' '}
+              <Link href="/staking" className="underline text-primary hover:text-primary-hover">register as a validator</Link>.
+            </Bullet>
             <Bullet tone="yellow">
               Use only what you can afford to lose. Markets are sparse, so expect wide spreads.
             </Bullet>
