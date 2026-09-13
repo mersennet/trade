@@ -12,6 +12,7 @@
  */
 const express = require('express');
 const rateLimit = require('express-rate-limit');
+const { createHash } = require('node:crypto');
 const { ethers } = require('ethers');
 const pool = require('../db/pool');
 const { whoami } = require('../services/nodeProbe');
@@ -54,6 +55,11 @@ const verifyLimiter = rateLimit({
 
 function verificationMessage(host, wallet) {
   return `Mersennet node runner verification\nnode: ${host}\nwallet: ${wallet.toLowerCase()}`;
+}
+
+/** Same anonymous id the explorer shows next to community nodes (sha256(ip)[:3]). */
+function nodeIdFor(host) {
+  return createHash('sha256').update(host).digest('hex').slice(0, 6);
 }
 
 function maskHost(host) {
@@ -117,7 +123,7 @@ router.get('/verified', async (_req, res) => {
        FROM verified_nodes ORDER BY first_verified_at ASC LIMIT 500`
     );
     res.json({
-      nodes: r.rows.map((n) => ({ ...n, host: maskHost(n.host), height: Number(n.height) })),
+      nodes: r.rows.map((n) => ({ ...n, id: nodeIdFor(n.host), host: maskHost(n.host), height: Number(n.height) })),
       total: r.rowCount,
       active: r.rows.filter((n) => n.active).length,
       pointsPerDay: NODE_POINTS_PER_DAY,

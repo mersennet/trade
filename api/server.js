@@ -54,7 +54,7 @@ const PORT = process.env.PORT || 4005;
 // CORS is handled by the front-facing Caddy (strict origin allowlist).
 // We only enable cors() here for direct dev use (when not behind Caddy).
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ||
-  'https://trade.mersennet.com,http://localhost:3000,http://localhost:3004')
+  'https://trade.mersennet.com,https://explorer.mersennet.com,http://localhost:3000,http://localhost:3004')
   .split(',').map(s => s.trim()).filter(Boolean);
 app.use(cors({
   origin: (origin, cb) => {
