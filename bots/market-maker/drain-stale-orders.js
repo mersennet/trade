@@ -12,7 +12,11 @@ const { BotWallet } = require('./signer');
 
 const RPC_URL = process.env.RPC_URL || 'http://127.0.0.1:8545';
 const NUM_TAKERS = Number(process.env.NUM_TAKERS || 20);
-const labels = ['maker', ...Array.from({ length: NUM_TAKERS }, (_, i) => `taker-${i}`)];
+// DRAIN_SKIP_MAKER=1 leaves the live maker's quotes alone (takers only).
+const labels = [
+  ...(process.env.DRAIN_SKIP_MAKER === '1' ? [] : ['maker']),
+  ...Array.from({ length: NUM_TAKERS }, (_, i) => `taker-${i}`),
+];
 
 async function rpc(method, params) {
   const res = await fetch(RPC_URL, {

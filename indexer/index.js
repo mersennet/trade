@@ -639,17 +639,22 @@ async function awardPoints() {
       if (trading <= 0) continue;
 
       const existing = await pool.query(
-        `SELECT trading_points, lp_points, referral_points FROM points_balance
+        `SELECT trading_points, lp_points, referral_points, COALESCE(node_points, 0) AS node_points FROM points_balance
          WHERE address = $1 AND season = $2`,
         [address, season]
-      );
+      ).catch(() => pool.query(   // column added by the API on first start; tolerate its absence
+        `SELECT trading_points, lp_points, referral_points, 0 AS node_points FROM points_balance
+         WHERE address = $1 AND season = $2`,
+        [address, season]
+      ));
       const prev = existing.rows[0] || {};
       const prevTrading = Number(prev.trading_points) || 0;
       if (trading <= prevTrading) continue; // no new volume since last run
 
       const lp = Number(prev.lp_points) || 0;
       const ref = Number(prev.referral_points) || 0;
-      const total = trading + lp + ref;
+      const nodePts = Number(prev.node_points) || 0; // awarded by the API for verified node runners
+      const total = trading + lp + ref + nodePts;
 
       await pool.query(
         `INSERT INTO points_balance

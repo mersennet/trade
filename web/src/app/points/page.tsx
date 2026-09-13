@@ -4,6 +4,7 @@ import { useWallet } from '@/hooks/useWallet';
 import { api, type PointsResponse, type PointsEntry } from '@/lib/api';
 import { formatNumber, shortenAddress, cn } from '@/lib/utils';
 import AddressAvatar from '@/components/AddressAvatar';
+import NodeRunnerCard from '@/components/points/NodeRunnerCard';
 
 const TIERS = [
   { name: 'Bronze',   min: 0,       tone: 'text-orange',     dot: 'bg-orange' },
@@ -95,13 +96,16 @@ export default function PointsPage() {
           </div>
 
           {/* Earn-by-source breakdown */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-4 gap-3">
             <SourceTile label="Trading"  value={points.tradingPoints} />
+            <SourceTile label="Node"     value={points.nodePoints || 0} />
             <SourceTile label="LP"       value={points.lpPoints} />
             <SourceTile label="Referral" value={points.referralPoints} />
           </div>
         </>
       )}
+
+      <NodeRunnerCard />
 
       {/* How to earn */}
       <div className="bg-surface border border-border rounded-xl overflow-hidden">
@@ -111,6 +115,7 @@ export default function PointsPage() {
         <div className="divide-y divide-border">
           {[
             { action: 'Trading',     desc: '1 point per $1 of volume traded',       mult: 'Live',   tone: 'text-primary', live: true  },
+            { action: 'Node runner', desc: '500 points per day for a verified, online full node', mult: 'Live', tone: 'text-primary', live: true },
             { action: 'Vault LP',    desc: '2 points per 1 MRSN deposited per day', mult: 'Soon',   tone: 'text-dim',     live: false },
             { action: 'Referrals',   desc: '10% of referee trading points',         mult: 'Soon',   tone: 'text-dim',     live: false },
             { action: 'Competitions',desc: 'Bonus points for top finishers',        mult: 'Soon',   tone: 'text-dim',     live: false },

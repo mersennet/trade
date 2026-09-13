@@ -79,6 +79,8 @@ CREATE TABLE IF NOT EXISTS points_balance (
     updated_at        TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (address, season)
 );
+-- Verified node runners (awarded daily by the API, see routes/nodes.js).
+ALTER TABLE points_balance ADD COLUMN IF NOT EXISTS node_points NUMERIC(20, 4) NOT NULL DEFAULT 0;
 
 -- ─── Competitions ─────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS competitions (

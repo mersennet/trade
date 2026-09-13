@@ -41,6 +41,7 @@ router.get('/:address', async (req, res) => {
       tradingPoints: Number(bal.trading_points),
       lpPoints: Number(bal.lp_points),
       referralPoints: Number(bal.referral_points),
+      nodePoints: Number(bal.node_points || 0),
       tier: bal.tier,
       rank: Number(ranking.rows[0]?.rank || 0),
       history: history.rows,

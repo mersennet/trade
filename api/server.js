@@ -124,6 +124,7 @@ app.use('/api/v1/paper', paperRouter);
 app.use('/api/v1/funding-arb', fundingArbRouter);
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/feedback', require('./src/routes/feedback'));
+app.use('/api/v1/nodes', require('./src/routes/nodes'));
 
 app.get('/api/v1/health', async (req, res) => {
   const pool = require('./src/db/pool');
