@@ -1,0 +1,172 @@
+'use client';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useWallet } from '@/hooks/useWallet';
+import { useToast } from '@/components/shared/Toast';
+import { api, type VerifiedNode } from '@/lib/api';
+import { cn, shortenAddress } from '@/lib/utils';
+import { startPoll } from '@/lib/poll';
+import {
+  addSelfStake, getValidatorSet, registerValidator, unregisterValidator, weiToMrsn,
+  type ValidatorSetEntry, type ValidatorSetView,
+} from '@/lib/staking';
+
+/**
+ * Open validator set: who is producing blocks, and the one-click path from
+ * "verified node runner" to "validator". Registration needs the node's
+ * signed proof, which the terminal already has for verified nodes (the API
+ * stores the `registrationProof` from the node's whoami), so an operator
+ * picks a node, chooses a self-stake and commission, and signs one tx.
+ */
+const STATUS_TONE: Record<string, string> = {
+  active: 'text-primary bg-primary/10',
+  pending: 'text-yellow-400 bg-yellow-400/10',
+  standby: 'text-dim bg-surface-2',
+  jailed: 'text-down bg-down/10',
+  exiting: 'text-dim bg-surface-2',
+};
+
+function fmtMrsn(wei: string) { return Number(weiToMrsn(wei, 0)).toLocaleString(); }
+
+export default function ValidatorSetPanel() {
+  const { address, provider, isConnected } = useWallet();
+  const { toast } = useToast();
+  const [view, setView] = useState<ValidatorSetView | null>(null);
+  const [mine, setMine] = useState<VerifiedNode[]>([]);
+  const [selected, setSelected] = useState<string>('');
+  const [stake, setStake] = useState('1000');
+  const [commission, setCommission] = useState('500');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [topUp, setTopUp] = useState<Record<string, string>>({});
+
+  const refresh = useCallback(async () => {
+    try { setView(await getValidatorSet()); } catch { /* rpc hiccup */ }
+    if (address) api.getMyNodes(address).then((r) => setMine(r.nodes.filter((n) => n.registration_proof))).catch(() => {});
+  }, [address]);
+  useEffect(() => { refresh(); return startPoll(refresh, 15_000); }, [refresh]);
+
+  const registered = useMemo(() => new Set((view?.validators || []).map((v) => v.identity.toLowerCase())), [view]);
+  const candidates = useMemo(() => mine.filter((n) => !registered.has(n.identity.toLowerCase())), [mine, registered]);
+  useEffect(() => { if (!selected && candidates[0]) setSelected(candidates[0].identity); }, [candidates, selected]);
+  const minStake = view ? Number(weiToMrsn(view.params.minSelfStake, 0)) : 1000;
+  const blocksToEpoch = view ? Math.max(0, view.nextEpochAt - view.height) : 0;
+  const myEntries = (view?.validators || []).filter((v) => address && v.operator.toLowerCase() === address.toLowerCase());
+  const activationPending = !!view && !view.active;
+
+  const act = async (label: string, fn: () => Promise<string>, ok: string) => {
+    if (!isConnected || !provider) { toast('Connect your wallet first', 'error'); return; }
+    setBusy(label);
+    try { await fn(); toast(ok, 'success'); await refresh(); }
+    catch (e) { toast((e as Error).message?.slice(0, 160) || 'Transaction failed', 'error'); }
+    finally { setBusy(null); }
+  };
+
+  const sorted = [...(view?.validators || [])].sort((a, b) => (BigInt(b.votingStake) > BigInt(a.votingStake) ? 1 : -1));
+
+  return (
+    <div className="bg-surface border border-border rounded-xl overflow-hidden" data-testid="validator-set-panel">
+      <div className="px-4 py-2.5 border-b border-border flex items-center justify-between gap-3">
+        <h3 className="text-[11px] font-semibold text-foreground uppercase tracking-wider">Validator set</h3>
+        {view && (
+          <span className="text-[10px] text-dim font-mono text-right">
+            {view.active
+              ? `epoch ${view.epoch} · ${view.activeSet.length}/${view.params.maxValidators} active · next epoch in ${blocksToEpoch.toLocaleString()} blocks (~${Math.round(blocksToEpoch * 2 / 60)} min)`
+              : `opens at block ${view.params.activationHeight.toLocaleString()} · ${Math.max(0, view.params.activationHeight - view.height).toLocaleString()} blocks to go`}
+          </span>
+        )}
+      </div>
+
+      <div className="px-4 py-3 space-y-3">
+        <p className="text-[12px] text-dim leading-relaxed">
+          Anyone can become a validator. Run a node with your wallet as operator (it appears below once verified), bond at least{' '}
+          <span className="text-foreground font-medium">{minStake.toLocaleString()} MRSN</span> as self-stake, and register. You join the active set at the next epoch
+          (epochs are {view ? Math.round(view.params.epochBlocks * 2 / 60) : 60} minutes; the top {view?.params.maxValidators ?? 12} by self + delegated stake produce blocks).
+          Miss more than {view ? view.params.jailMissBps / 100 : 20}% of your leader slots in an epoch and you sit out the next one. Unregister any time; your stake unbonds over ~{view ? Math.round(view.params.unbondingBlocks * 2 / 3600) : 3} hours.
+        </p>
+
+        {isConnected && (
+          <div className="border border-border rounded-lg p-3 space-y-2">
+            <p className="text-[11px] font-semibold text-foreground uppercase tracking-wider">Register a node</p>
+            {candidates.length === 0 ? (
+              <p className="text-[12px] text-dim">
+                No unregistered verified node for this wallet yet. Install one with <code className="font-mono text-[11px] text-foreground">--operator {address?.toLowerCase()}</code> (see <a className="text-primary hover:underline" href="https://docs.mersennet.com/validators/run-a-node/" target="_blank" rel="noopener">the guide</a>); it shows up here within ~10 minutes of being online.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
+                <label className="text-[10px] text-dim uppercase tracking-wider md:col-span-2">Node
+                  <select value={selected} onChange={(e) => setSelected(e.target.value)} className="mt-1 w-full bg-surface-2 border border-border rounded-lg px-2 py-2 text-[12px] font-mono text-foreground">
+                    {candidates.map((n) => <option key={n.identity} value={n.identity}>{n.host} · {shortenAddress(n.identity)} · {n.version}</option>)}
+                  </select>
+                </label>
+                <label className="text-[10px] text-dim uppercase tracking-wider">Self-stake (MRSN)
+                  <input value={stake} onChange={(e) => setStake(e.target.value)} inputMode="decimal" className="mt-1 w-full bg-surface-2 border border-border rounded-lg px-2 py-2 text-[12px] font-mono text-foreground" />
+                </label>
+                <label className="text-[10px] text-dim uppercase tracking-wider">Commission (bps)
+                  <input value={commission} onChange={(e) => setCommission(e.target.value)} inputMode="numeric" className="mt-1 w-full bg-surface-2 border border-border rounded-lg px-2 py-2 text-[12px] font-mono text-foreground" />
+                </label>
+                <button
+                  disabled={!!busy || activationPending}
+                  onClick={() => {
+                    const node = candidates.find((n) => n.identity === selected);
+                    if (!node?.registration_proof) { toast('This node has no registration proof yet — restart it on the latest build', 'error'); return; }
+                    if (Number(stake) < minStake) { toast(`Self-stake must be at least ${minStake} MRSN`, 'error'); return; }
+                    const proof = node.registration_proof;
+                    act('register', () => registerValidator(provider, node.identity, stake, Number(commission) || 0, proof), 'Registered — active from the next epoch');
+                  }}
+                  className="premium-gradient px-4 py-2 text-[10px] font-extrabold uppercase tracking-[0.14em] disabled:opacity-50 md:col-span-4"
+                >{activationPending ? `Registration opens at block ${view?.params.activationHeight.toLocaleString()}` : busy === 'register' ? 'Registering…' : `Bond ${Number(stake || 0).toLocaleString()} MRSN & register`}</button>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-[12px]">
+            <thead>
+              <tr className="text-dim text-[10px] uppercase tracking-wider border-b border-border">
+                <th className="text-left py-1.5 pr-3">Validator</th>
+                <th className="text-left py-1.5 pr-3">Operator</th>
+                <th className="text-right py-1.5 pr-3">Self-stake</th>
+                <th className="text-right py-1.5 pr-3">Delegated</th>
+                <th className="text-right py-1.5 pr-3">Slots (epoch)</th>
+                <th className="text-right py-1.5">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.length === 0 && (
+                <tr><td colSpan={6} className="py-3 text-dim">{view?.active ? 'No registrations yet.' : 'The set opens at activation; the four genesis validators are seeded then.'}</td></tr>
+              )}
+              {sorted.map((v: ValidatorSetEntry) => {
+                const own = !!address && v.operator.toLowerCase() === address.toLowerCase();
+                return (
+                  <tr key={v.identity} className={cn('border-b border-border last:border-0', own && 'bg-primary/5')}>
+                    <td className="py-1.5 pr-3 font-mono text-foreground">{shortenAddress(v.identity)}{v.genesis && <span className="text-dim"> · genesis</span>}</td>
+                    <td className="py-1.5 pr-3 font-mono text-dim">{shortenAddress(v.operator)}{own && <span className="text-primary"> · you</span>}</td>
+                    <td className="py-1.5 pr-3 text-right font-mono">{fmtMrsn(v.selfStake)}</td>
+                    <td className="py-1.5 pr-3 text-right font-mono">{fmtMrsn(v.delegated)}</td>
+                    <td className="py-1.5 pr-3 text-right font-mono">{v.proposedSlots}<span className="text-dim"> / {v.missedSlots} missed</span></td>
+                    <td className="py-1.5 text-right"><span className={cn('font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded', STATUS_TONE[v.status] || 'text-dim')}>{v.status}</span></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {myEntries.map((v) => (
+          <div key={v.identity} className="flex flex-wrap items-center gap-2 border border-border rounded-lg px-3 py-2 text-[12px]">
+            <span className="font-mono text-foreground">{shortenAddress(v.identity)}</span>
+            <span className="text-dim">self-stake {fmtMrsn(v.selfStake)} MRSN · {v.commissionBps / 100}% commission · {v.status}</span>
+            <span className="flex-1" />
+            {!v.genesis && !v.exiting && (
+              <>
+                <input value={topUp[v.identity] || ''} onChange={(e) => setTopUp({ ...topUp, [v.identity]: e.target.value })} placeholder="MRSN" className="w-24 bg-surface-2 border border-border rounded-lg px-2 py-1 text-[11px] font-mono" />
+                <button disabled={!!busy} onClick={() => act('top', () => addSelfStake(provider, v.identity, topUp[v.identity] || '0'), 'Self-stake added')} className="text-[10px] uppercase tracking-wider text-primary hover:underline">Add stake</button>
+                <button disabled={!!busy} onClick={() => { if (confirm('Leave the validator set at the next epoch? Your self-stake unbonds afterwards.')) act('exit', () => unregisterValidator(provider, v.identity), 'Exit scheduled for the next epoch'); }} className="text-[10px] uppercase tracking-wider text-down hover:underline">Unregister</button>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

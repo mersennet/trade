@@ -49,6 +49,9 @@ function whoami(host, port = DEFAULT_PORT, timeoutMs = 6000) {
           operator: body.operator ? String(body.operator).toLowerCase() : null,
           height: Number(body.height) || 0,
           version: String(body.version || ''),
+          // Node-key signature over "operator+identity": the proof the staking
+          // precompile's registerValidator() checks. Static per node config.
+          registrationProof: typeof body.registrationProof === 'string' && /^0x[0-9a-f]{130}$/i.test(body.registrationProof) ? body.registrationProof : null,
         });
       } catch (e) {
         reject(new Error(`bad attestation: ${e.message}`));

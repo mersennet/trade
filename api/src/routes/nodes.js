@@ -39,6 +39,7 @@ async function ensureTables() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_verified_nodes_operator ON verified_nodes (operator)`);
+  await pool.query(`ALTER TABLE verified_nodes ADD COLUMN IF NOT EXISTS registration_proof TEXT`).catch(() => {});
   await pool.query(`ALTER TABLE points_balance ADD COLUMN IF NOT EXISTS node_points NUMERIC(20, 4) NOT NULL DEFAULT 0`).catch(() => {});
 }
 const ready = ensureTables().catch((e) => console.error('[nodes] table setup failed:', e.message));
@@ -100,11 +101,12 @@ router.post('/verify', verifyLimiter, async (req, res) => {
   }
   try {
     await pool.query(
-      `INSERT INTO verified_nodes (identity, operator, host, version, height, last_verified_at, last_seen_at, consecutive_failures)
-       VALUES ($1, $2, $3, $4, $5, NOW(), NOW(), 0)
+      `INSERT INTO verified_nodes (identity, operator, host, version, height, last_verified_at, last_seen_at, consecutive_failures, registration_proof)
+       VALUES ($1, $2, $3, $4, $5, NOW(), NOW(), 0, $6)
        ON CONFLICT (identity) DO UPDATE SET operator = EXCLUDED.operator, host = EXCLUDED.host, version = EXCLUDED.version,
-         height = EXCLUDED.height, last_verified_at = NOW(), last_seen_at = NOW(), consecutive_failures = 0`,
-      [att.identity, walletLc, host, att.version, att.height]
+         height = EXCLUDED.height, last_verified_at = NOW(), last_seen_at = NOW(), consecutive_failures = 0,
+         registration_proof = COALESCE(EXCLUDED.registration_proof, verified_nodes.registration_proof)`,
+      [att.identity, walletLc, host, att.version, att.height, att.registrationProof]
     );
   } catch (e) {
     console.error('[nodes] store failed:', e.message);
@@ -139,7 +141,7 @@ router.get('/mine/:wallet', async (req, res) => {
   if (!ethers.isAddress(req.params.wallet)) return res.status(400).json({ error: 'invalid address' });
   try {
     const r = await pool.query(
-      `SELECT identity, host, version, height, first_verified_at, last_seen_at, points_awarded_on,
+      `SELECT identity, host, version, height, first_verified_at, last_seen_at, points_awarded_on, registration_proof,
               (last_seen_at > NOW() - ${ACTIVE_WINDOW}) AS active
        FROM verified_nodes WHERE operator = $1 ORDER BY first_verified_at ASC`,
       [req.params.wallet.toLowerCase()]
@@ -180,11 +182,12 @@ async function discoverFromPeers() {
       const att = await whoami(host);
       if (!att.operator) continue;   // node runs, but nobody claimed it
       await pool.query(
-        `INSERT INTO verified_nodes (identity, operator, host, version, height, last_verified_at, last_seen_at, consecutive_failures)
-         VALUES ($1, $2, $3, $4, $5, NOW(), NOW(), 0)
+        `INSERT INTO verified_nodes (identity, operator, host, version, height, last_verified_at, last_seen_at, consecutive_failures, registration_proof)
+         VALUES ($1, $2, $3, $4, $5, NOW(), NOW(), 0, $6)
          ON CONFLICT (identity) DO UPDATE SET operator = EXCLUDED.operator, host = EXCLUDED.host, version = EXCLUDED.version,
-           height = EXCLUDED.height, last_seen_at = NOW(), consecutive_failures = 0`,
-        [att.identity, att.operator, host, att.version, att.height]
+           height = EXCLUDED.height, last_seen_at = NOW(), consecutive_failures = 0,
+           registration_proof = COALESCE(EXCLUDED.registration_proof, verified_nodes.registration_proof)`,
+        [att.identity, att.operator, host, att.version, att.height, att.registrationProof]
       );
       added++;
       console.log(`[nodes] auto-verified ${host} (${att.identity.slice(0, 10)}…) for operator ${att.operator}`);
@@ -203,7 +206,7 @@ async function recheckAll() {
       const att = await whoami(n.host);
       const ok = att.identity === n.identity && att.operator === n.operator;
       if (ok) {
-        await pool.query(`UPDATE verified_nodes SET last_seen_at = NOW(), height = $2, version = $3, consecutive_failures = 0 WHERE identity = $1`, [n.identity, att.height, att.version]);
+        await pool.query(`UPDATE verified_nodes SET last_seen_at = NOW(), height = $2, version = $3, consecutive_failures = 0, registration_proof = COALESCE($4, registration_proof) WHERE identity = $1`, [n.identity, att.height, att.version, att.registrationProof]);
       } else {
         await pool.query(`UPDATE verified_nodes SET consecutive_failures = consecutive_failures + 1 WHERE identity = $1`, [n.identity]);
       }

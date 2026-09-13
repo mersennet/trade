@@ -4,6 +4,7 @@ import { useWallet } from '@/hooks/useWallet';
 import { useToast } from '@/components/shared/Toast';
 import { cn, shortenAddress } from '@/lib/utils';
 import { startPoll } from '@/lib/poll';
+import ValidatorSetPanel from '@/components/staking/ValidatorSetPanel';
 import {
   claimRewards,
   delegate,
@@ -229,10 +230,13 @@ export default function StakingPage() {
       </div>
 
       <p className="text-[11px] text-dim mt-4">
-        Delegated stake earns rewards but does not change the consensus
-        validator set on this testnet. Rewards accrue per block and are
+        Delegated stake earns rewards and counts toward a validator&apos;s ranking in the open validator set below. Rewards accrue per block and are
         claimable at any time; principal follows the unbonding period.
       </p>
+
+      <div className="mt-4">
+        <ValidatorSetPanel />
+      </div>
     </div>
   );
 }

@@ -26,6 +26,11 @@ const STAKING_ABI = [
   'function getDelegation(address delegator, address validator) view returns (uint256 amount, uint256 pending)',
   'function getValidatorStaking(address validator) view returns (uint256 delegatedTotal, uint256 commissionBps)',
   'function getUnbonding(address delegator) view returns (uint256 total, uint256 withdrawable, uint256 nextUnlock)',
+  // Open validator set
+  'function registerValidator(address identity, uint256 selfStake, uint256 commissionBps, bytes proof) returns (bool)',
+  'function addSelfStake(address identity, uint256 amount) returns (bool)',
+  'function unregisterValidator(address identity) returns (bool)',
+  'function rotateValidatorKey(address identity, address newIdentity, bytes proof) returns (bool)',
 ];
 
 type EthersLike = typeof import('ethers');
@@ -179,3 +184,43 @@ export async function getValidatorsFull(): Promise<ValidatorFull[]> {
     commissionBps: Number(v.commissionBps ?? 0),
   }));
 }
+
+// ─── Open validator set ─────────────────────────────────────────────────────
+
+export interface ValidatorSetParams { activationHeight: number; epochBlocks: number; minSelfStake: string; maxValidators: number; unbondingBlocks: number; jailMissBps: number; jailMinSlots: number; }
+export interface ValidatorSetEntry {
+  identity: string; operator: string; selfStake: string; delegated: string; votingStake: string; commissionBps: number;
+  status: 'pending' | 'active' | 'standby' | 'jailed' | 'exiting'; genesis: boolean; registeredAt: number; jailedUntilEpoch: number;
+  exiting: boolean; pendingIdentity: string | null; proposedSlots: number; missedSlots: number; totalProposed: number; timesJailed: number;
+}
+export interface ValidatorSetView {
+  active: boolean; params: ValidatorSetParams; height: number; epoch: number; nextEpochAt: number;
+  activeSet: string[]; consensusValidators: string[]; validators: ValidatorSetEntry[];
+}
+
+export async function getValidatorSet(): Promise<ValidatorSetView> {
+  const rpc = getDefaultChain().rpcUrls[0];
+  const res = await fetch(rpc, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'mersennet_validatorSet', params: [] }),
+  });
+  const { result } = await res.json();
+  return result as ValidatorSetView;
+}
+
+/** Register a node as a validator. `proof` comes from the node (whoami /
+ * mersennet_nodeIdentity); `selfStakeMrsn` is escrowed from the caller. */
+export function registerValidator(signerSource: unknown, identity: string, selfStakeMrsn: string, commissionBps: number, proof: string): Promise<string> {
+  return sendStaking(signerSource, 'registerValidator', [identity, mrsnToWei(selfStakeMrsn), BigInt(commissionBps), proof], 400_000);
+}
+export function addSelfStake(signerSource: unknown, identity: string, amountMrsn: string): Promise<string> {
+  return sendStaking(signerSource, 'addSelfStake', [identity, mrsnToWei(amountMrsn)], 200_000);
+}
+export function unregisterValidator(signerSource: unknown, identity: string): Promise<string> {
+  return sendStaking(signerSource, 'unregisterValidator', [identity], 200_000);
+}
+export function rotateValidatorKey(signerSource: unknown, identity: string, newIdentity: string, proof: string): Promise<string> {
+  return sendStaking(signerSource, 'rotateValidatorKey', [identity, newIdentity, proof], 200_000);
+}
+
