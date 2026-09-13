@@ -136,6 +136,43 @@ app.get('/api/v1/health', async (req, res) => {
   }
 });
 
+// Open validator set liveness for the status page: the engine's epoch must
+// equal floor(height / epochBlocks) once the set is active — a lagging epoch
+// means transitions stopped firing (or the fleet disagrees on the set). Kuma
+// keys on `"ok":true`.
+app.get('/api/v1/health/validator-set', async (req, res) => {
+  const { rpcCall } = require('./src/services/chain');
+  try {
+    const v = await rpcCall('mersennet_validatorSet', []);
+    const epochBlocks = Number(v?.params?.epochBlocks || 0);
+    const height = Number(v?.height || 0);
+    const expectedEpoch = epochBlocks ? Math.floor(height / epochBlocks) : null;
+    const active = v?.active === true;
+    const activeSet = Array.isArray(v?.activeSet) ? v.activeSet : [];
+    const consensus = Array.isArray(v?.consensusValidators) ? v.consensusValidators : [];
+    const setsAgree = active
+      ? activeSet.length === consensus.length && activeSet.every((a) => consensus.includes(a))
+      : true;
+    const ok = active && Number(v?.epoch) === expectedEpoch && activeSet.length >= 3 && setsAgree;
+    res.status(ok ? 200 : 503).json({
+      ok,
+      active,
+      height,
+      epoch: v?.epoch ?? null,
+      expectedEpoch,
+      nextEpochAt: v?.nextEpochAt ?? null,
+      activationHeight: v?.params?.activationHeight ?? null,
+      activeSet: activeSet.length,
+      consensusValidators: consensus.length,
+      setsAgree,
+      registered: Array.isArray(v?.validators) ? v.validators.length : 0,
+      timestamp: Date.now(),
+    });
+  } catch (e) {
+    res.status(503).json({ ok: false, error: e.message });
+  }
+});
+
 setupWebSocket(server);
 
 const pool = require('./src/db/pool');
