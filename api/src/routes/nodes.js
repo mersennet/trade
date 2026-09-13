@@ -150,6 +150,49 @@ router.get('/mine/:wallet', async (req, res) => {
   }
 });
 
+/**
+ * Auto-discovery: any node the public RPC node currently hears from is
+ * probed; if it names an operator, it is verified without anyone clicking
+ * anything. Safe because the node itself signs the operator address (the
+ * worst an attacker can do is gift points to a wallet), and one operator
+ * earns for one node regardless of how many they run.
+ */
+const RPC_URL = process.env.RPC_URL || 'https://rpc.mersennet.com';
+const FLEET_IPS = new Set((process.env.FLEET_IPS || '46.225.183.192,49.13.54.79,167.233.105.60,167.233.118.149,46.225.30.187').split(',').map((s) => s.trim()));
+
+async function discoverFromPeers() {
+  await ready;
+  let peers;
+  try {
+    const res = await fetch(RPC_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'mersennet_peers', params: [] }), signal: AbortSignal.timeout(8000) });
+    peers = (await res.json()).result || [];
+  } catch (e) {
+    console.warn('[nodes] discovery: peers unavailable:', e.message);
+    return;
+  }
+  const hosts = [...new Set(peers.filter((p) => p.heard).map((p) => String(p.addr).replace(/:\d+$/, '')).filter((h) => !FLEET_IPS.has(h) && validHost(h)))];
+  let known = new Set();
+  try { known = new Set((await pool.query(`SELECT host FROM verified_nodes WHERE last_seen_at > NOW() - interval '6 hours'`)).rows.map((r) => r.host)); } catch { /* fall through: probe all */ }
+  let added = 0;
+  for (const host of hosts) {
+    if (known.has(host)) continue;
+    try {
+      const att = await whoami(host);
+      if (!att.operator) continue;   // node runs, but nobody claimed it
+      await pool.query(
+        `INSERT INTO verified_nodes (identity, operator, host, version, height, last_verified_at, last_seen_at, consecutive_failures)
+         VALUES ($1, $2, $3, $4, $5, NOW(), NOW(), 0)
+         ON CONFLICT (identity) DO UPDATE SET operator = EXCLUDED.operator, host = EXCLUDED.host, version = EXCLUDED.version,
+           height = EXCLUDED.height, last_seen_at = NOW(), consecutive_failures = 0`,
+        [att.identity, att.operator, host, att.version, att.height]
+      );
+      added++;
+      console.log(`[nodes] auto-verified ${host} (${att.identity.slice(0, 10)}…) for operator ${att.operator}`);
+    } catch { /* unreachable or old build: skip quietly */ }
+  }
+  if (added) console.log(`[nodes] discovery: ${added} node(s) auto-verified from ${hosts.length} community peer(s)`);
+}
+
 /** Re-probe every verified node; award daily points to operators with an active node. */
 async function recheckAll() {
   await ready;
@@ -205,5 +248,8 @@ async function awardDailyPoints() {
 
 setTimeout(() => recheckAll().catch(() => {}), 60 * 1000);
 setInterval(() => recheckAll().catch(() => {}), RECHECK_MS);
+const DISCOVER_MS = Number(process.env.NODE_DISCOVERY_MS || 10 * 60 * 1000);
+setTimeout(() => discoverFromPeers().catch(() => {}), 90 * 1000);
+setInterval(() => discoverFromPeers().catch(() => {}), DISCOVER_MS);
 
 module.exports = router;

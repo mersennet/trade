@@ -57,7 +57,8 @@ export default function NodeRunnerCard() {
           Run a Mersennet full node and earn <span className="text-foreground font-medium">{pointsPerDay} points a day</span> while it is online.
           Install in one command (<a href="https://docs.mersennet.com/validators/run-a-node/" target="_blank" rel="noopener" className="text-primary hover:underline">guide</a>),
           set <code className="font-mono text-[11px] text-foreground">&quot;operator_address&quot;: &quot;{address ? address.toLowerCase() : '0x…your wallet'}&quot;</code> in the
-          <code className="font-mono text-[11px] text-foreground"> p2p</code> section of <code className="font-mono text-[11px] text-foreground">/etc/mersennet/config.json</code>, restart it, then verify here.
+          <code className="font-mono text-[11px] text-foreground"> p2p</code> section of <code className="font-mono text-[11px] text-foreground">/etc/mersennet/config.json</code> (or install with <code className="font-mono text-[11px] text-foreground">--operator</code>) and restart it.
+          Verification is automatic: within about ten minutes of your node being heard by the network it appears here and on the explorer as yours. The button below does the same check immediately — use it for confirmation or if your node sits behind NAT.
         </p>
 
         {mine.length > 0 && (
