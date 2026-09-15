@@ -136,6 +136,30 @@ app.get('/api/v1/health', async (req, res) => {
   }
 });
 
+// Block production health: average block interval over the last ~150
+// blocks and head freshness. A dead or unreachable leader costs a failover
+// round per slot (8 s from block 1,440,000, 19 s before), so a flapping
+// validator shows up here as a slow chain long before anything else fails.
+// Kuma keys on `"ok":true`.
+app.get('/api/v1/health/chain', async (req, res) => {
+  const { rpcCall } = require('./src/services/chain');
+  try {
+    const head = await rpcCall('eth_getBlockByNumber', ['latest', false]);
+    const headNum = parseInt(head.number, 16);
+    const span = 150;
+    const older = await rpcCall('eth_getBlockByNumber', ['0x' + Math.max(0, headNum - span).toString(16), false]);
+    const headTs = parseInt(head.timestamp, 16);
+    const olderTs = older ? parseInt(older.timestamp, 16) : headTs;
+    const blocks = headNum - (older ? parseInt(older.number, 16) : headNum);
+    const avgBlockMs = blocks > 0 ? Math.round(((headTs - olderTs) * 1000) / blocks) : null;
+    const headAgeSec = Math.max(0, Math.floor(Date.now() / 1000) - headTs);
+    const ok = avgBlockMs !== null && avgBlockMs <= 3000 && headAgeSec <= 30;
+    res.status(ok ? 200 : 503).json({ ok, head: headNum, headAgeSec, avgBlockMs, window: blocks, timestamp: Date.now() });
+  } catch (e) {
+    res.status(503).json({ ok: false, error: e.message });
+  }
+});
+
 // Open validator set liveness for the status page: the engine's epoch must
 // equal floor(height / epochBlocks) once the set is active — a lagging epoch
 // means transitions stopped firing (or the fleet disagrees on the set). Kuma
