@@ -97,15 +97,22 @@ export default function ValidatorSetPanel() {
           <div className="border border-border rounded-lg p-3 space-y-2">
             <p className="text-[11px] font-semibold text-foreground uppercase tracking-wider">Register a node</p>
             {candidates.length === 0 ? (
-              <p className="text-[12px] text-dim">
-                No unregistered verified node for this wallet yet. Install one with <code className="font-mono text-[11px] text-foreground">--operator {address?.toLowerCase()}</code> (see <a className="text-primary hover:underline" href="https://docs.mersennet.com/validators/run-a-node/" target="_blank" rel="noopener">the guide</a>); it shows up here within ~10 minutes of being online.
-              </p>
+              myEntries.length > 0 ? (
+                <p className="text-[12px] text-dim">
+                  Your node{myEntries.length > 1 ? 's are' : ' is'} registered: {myEntries.map((v) => shortenAddress(v.identity)).join(', ')} — status and slots in the table below. To add another node, install it with <code className="font-mono text-[11px] text-foreground">--operator {address?.toLowerCase()}</code>; it appears here within ~10 minutes of being online.
+                </p>
+              ) : (
+                <p className="text-[12px] text-dim">
+                  No verified node for this wallet yet. Install one with <code className="font-mono text-[11px] text-foreground">--operator {address?.toLowerCase()}</code> (see <a className="text-primary hover:underline" href="https://docs.mersennet.com/validators/run-a-node/" target="_blank" rel="noopener">the guide</a>); it shows up here within ~10 minutes of being online.
+                </p>
+              )
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
                 <label className="text-[10px] text-dim uppercase tracking-wider md:col-span-2">Node
                   <select value={selected} onChange={(e) => setSelected(e.target.value)} className="mt-1 w-full bg-surface-2 border border-border rounded-lg px-2 py-2 text-[12px] font-mono text-foreground">
-                    {candidates.map((n) => <option key={n.identity} value={n.identity}>{n.host} · {shortenAddress(n.identity)} · {n.version}</option>)}
+                    {candidates.map((n) => <option key={n.identity} value={n.identity}>{n.host} · identity {shortenAddress(n.identity)} · {n.version}</option>)}
                   </select>
+                  <span className="block mt-1 text-[10px] normal-case tracking-normal text-dim">The identity is your node&apos;s signing key, not your wallet; your wallet {address ? shortenAddress(address) : ''} is recorded as the operator and receives the rewards.</span>
                 </label>
                 <label className="text-[10px] text-dim uppercase tracking-wider">Self-stake (MRSN)
                   <input value={stake} onChange={(e) => setStake(e.target.value)} inputMode="decimal" className="mt-1 w-full bg-surface-2 border border-border rounded-lg px-2 py-2 text-[12px] font-mono text-foreground" />
@@ -152,7 +159,7 @@ export default function ValidatorSetPanel() {
                 <th className="text-left py-1.5 pr-3">Operator</th>
                 <th className="text-right py-1.5 pr-3">Self-stake</th>
                 <th className="text-right py-1.5 pr-3">Delegated</th>
-                <th className="text-right py-1.5 pr-3">Slots (epoch)</th>
+                <th className="text-right py-1.5 pr-3">Proposed / missed (this epoch)</th>
                 <th className="text-right py-1.5">Status</th>
               </tr>
             </thead>
@@ -168,7 +175,7 @@ export default function ValidatorSetPanel() {
                     <td className="py-1.5 pr-3 font-mono text-dim">{shortenAddress(v.operator)}{own && <span className="text-primary"> · you</span>}</td>
                     <td className="py-1.5 pr-3 text-right font-mono">{fmtMrsn(v.selfStake)}</td>
                     <td className="py-1.5 pr-3 text-right font-mono">{fmtMrsn(v.delegated)}</td>
-                    <td className="py-1.5 pr-3 text-right font-mono">{v.proposedSlots}<span className="text-dim"> / {v.missedSlots} missed</span></td>
+                    <td className={cn('py-1.5 pr-3 text-right font-mono', v.missedSlots > 0 && v.proposedSlots === 0 ? 'text-down' : '')} title="Leader slots this epoch: blocks your node proposed vs. slots it missed. Missing more than 20% of at least 5 slots jails the node for the next epoch.">{v.proposedSlots} proposed<span className="text-dim"> · {v.missedSlots} missed</span></td>
                     <td className="py-1.5 text-right"><span className={cn('font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded', STATUS_TONE[v.status] || 'text-dim')}>{v.status}</span></td>
                   </tr>
                 );
