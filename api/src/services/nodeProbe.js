@@ -2,7 +2,7 @@
  * Ask a Mersennet node who it is over its public P2P TCP port.
  *
  * Wire format is the node's TcpSync framing: 4-byte big-endian length + JSON
- * GossipPacket { topic, data: number[], id, ttl }. We send topic "whoami" with
+ * GossipPacket { topic, data: number[] | base64 string, id, ttl }. We send topic "whoami" with
  * a 32-byte random nonce and expect "whoami_response" whose data is JSON:
  * { identity, operator, height, version, message, signature }. The message is
  * EIP-191 personal-sign formatted and signed by the node key, so
@@ -39,7 +39,10 @@ function whoami(host, port = DEFAULT_PORT, timeoutMs = 6000) {
       try {
         const packet = JSON.parse(buf.subarray(4, 4 + len).toString());
         if (packet.topic !== 'whoami_response') return reject(new Error(`unexpected response ${packet.topic}`));
-        const body = JSON.parse(Buffer.from(packet.data).toString());
+        // Nodes send `data` as a JSON byte array (legacy) or a base64 string
+        // (compact wire format, from block 1,440,000); accept both.
+        const raw = typeof packet.data === 'string' ? Buffer.from(packet.data, 'base64') : Buffer.from(packet.data);
+        const body = JSON.parse(raw.toString());
         if (!body.message || !body.signature || !body.identity) return reject(new Error('malformed attestation'));
         const recovered = ethers.verifyMessage(body.message, body.signature).toLowerCase();
         if (recovered !== String(body.identity).toLowerCase()) return reject(new Error('attestation signature does not match the node identity'));
