@@ -20,7 +20,10 @@ const { whoami } = require('../services/nodeProbe');
 const router = express.Router();
 const SEASON = 1;
 const NODE_POINTS_PER_DAY = Number(process.env.NODE_POINTS_PER_DAY || 500);
-const RECHECK_MS = 6 * 60 * 60 * 1000;
+// Re-probe every verified node: keeps last_seen_at/height fresh for the
+// staking panel's "node at X" line and for the active window. whoami is one
+// TCP round trip, so this is cheap even for hundreds of nodes.
+const RECHECK_MS = 30 * 60 * 1000;
 const ACTIVE_WINDOW = "interval '24 hours'";
 
 async function ensureTables() {
@@ -230,20 +233,31 @@ async function discoverFromPeers() {
 async function recheckAll() {
   await ready;
   let rows;
-  try { rows = (await pool.query(`SELECT identity, operator, host FROM verified_nodes`)).rows; } catch { return; }
+  try { rows = (await pool.query(`SELECT identity, operator, host FROM verified_nodes`)).rows; } catch (e) { console.error('[nodes] recheck: query failed:', e.message); return; }
+  let seen = 0, failed = 0;
   for (const n of rows) {
     try {
       const att = await whoami(n.host);
-      const ok = att.identity === n.identity && att.operator === n.operator;
+      const ok = (att.identity || '').toLowerCase() === n.identity.toLowerCase()
+        && (att.operator || '').toLowerCase() === (n.operator || '').toLowerCase();
       if (ok) {
-        await pool.query(`UPDATE verified_nodes SET last_seen_at = NOW(), height = $2, version = $3, consecutive_failures = 0, registration_proof = COALESCE($4, registration_proof) WHERE identity = $1`, [n.identity, att.height, att.version, att.registrationProof]);
+        await pool.query(
+          `UPDATE verified_nodes SET last_seen_at = NOW(), height = $2, version = $3, consecutive_failures = 0,
+                  registration_proof = COALESCE($4, registration_proof) WHERE identity = $1`,
+          [n.identity, Number(att.height) || 0, att.version || null, att.registrationProof || null]
+        );
+        seen++;
       } else {
+        failed++;
         await pool.query(`UPDATE verified_nodes SET consecutive_failures = consecutive_failures + 1 WHERE identity = $1`, [n.identity]);
       }
-    } catch {
+    } catch (e) {
+      failed++;
+      console.error(`[nodes] recheck ${n.host}: ${e.message}`);
       await pool.query(`UPDATE verified_nodes SET consecutive_failures = consecutive_failures + 1 WHERE identity = $1`, [n.identity]).catch(() => {});
     }
   }
+  console.log(`[nodes] recheck: ${seen} seen, ${failed} unreachable/mismatched of ${rows.length}`);
   await awardDailyPoints();
 }
 
