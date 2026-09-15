@@ -42,11 +42,14 @@ const DEFAULT_BOT_ADDRESSES = [
   '0xa038a60c9ef33de711f4604573a7e1431a37d933',
   '0xed8db2dfc8999f859048ce83d555281d627df845',
 ];
-const BOT_ADDRESSES = (process.env.BOT_ADDRESSES
-  ? process.env.BOT_ADDRESSES.split(',')
-  : DEFAULT_BOT_ADDRESSES)
-  .map((a) => a.trim().toLowerCase())
-  .filter((a) => /^0x[0-9a-f]{40}$/.test(a));
+// The configured list ADDS to the defaults: every bot generation we have ever
+// run stays excluded, otherwise a seed rotation leaves the previous bots'
+// balances on the board (that is exactly what happened before 2026-09-15).
+const BOT_ADDRESSES = [...new Set(
+  [...DEFAULT_BOT_ADDRESSES, ...(process.env.BOT_ADDRESSES || '').split(',')]
+    .map((a) => a.trim().toLowerCase())
+    .filter((a) => /^0x[0-9a-f]{40}$/.test(a))
+)];
 // Bind host for the internal trade-report server. Defaults to loopback (safe on
 // a bare host); set REPORT_HOST=0.0.0.0 in docker so the api container can reach
 // it over the internal network (the port is not published externally).
@@ -620,6 +623,31 @@ function pointsTier(total) {
 async function awardPoints() {
   const season = 1;
   try {
+    // Bot wallets never hold trading points. Zero any that accrued before an
+    // address joined the exclusion list (node points, if the wallet also runs a
+    // verified node, are real and stay), and drop rows left with nothing.
+    await pool.query(
+      `UPDATE points_balance
+          SET trading_points = 0,
+              total_points = COALESCE(node_points, 0) + COALESCE(lp_points, 0) + COALESCE(referral_points, 0),
+              tier = CASE
+                WHEN COALESCE(node_points, 0) + COALESCE(lp_points, 0) + COALESCE(referral_points, 0) >= 1000000 THEN 'Diamond'
+                WHEN COALESCE(node_points, 0) + COALESCE(lp_points, 0) + COALESCE(referral_points, 0) >= 100000 THEN 'Platinum'
+                WHEN COALESCE(node_points, 0) + COALESCE(lp_points, 0) + COALESCE(referral_points, 0) >= 10000 THEN 'Gold'
+                WHEN COALESCE(node_points, 0) + COALESCE(lp_points, 0) + COALESCE(referral_points, 0) >= 1000 THEN 'Silver'
+                ELSE 'Bronze' END,
+              updated_at = NOW()
+        WHERE LOWER(address) = ANY($1::text[]) AND trading_points <> 0`,
+      [BOT_ADDRESSES]
+    ).catch((e) => console.error('[points] bot purge (balance):', e.message));
+    await pool.query(
+      `DELETE FROM points WHERE LOWER(address) = ANY($1::text[]) AND point_type = 'trading'`,
+      [BOT_ADDRESSES]
+    ).catch((e) => console.error('[points] bot purge (history):', e.message));
+    await pool.query(
+      `DELETE FROM points_balance WHERE LOWER(address) = ANY($1::text[]) AND total_points = 0`,
+      [BOT_ADDRESSES]
+    ).catch((e) => console.error('[points] bot purge (empty rows):', e.message));
     const vol = await pool.query(
       `SELECT LOWER(taker) AS address, SUM(price * size)::numeric AS volume
        FROM trades
