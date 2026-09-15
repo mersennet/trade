@@ -42,7 +42,7 @@ export default function ValidatorSetPanel() {
 
   const refresh = useCallback(async () => {
     try { setView(await getValidatorSet()); } catch { /* rpc hiccup */ }
-    if (address) api.getMyNodes(address).then((r) => setMine(r.nodes.filter((n) => n.registration_proof))).catch(() => {});
+    if (address) api.getMyNodes(address).then((r) => setMine(r.nodes)).catch(() => {});
     if (address) {
       // Native balance straight from the Mersennet RPC (the wallet provider
       // may still be pointed at another chain right after connecting).
@@ -55,7 +55,8 @@ export default function ValidatorSetPanel() {
   useEffect(() => { refresh(); return startPoll(refresh, 15_000); }, [refresh]);
 
   const registered = useMemo(() => new Set((view?.validators || []).map((v) => v.identity.toLowerCase())), [view]);
-  const candidates = useMemo(() => mine.filter((n) => !registered.has(n.identity.toLowerCase())), [mine, registered]);
+  const candidates = useMemo(() => mine.filter((n) => n.registration_proof && !registered.has(n.identity.toLowerCase())), [mine, registered]);
+  const nodeByIdentity = useMemo(() => Object.fromEntries(mine.map((n) => [n.identity.toLowerCase(), n])), [mine]);
   useEffect(() => { if (!selected && candidates[0]) setSelected(candidates[0].identity); }, [candidates, selected]);
   const minStake = view ? Number(weiToMrsn(view.params.minSelfStake, 0)) : 1000;
   const blocksToEpoch = view ? Math.max(0, view.nextEpochAt - view.height) : 0;
@@ -184,10 +185,21 @@ export default function ValidatorSetPanel() {
           </table>
         </div>
 
-        {myEntries.map((v) => (
-          <div key={v.identity} className="flex flex-wrap items-center gap-2 border border-border rounded-lg px-3 py-2 text-[12px]">
+        {myEntries.map((v) => {
+          const node = nodeByIdentity[v.identity.toLowerCase()];
+          const behind = node && view ? Math.max(0, view.height - node.height) : null;
+          const silent = v.status === 'active' && v.proposedSlots === 0 && v.missedSlots >= 2;
+          const lagging = behind !== null && behind > 50;
+          return (
+          <div key={v.identity} className={cn('border rounded-lg px-3 py-2 text-[12px] space-y-1', silent || lagging ? 'border-down/50 bg-down/5' : 'border-border')}>
+          <div className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-foreground">{shortenAddress(v.identity)}</span>
-            <span className="text-dim">self-stake {fmtMrsn(v.selfStake)} MRSN · {v.commissionBps / 100}% commission · {v.status}</span>
+            <span className="text-dim">self-stake {fmtMrsn(v.selfStake)} MRSN · {v.commissionBps / 100}% commission · {v.status}{v.status === 'jailed' ? ` until epoch ${v.jailedUntilEpoch}` : ''}</span>
+            {node && behind !== null && (
+              <span className={cn('font-mono text-[11px]', lagging ? 'text-down' : 'text-dim')} title="Height your node reported at its last check, vs. the chain head">
+                node at {node.height.toLocaleString()}{lagging ? ` · ${behind.toLocaleString()} blocks behind` : ' · in sync'}
+              </span>
+            )}
             <span className="flex-1" />
             {!v.genesis && !v.exiting && (
               <>
@@ -197,7 +209,17 @@ export default function ValidatorSetPanel() {
               </>
             )}
           </div>
-        ))}
+          {(silent || lagging) && (
+            <p className="text-[11px] text-down">
+              {lagging
+                ? `Your node is ${behind!.toLocaleString()} blocks behind the chain, so it cannot propose. `
+                : 'Your node is in the active set but has not proposed any of its slots this epoch. '}
+              Each missed slot delays the network by a failover round; missing more than 20% of your slots jails the validator for the next epoch. Check the server: <code className="font-mono">systemctl status mersennet</code>, <code className="font-mono">mersennet-check</code>, and <code className="font-mono">journalctl -u mersennet -n 100</code>. If the node is stuck, re-run the installer with <code className="font-mono">--reset-state</code>; if you cannot fix it now, <span className="underline">Unregister</span> so the network does not wait on it.
+            </p>
+          )}
+          </div>
+          );
+        })}
       </div>
     </div>
   );
