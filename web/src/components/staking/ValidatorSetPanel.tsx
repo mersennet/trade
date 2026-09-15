@@ -4,6 +4,7 @@ import { useWallet } from '@/hooks/useWallet';
 import { useToast } from '@/components/shared/Toast';
 import { api, type VerifiedNode } from '@/lib/api';
 import { cn, shortenAddress } from '@/lib/utils';
+import { getDefaultChain } from '@/lib/chain';
 import { startPoll } from '@/lib/poll';
 import {
   addSelfStake, getValidatorSet, registerValidator, unregisterValidator, weiToMrsn,
@@ -37,10 +38,19 @@ export default function ValidatorSetPanel() {
   const [commission, setCommission] = useState('500');
   const [busy, setBusy] = useState<string | null>(null);
   const [topUp, setTopUp] = useState<Record<string, string>>({});
+  const [balance, setBalance] = useState<number | null>(null);
 
   const refresh = useCallback(async () => {
     try { setView(await getValidatorSet()); } catch { /* rpc hiccup */ }
     if (address) api.getMyNodes(address).then((r) => setMine(r.nodes.filter((n) => n.registration_proof))).catch(() => {});
+    if (address) {
+      // Native balance straight from the Mersennet RPC (the wallet provider
+      // may still be pointed at another chain right after connecting).
+      fetch(getDefaultChain().rpcUrls[0], {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_getBalance', params: [address, 'latest'] }),
+      }).then((r) => r.json()).then((j) => { if (j.result) setBalance(Number(BigInt(j.result)) / 1e18); }).catch(() => {});
+    }
   }, [address]);
   useEffect(() => { refresh(); return startPoll(refresh, 15_000); }, [refresh]);
 
@@ -99,6 +109,14 @@ export default function ValidatorSetPanel() {
                 </label>
                 <label className="text-[10px] text-dim uppercase tracking-wider">Self-stake (MRSN)
                   <input value={stake} onChange={(e) => setStake(e.target.value)} inputMode="decimal" className="mt-1 w-full bg-surface-2 border border-border rounded-lg px-2 py-2 text-[12px] font-mono text-foreground" />
+                  {balance !== null && (
+                    <span className={cn('block mt-1 text-[10px] normal-case tracking-normal', balance < minStake + 0.001 ? 'text-down' : 'text-dim')}>
+                      Balance {balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} MRSN
+                      {balance < minStake + 0.001 && address && (
+                        <> · <a className="underline" href={`https://faucet.mersennet.com/?address=${address}`} target="_blank" rel="noopener noreferrer">claim from the faucet</a> (bond + gas)</>
+                      )}
+                    </span>
+                  )}
                 </label>
                 <label className="text-[10px] text-dim uppercase tracking-wider">Commission (bps)
                   <input value={commission} onChange={(e) => setCommission(e.target.value)} inputMode="numeric" className="mt-1 w-full bg-surface-2 border border-border rounded-lg px-2 py-2 text-[12px] font-mono text-foreground" />
@@ -109,6 +127,13 @@ export default function ValidatorSetPanel() {
                     const node = candidates.find((n) => n.identity === selected);
                     if (!node?.registration_proof) { toast('This node has no registration proof yet — restart it on the latest build', 'error'); return; }
                     if (Number(stake) < minStake) { toast(`Self-stake must be at least ${minStake} MRSN`, 'error'); return; }
+                    // The precompile pulls the bond from the balance after gas: bonding your whole balance fails.
+                    if (balance !== null && balance < Number(stake) + 0.001) {
+                      toast(balance < minStake + 0.001
+                        ? `You need ${minStake.toLocaleString()} MRSN plus a little gas; you have ${balance.toFixed(3)}. Claim from the faucet, then register.`
+                        : `Bonding ${Number(stake).toLocaleString()} MRSN leaves nothing for gas — bond a little less than your ${balance.toFixed(3)} MRSN balance.`, 'error');
+                      return;
+                    }
                     const proof = node.registration_proof;
                     act('register', () => registerValidator(provider, node.identity, stake, Number(commission) || 0, proof), 'Registered — active from the next epoch');
                   }}
