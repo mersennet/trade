@@ -116,6 +116,36 @@ router.post('/verify', verifyLimiter, async (req, res) => {
 });
 
 /** GET /api/v1/nodes/verified — public list (hosts masked) */
+// On-demand reachability probe, used by `mersennet-check` on the operator's
+// own server: is this host's TCP 30303 open from the internet and answering
+// `whoami`? A provider firewall that blocks it leaves a node visible (UDP out
+// works) yet never verifiable — this makes that visible in one line.
+const probeLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  keyGenerator: (req) => req.headers['x-real-ip'] || (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip,
+  validate: false,
+  message: { error: 'Too many probes; try again in a minute' },
+});
+router.get('/probe', probeLimiter, async (req, res) => {
+  const host = String(req.query.host || '').trim();
+  if (!validHost(host)) return res.status(400).json({ error: 'host must be a public IP or hostname' });
+  try {
+    const att = await whoami(host);
+    res.json({
+      reachable: true,
+      identity: att.identity || null,
+      operator: att.operator || null,
+      version: att.version || null,
+      height: att.height ?? null,
+    });
+  } catch (e) {
+    res.json({ reachable: false, error: e.message });
+  }
+});
+
 router.get('/verified', async (_req, res) => {
   await ready;
   try {
