@@ -187,11 +187,19 @@ export async function getValidatorsFull(): Promise<ValidatorFull[]> {
 
 // ─── Open validator set ─────────────────────────────────────────────────────
 
-export interface ValidatorSetParams { activationHeight: number; epochBlocks: number; minSelfStake: string; maxValidators: number; unbondingBlocks: number; jailMissBps: number; jailMinSlots: number; }
+export interface ValidatorSetParams {
+  activationHeight: number; epochBlocks: number; minSelfStake: string; maxValidators: number; unbondingBlocks: number; jailMissBps: number; jailMinSlots: number;
+  rewardsToOperatorHeight?: number; jailEscalationHeight?: number; benchHeight?: number;
+}
+/** The next consensus switch height above `height` (0 when none is scheduled). Nodes must run the current release by then. */
+export function nextProtocolSwitch(params: ValidatorSetParams, height: number): number {
+  const hs = [params.rewardsToOperatorHeight, params.jailEscalationHeight, params.benchHeight].filter((h): h is number => typeof h === 'number' && h > height);
+  return hs.length ? Math.min(...hs) : 0;
+}
 export interface ValidatorSetEntry {
   identity: string; operator: string; selfStake: string; delegated: string; votingStake: string; commissionBps: number;
   status: 'pending' | 'active' | 'standby' | 'jailed' | 'exiting'; genesis: boolean; registeredAt: number; jailedUntilEpoch: number;
-  exiting: boolean; pendingIdentity: string | null; proposedSlots: number; missedSlots: number; totalProposed: number; timesJailed: number;
+  exiting: boolean; pendingIdentity: string | null; proposedSlots: number; missedSlots: number; totalProposed: number; timesJailed: number; benched?: boolean;
 }
 export interface ValidatorSetView {
   active: boolean; params: ValidatorSetParams; height: number; epoch: number; nextEpochAt: number;

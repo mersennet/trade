@@ -93,7 +93,7 @@ export const api = {
   getTraderProfile: (addr: string) => apiFetch<TraderProfile>(`/leaderboard/trader/${addr}`),
   getPoints: (addr: string, season = 1) => apiFetch<PointsResponse>(`/points/${addr}?season=${season}`),
   // Verified node runners
-  getMyNodes: (addr: string) => apiFetch<{ nodes: VerifiedNode[]; pointsPerDay: number }>(`/nodes/mine/${addr}`),
+  getMyNodes: (addr: string) => apiFetch<{ nodes: VerifiedNode[]; pointsPerDay: number; latest_sha?: string | null }>(`/nodes/mine/${addr}`),
   probeNode: (host: string) => apiFetch<{ reachable: boolean; identity?: string | null; height?: number | null; version?: string | null; error?: string }>(`/nodes/probe?host=${encodeURIComponent(host)}`),
   getVerifiedNodes: () => apiFetch<{ nodes: VerifiedNode[]; total: number; active: number; pointsPerDay: number }>('/nodes/verified'),
   verifyNode: (body: { host: string; wallet: string; signature: string }) =>
@@ -330,7 +330,7 @@ export interface TraderStatRow {
 export interface TraderProfile { address: string; stats: Record<string, TraderStatRow>; recentTrades: Trade[]; }
 export interface PointsResponse { address: string; totalPoints: number; tradingPoints: number; lpPoints: number; referralPoints: number; nodePoints?: number; tier: string; rank: number; history: { point_type: string; amount: number; reason: string; created_at: string }[]; }
 export interface PointsEntry { rank: number; address: string; totalPoints: number; tier: string; }
-export interface VerifiedNode { identity: string; operator?: string; host: string; version: string; height: number; first_verified_at: string; last_seen_at: string; active: boolean; registration_proof?: string | null; }
+export interface VerifiedNode { identity: string; operator?: string; host: string; version: string; height: number; first_verified_at: string; last_seen_at: string; active: boolean; registration_proof?: string | null; build_sha?: string | null; outdated?: boolean; }
 export interface VaultState { totalShares: number; totalTvl: number; totalPnl: number; apy7d: number; apy30d: number; depositors: number; }
 export interface VaultUserState { address: string; shares: number; value: number; shareOfVault: string; history: unknown[]; }
 export interface StakingState { totalStaked: number; totalRewardsDistributed: number; rewardRate: number; stakersCount: number; }

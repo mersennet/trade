@@ -7,7 +7,7 @@ import { cn, shortenAddress } from '@/lib/utils';
 import { getDefaultChain } from '@/lib/chain';
 import { startPoll } from '@/lib/poll';
 import {
-  addSelfStake, getValidatorSet, registerValidator, unregisterValidator, weiToMrsn,
+  addSelfStake, getValidatorSet, nextProtocolSwitch, registerValidator, unregisterValidator, weiToMrsn,
   type ValidatorSetEntry, type ValidatorSetView,
 } from '@/lib/staking';
 
@@ -39,6 +39,7 @@ export default function ValidatorSetPanel() {
   const [busy, setBusy] = useState<string | null>(null);
   const [topUp, setTopUp] = useState<Record<string, string>>({});
   const [balance, setBalance] = useState<number | null>(null);
+  const [latestSha, setLatestSha] = useState<string | null>(null);
   // Live height of the operator's own nodes, probed through the API once a
   // minute and compared with the head read at the same moment. The stored
   // height from the periodic recheck can be half an hour old, which made a
@@ -47,7 +48,7 @@ export default function ValidatorSetPanel() {
 
   const refresh = useCallback(async () => {
     try { setView(await getValidatorSet()); } catch { /* rpc hiccup */ }
-    if (address) api.getMyNodes(address).then((r) => setMine(r.nodes)).catch(() => {});
+    if (address) api.getMyNodes(address).then((r) => { setMine(r.nodes); setLatestSha(r.latest_sha || null); }).catch(() => {});
     if (address) {
       // Native balance straight from the Mersennet RPC (the wallet provider
       // may still be pointed at another chain right after connecting).
@@ -94,6 +95,8 @@ export default function ValidatorSetPanel() {
   };
 
   const sorted = [...(view?.validators || [])].sort((a, b) => (BigInt(b.votingStake) > BigInt(a.votingStake) ? 1 : -1));
+  const outdatedNodes = useMemo(() => mine.filter((n) => n.outdated), [mine]);
+  const nextSwitch = view ? nextProtocolSwitch(view.params, view.height) : 0;
 
   return (
     <div className="bg-surface border border-border rounded-xl overflow-hidden" data-testid="validator-set-panel">
@@ -115,6 +118,22 @@ export default function ValidatorSetPanel() {
           (epochs are {view ? Math.round(view.params.epochBlocks * 2 / 60) : 60} minutes; the top {view?.params.maxValidators ?? 12} by self + delegated stake produce blocks).
           Miss more than {view ? view.params.jailMissBps / 100 : 20}% of your leader slots in an epoch and you sit out the next one. Unregister any time; your stake unbonds over ~{view ? Math.round(view.params.unbondingBlocks * 2 / 3600) : 3} hours.
         </p>
+
+        {outdatedNodes.length > 0 && (
+          <div className="border border-yellow-400/40 bg-yellow-400/5 rounded-lg p-3 space-y-1" data-testid="node-upgrade-notice">
+            <p className="text-[11px] font-semibold text-yellow-400 uppercase tracking-wider">Upgrade required</p>
+            <p className="text-[12px] text-dim leading-relaxed">
+              {outdatedNodes.length > 1 ? 'Your nodes run' : 'Your node runs'} build{' '}
+              {outdatedNodes.map((n) => <code key={n.identity} className="font-mono text-[11px] text-foreground">{n.build_sha || n.version || 'unknown'} </code>)}
+              and the current release is <code className="font-mono text-[11px] text-foreground">{latestSha}</code>.
+              {nextSwitch > 0 && (
+                <> A protocol switch is scheduled at block <span className="text-foreground font-medium">{nextSwitch.toLocaleString()}</span> (~{Math.round((nextSwitch - (view?.height || 0)) * 2 / 3600)} h); a validator on an old build forks off there.</>
+              )}
+              {' '}Upgrading is the install command again and keeps your keys and data:
+            </p>
+            <code className="block font-mono text-[11px] text-foreground bg-surface-2 rounded px-2 py-1 overflow-x-auto">curl -fsSL https://mersennet.com/downloads/install.sh | sudo bash -s -- --operator {address?.toLowerCase()}</code>
+          </div>
+        )}
 
         {isConnected && (
           <div className="border border-border rounded-lg p-3 space-y-2">
@@ -199,7 +218,7 @@ export default function ValidatorSetPanel() {
                     <td className="py-1.5 pr-3 text-right font-mono">{fmtMrsn(v.selfStake)}</td>
                     <td className="py-1.5 pr-3 text-right font-mono">{fmtMrsn(v.delegated)}</td>
                     <td className={cn('py-1.5 pr-3 text-right font-mono', v.missedSlots > 0 && v.proposedSlots === 0 ? 'text-down' : '')} title="Leader slots this epoch: blocks your node proposed vs. slots it missed. Missing more than 20% of at least 5 slots jails the node for the next epoch.">{v.proposedSlots} proposed<span className="text-dim"> · {v.missedSlots} missed</span></td>
-                    <td className="py-1.5 text-right"><span className={cn('font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded', STATUS_TONE[v.status] || 'text-dim')}>{v.status}</span></td>
+                    <td className="py-1.5 text-right"><span className={cn('font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded', STATUS_TONE[v.status] || 'text-dim')}>{v.status}</span>{v.benched && <span title="Missed 3 leader slots this epoch: out of the leader rotation until the epoch boundary (still voting)" className="ml-1 font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded text-yellow-400 bg-yellow-400/10">benched</span>}</td>
                   </tr>
                 );
               })}

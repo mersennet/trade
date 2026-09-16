@@ -149,19 +149,64 @@ router.get('/probe', probeLimiter, async (req, res) => {
   }
 });
 
+/**
+ * Current release, read from the signed checksum list the installer uses
+ * (the bundle is named by the git sha it was built from). Cached 10 minutes;
+ * a fetch failure keeps the last known value.
+ */
+const DOWNLOADS_URL = process.env.DOWNLOADS_URL || 'https://mersennet.com/downloads';
+let releaseCache = { sha: null, checkedAt: 0 };
+async function latestReleaseSha() {
+  if (Date.now() - releaseCache.checkedAt < 10 * 60 * 1000) return releaseCache.sha;
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 6000);
+    const r = await fetch(`${DOWNLOADS_URL}/latest.json`, { signal: ctrl.signal, headers: { 'user-agent': 'mersennet-api' } });
+    clearTimeout(t);
+    if (r.ok) {
+      const j = await r.json();
+      const sha = String(j.release || '').match(/^[0-9a-f]{7,40}$/) ? j.release : null;
+      if (sha) releaseCache = { sha, checkedAt: Date.now() };
+    }
+  } catch (e) {
+    console.warn('[nodes] release check failed:', e.message);
+    releaseCache.checkedAt = Date.now();
+  }
+  return releaseCache.sha;
+}
+/** "Mersennet/0.7.0-2c2974a" → "2c2974a"; null when the build has no sha (pre-15 Sep builds). */
+function buildShaOf(version) {
+  const m = String(version || '').match(/-([0-9a-f]{7,40})$/);
+  return m ? m[1] : null;
+}
+function withBuild(n, latest) {
+  const build = buildShaOf(n.version);
+  return { ...n, build_sha: build, outdated: !!latest && build !== latest };
+}
+
+/** GET /api/v1/nodes/release — the current node release (bundle sha) */
+router.get('/release', async (_req, res) => {
+  const sha = await latestReleaseSha();
+  res.json({ latest_sha: sha, version: sha ? `Mersennet/0.7.0-${sha}` : null, downloads: DOWNLOADS_URL, checked_at: releaseCache.checkedAt || null });
+});
+
 router.get('/verified', async (_req, res) => {
   await ready;
   try {
-    const r = await pool.query(
-      `SELECT identity, operator, host, version, height, first_verified_at, last_seen_at,
-              (last_seen_at > NOW() - ${ACTIVE_WINDOW}) AS active
-       FROM verified_nodes ORDER BY first_verified_at ASC LIMIT 500`
-    );
+    const [r, latest] = await Promise.all([
+      pool.query(
+        `SELECT identity, operator, host, version, height, first_verified_at, last_seen_at,
+                (last_seen_at > NOW() - ${ACTIVE_WINDOW}) AS active
+         FROM verified_nodes ORDER BY first_verified_at ASC LIMIT 500`
+      ),
+      latestReleaseSha(),
+    ]);
     res.json({
-      nodes: r.rows.map((n) => ({ ...n, id: nodeIdFor(n.host), host: maskHost(n.host), height: Number(n.height) })),
+      nodes: r.rows.map((n) => withBuild({ ...n, id: nodeIdFor(n.host), host: maskHost(n.host), height: Number(n.height) }, latest)),
       total: r.rowCount,
       active: r.rows.filter((n) => n.active).length,
       pointsPerDay: NODE_POINTS_PER_DAY,
+      latest_sha: latest,
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -173,13 +218,21 @@ router.get('/mine/:wallet', async (req, res) => {
   await ready;
   if (!ethers.isAddress(req.params.wallet)) return res.status(400).json({ error: 'invalid address' });
   try {
-    const r = await pool.query(
-      `SELECT identity, host, version, height, first_verified_at, last_seen_at, points_awarded_on, registration_proof,
-              (last_seen_at > NOW() - ${ACTIVE_WINDOW}) AS active
-       FROM verified_nodes WHERE operator = $1 ORDER BY first_verified_at ASC`,
-      [req.params.wallet.toLowerCase()]
-    );
-    res.json({ nodes: r.rows.map((n) => ({ ...n, height: Number(n.height) })), pointsPerDay: NODE_POINTS_PER_DAY, message: verificationMessage('<host>', req.params.wallet) });
+    const [r, latest] = await Promise.all([
+      pool.query(
+        `SELECT identity, host, version, height, first_verified_at, last_seen_at, points_awarded_on, registration_proof,
+                (last_seen_at > NOW() - ${ACTIVE_WINDOW}) AS active
+         FROM verified_nodes WHERE operator = $1 ORDER BY first_verified_at ASC`,
+        [req.params.wallet.toLowerCase()]
+      ),
+      latestReleaseSha(),
+    ]);
+    res.json({
+      nodes: r.rows.map((n) => withBuild({ ...n, height: Number(n.height) }, latest)),
+      pointsPerDay: NODE_POINTS_PER_DAY,
+      latest_sha: latest,
+      message: verificationMessage('<host>', req.params.wallet),
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
