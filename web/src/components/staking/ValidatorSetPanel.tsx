@@ -262,7 +262,10 @@ export default function ValidatorSetPanel() {
               {lagging
                 ? `Your node is ${behind!.toLocaleString()} blocks behind the chain, so it cannot propose. `
                 : 'Your node is in the active set but has not proposed any of its slots this epoch. '}
-              Each missed slot delays the network by a failover round; missing more than 20% of your slots jails the validator for the next epoch. Check the server: <code className="font-mono">systemctl status mersennet</code>, <code className="font-mono">mersennet-check</code>, and <code className="font-mono">journalctl -u mersennet -n 100</code>. If the node is stuck, re-run the installer with <code className="font-mono">--reset-state</code>; if you cannot fix it now, <span className="underline">Unregister</span> so the network does not wait on it.
+              {v.benched
+                ? 'It is benched: out of the leader rotation until the epoch boundary (it still votes), and the boundary will jail it for the next epoch. '
+                : 'Each missed slot delays the network by a failover round; missing more than 20% of your slots jails the validator for the next epoch. '}
+              Check the server: <code className="font-mono">systemctl status mersennet</code>, <code className="font-mono">mersennet-check</code>, and <code className="font-mono">journalctl -u mersennet -n 100</code>. If the node is stuck, re-run the installer with <code className="font-mono">--reset-state</code>; if you cannot fix it now, <span className="underline">Unregister</span> so the network does not wait on it.
             </p>
           )}
           </div>
