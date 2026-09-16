@@ -68,6 +68,9 @@ export default function NodeRunnerCard() {
                 <div>
                   <span className="font-mono text-foreground">{n.host}</span>
                   <span className="text-dim"> · {n.identity.slice(0, 10)}… · {n.version || 'unknown build'}</span>
+                  {n.outdated && (
+                    <a href="/staking" className="ml-2 text-[10px] uppercase tracking-wider text-yellow-400 hover:underline" title="A newer node release is out. Re-run the install command (keeps keys and data); required before the next protocol switch.">upgrade available</a>
+                  )}
                 </div>
                 <span className={cn('font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded', n.active ? 'text-primary bg-primary/10' : 'text-dim bg-surface-2')}>
                   {n.active ? 'online' : 'offline'}
