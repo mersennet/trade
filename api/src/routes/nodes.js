@@ -274,10 +274,16 @@ async function awardDailyPoints() {
       const address = row.operator;
       await pool.query(
         `INSERT INTO points_balance (address, season, total_points, trading_points, lp_points, referral_points, node_points, tier, updated_at)
-         VALUES ($1, $2, $3, 0, 0, 0, $3, 'bronze', NOW())
+         VALUES ($1, $2, $3, 0, 0, 0, $3, 'Bronze', NOW())
          ON CONFLICT (address, season) DO UPDATE SET
            node_points = points_balance.node_points + $3,
            total_points = points_balance.total_points + $3,
+           tier = CASE
+             WHEN points_balance.total_points + $3 >= 1000000 THEN 'Diamond'
+             WHEN points_balance.total_points + $3 >= 100000 THEN 'Platinum'
+             WHEN points_balance.total_points + $3 >= 10000 THEN 'Gold'
+             WHEN points_balance.total_points + $3 >= 1000 THEN 'Silver'
+             ELSE 'Bronze' END,
            updated_at = NOW()`,
         [address, SEASON, NODE_POINTS_PER_DAY]
       );
