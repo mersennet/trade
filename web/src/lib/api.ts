@@ -94,6 +94,7 @@ export const api = {
   getPoints: (addr: string, season = 1) => apiFetch<PointsResponse>(`/points/${addr}?season=${season}`),
   // Verified node runners
   getMyNodes: (addr: string) => apiFetch<{ nodes: VerifiedNode[]; pointsPerDay: number }>(`/nodes/mine/${addr}`),
+  probeNode: (host: string) => apiFetch<{ reachable: boolean; identity?: string | null; height?: number | null; version?: string | null; error?: string }>(`/nodes/probe?host=${encodeURIComponent(host)}`),
   getVerifiedNodes: () => apiFetch<{ nodes: VerifiedNode[]; total: number; active: number; pointsPerDay: number }>('/nodes/verified'),
   verifyNode: (body: { host: string; wallet: string; signature: string }) =>
     apiFetch<{ ok: boolean; identity: string; height: number; version: string; pointsPerDay: number }>('/nodes/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),

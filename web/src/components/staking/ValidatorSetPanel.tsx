@@ -39,6 +39,11 @@ export default function ValidatorSetPanel() {
   const [busy, setBusy] = useState<string | null>(null);
   const [topUp, setTopUp] = useState<Record<string, string>>({});
   const [balance, setBalance] = useState<number | null>(null);
+  // Live height of the operator's own nodes, probed through the API once a
+  // minute and compared with the head read at the same moment. The stored
+  // height from the periodic recheck can be half an hour old, which made a
+  // healthy validator look "670 blocks behind" (first outside validator).
+  const [live, setLive] = useState<Record<string, { height: number; head: number; at: number }>>({});
 
   const refresh = useCallback(async () => {
     try { setView(await getValidatorSet()); } catch { /* rpc hiccup */ }
@@ -57,6 +62,23 @@ export default function ValidatorSetPanel() {
   const registered = useMemo(() => new Set((view?.validators || []).map((v) => v.identity.toLowerCase())), [view]);
   const candidates = useMemo(() => mine.filter((n) => n.registration_proof && !registered.has(n.identity.toLowerCase())), [mine, registered]);
   const nodeByIdentity = useMemo(() => Object.fromEntries(mine.map((n) => [n.identity.toLowerCase(), n])), [mine]);
+  useEffect(() => {
+    if (!address || mine.length === 0) return;
+    let alive = true;
+    const probe = async () => {
+      for (const n of mine) {
+        try {
+          const [r, v] = await Promise.all([api.probeNode(n.host), getValidatorSet()]);
+          if (alive && r.reachable && typeof r.height === 'number') {
+            setLive((prev) => ({ ...prev, [n.identity.toLowerCase()]: { height: r.height as number, head: v.height, at: Date.now() } }));
+          }
+        } catch { /* probe endpoint is rate limited; try again next minute */ }
+      }
+    };
+    probe();
+    const t = setInterval(probe, 60_000);
+    return () => { alive = false; clearInterval(t); };
+  }, [address, mine]);
   useEffect(() => { if (!selected && candidates[0]) setSelected(candidates[0].identity); }, [candidates, selected]);
   const minStake = view ? Number(weiToMrsn(view.params.minSelfStake, 0)) : 1000;
   const blocksToEpoch = view ? Math.max(0, view.nextEpochAt - view.height) : 0;
@@ -187,19 +209,26 @@ export default function ValidatorSetPanel() {
 
         {myEntries.map((v) => {
           const node = nodeByIdentity[v.identity.toLowerCase()];
-          const behind = node && view ? Math.max(0, view.height - node.height) : null;
+          const probe = live[v.identity.toLowerCase()];
+          // Only a live reading may drive a warning; the stored height is shown as information.
+          const behind = probe ? Math.max(0, probe.head - probe.height) : null;
+          const proposing = v.proposedSlots > 0 && v.missedSlots === 0;
           const silent = v.status === 'active' && v.proposedSlots === 0 && v.missedSlots >= 2;
-          const lagging = behind !== null && behind > 50;
+          const lagging = behind !== null && behind > 100 && !proposing;
           return (
           <div key={v.identity} className={cn('border rounded-lg px-3 py-2 text-[12px] space-y-1', silent || lagging ? 'border-down/50 bg-down/5' : 'border-border')}>
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-foreground">{shortenAddress(v.identity)}</span>
             <span className="text-dim">self-stake {fmtMrsn(v.selfStake)} MRSN · {v.commissionBps / 100}% commission · {v.status}{v.status === 'jailed' ? ` until epoch ${v.jailedUntilEpoch}` : ''}</span>
-            {node && behind !== null && (
-              <span className={cn('font-mono text-[11px]', lagging ? 'text-down' : 'text-dim')} title="Height your node reported at its last check, vs. the chain head">
-                node at {node.height.toLocaleString()}{lagging ? ` · ${behind.toLocaleString()} blocks behind` : ' · in sync'}
+            {probe ? (
+              <span className={cn('font-mono text-[11px]', lagging ? 'text-down' : 'text-dim')} title="Your node's height, probed live through the API and compared with the head at the same moment">
+                node at {probe.height.toLocaleString()}{behind !== null && behind > 100 ? ` · ${behind.toLocaleString()} blocks behind` : ' · in sync'}
               </span>
-            )}
+            ) : node ? (
+              <span className="font-mono text-[11px] text-dim" title="Height at the network's last periodic check (up to 30 minutes old); a live reading follows shortly">
+                last seen at {node.height.toLocaleString()}
+              </span>
+            ) : null}
             <span className="flex-1" />
             {!v.genesis && !v.exiting && (
               <>
