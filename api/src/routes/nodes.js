@@ -165,7 +165,10 @@ async function latestReleaseSha() {
     clearTimeout(t);
     if (r.ok) {
       const j = await r.json();
-      const sha = String(j.release || '').match(/^[0-9a-f]{7,40}$/) ? j.release : null;
+      // build_sha = what the binary reports; release = the bundle's commit
+      // (differs when a bundle is republished with the same binary).
+      const pick = String(j.build_sha || j.release || '');
+      const sha = /^[0-9a-f]{7,40}$/.test(pick) ? pick : null;
       if (sha) releaseCache = { sha, checkedAt: Date.now() };
     }
   } catch (e) {
