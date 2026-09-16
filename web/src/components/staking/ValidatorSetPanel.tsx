@@ -116,7 +116,7 @@ export default function ValidatorSetPanel() {
           Anyone can become a validator. Run a node with your wallet as operator (it appears below once verified), bond at least{' '}
           <span className="text-foreground font-medium">{minStake.toLocaleString()} MRSN</span> as self-stake, and register. You join the active set at the next epoch
           (epochs are {view ? Math.round(view.params.epochBlocks * 2 / 60) : 60} minutes; the top {view?.params.maxValidators ?? 12} by self + delegated stake produce blocks).
-          Miss more than {view ? view.params.jailMissBps / 100 : 20}% of your leader slots in an epoch and you sit out the next one. Unregister any time; your stake unbonds over ~{view ? Math.round(view.params.unbondingBlocks * 2 / 3600) : 3} hours.
+          Miss more than {view ? view.params.jailMissBps / 100 : 20}% of your leader slots in an epoch and you sit out the next one{view?.params.benchHeight ? (view.height >= view.params.benchHeight ? '; three missed slots bench you for the rest of the epoch' : ` (from block ${view.params.benchHeight.toLocaleString()}, three missed slots bench you for the rest of the epoch)`) : ''}. Unregister any time; your stake unbonds over ~{view ? Math.round(view.params.unbondingBlocks * 2 / 3600) : 3} hours.
         </p>
 
         {outdatedNodes.length > 0 && (
