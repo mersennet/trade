@@ -19,14 +19,14 @@ export default function ChainStatusChip() {
     const tick = async () => {
       const t0 = performance.now();
       try {
-        const s = await api.getStats();
+        const s = await api.getChainHealth();
         if (!mounted) return;
         const ms = Math.round(performance.now() - t0);
         setLatencyMs(ms);
-        if (s.blockHeight && s.blockHeight !== block) {
+        if (s.head && s.head !== block) {
           const now = Date.now();
           setLastBlockAt(now);
-          setBlock(s.blockHeight);
+          setBlock(s.head);
           setBlockAgeMs(0);
         }
       } catch { /* keep last good */ }

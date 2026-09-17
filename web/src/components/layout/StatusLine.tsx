@@ -24,12 +24,12 @@ export default function StatusLine() {
     const tick = async () => {
       const t0 = performance.now();
       try {
-        const s = await api.getStats();
+        const s = await api.getChainHealth();
         if (!mounted) return;
         setLatencyMs(Math.round(performance.now() - t0));
-        if (s.blockHeight && s.blockHeight !== lastBlock) {
-          lastBlock = s.blockHeight;
-          setBlock(s.blockHeight);
+        if (s.head && s.head !== lastBlock) {
+          lastBlock = s.head;
+          setBlock(s.head);
           setLastBlockAt(Date.now());
         }
       } catch { /* keep last good values */ }

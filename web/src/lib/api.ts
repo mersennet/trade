@@ -11,6 +11,21 @@ const WS_BASE =
 // forever. Abort after a fixed timeout so callers surface an error instead.
 const REQUEST_TIMEOUT_MS = 15000;
 
+/**
+ * Share one in-flight request and its result for `ttlMs` across components:
+ * several widgets poll the same endpoint on their own timers, which multiplied
+ * identical requests (the two status chips alone hit /stats 16× per 30 s).
+ */
+const memoCache = new Map<string, { at: number; p: Promise<unknown> }>();
+function memo<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
+  const hit = memoCache.get(key);
+  const now = Date.now();
+  if (hit && now - hit.at < ttlMs) return hit.p as Promise<T>;
+  const p = fn().catch((e) => { memoCache.delete(key); throw e; });
+  memoCache.set(key, { at: now, p });
+  return p;
+}
+
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -122,7 +137,9 @@ export const api = {
   getBuilderCodesByOwner: (address: string) => apiFetch<{ codes: BuilderCode[] }>(`/builder-codes/owner/${address}`),
   createBuilderCode: (owner: string, label?: string, code?: string) =>
     apiFetch<{ code: string }>('/builder-codes', { method: 'POST', body: JSON.stringify({ owner, label, code }) }),
-  getStats: () => apiFetch<ProtocolStats>('/stats'),
+  getStats: () => memo('stats', 5_000, () => apiFetch<ProtocolStats>('/stats')),
+  /** Cheap RPC-backed head/interval reading for status chips (no DB aggregates). */
+  getChainHealth: () => memo('chain-health', 2_000, () => apiFetch<ChainHealth>('/health/chain')),
   getBalance: (addr: string) => apiFetch<{ balance: string }>(`/balance/${addr}`),
   getHealth: () => apiFetch<{ status: string }>('/health'),
   getApiKeys: (address: string) =>
@@ -338,6 +355,7 @@ export interface StakingUserState { address: string; staked: number; rewardsPend
 export interface Competition { id: number; name: string; description: string; comp_type: string; start_at: string; end_at: string; prize_pool: number; status: string; }
 export interface CompetitionDetail { competition: Competition; standings: { address: string; pnl: number; roi: number; volume: number; rank: number }[]; }
 export interface BuilderCode { code: string; owner: string; label: string; fee_share_bps: number; total_volume: number; total_fees_earned: number; total_orders: number; }
+export interface ChainHealth { ok: boolean; head: number; headAgeSec: number; avgBlockMs: number; window: number; timestamp: number; }
 export interface ProtocolStats { volume24h: number; volume7d: number; totalTrades: number; uniqueTraders: number; markets: number; blockHeight: number; vaultTvl: number; totalStaked: number; insuranceFund: number; feeTiers?: FeeTier[]; }
 export interface FundingRate { timestamp: string; rate: number; marketId: number; }
 export interface FeeTier { name: string; minVolume: number; makerFee: number; takerFee: number; }

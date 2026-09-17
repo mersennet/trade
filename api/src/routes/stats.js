@@ -5,58 +5,83 @@ const { FEE_TIERS } = require('../services/feeTiers');
 
 const router = Router();
 
+// The aggregates below scan the whole trades table (COUNT, COUNT DISTINCT,
+// 24 h / 7 d sums, DISTINCT ON) and took 0.9–1.9 s per call while every open
+// terminal tab polled twice every 5 s. Compute at most once per STATS_TTL_MS
+// and share the in-flight promise; the block height is refreshed per request
+// because it is cheap and the status chips want it fresh.
+const STATS_TTL_MS = Number(process.env.STATS_TTL_MS || 10_000);
+let statsCache = { at: 0, body: null, inflight: null };
+
+async function computeStats() {
+  const VOL_DIV = '1.0';
+  const [vol24h, vol7d, totalTrades, uniqueTraders] = await Promise.all([
+    pool.query(`SELECT COALESCE(SUM(price * size) / ${VOL_DIV}, 0)::float8 as v FROM trades WHERE block_timestamp > NOW() - interval '24 hours'`),
+    pool.query(`SELECT COALESCE(SUM(price * size) / ${VOL_DIV}, 0)::float8 as v FROM trades WHERE block_timestamp > NOW() - interval '7 days'`),
+    pool.query('SELECT COUNT(*) as c FROM trades'),
+    pool.query('SELECT COUNT(DISTINCT taker) as c FROM trades'),
+  ]);
+  const [stakingStateDb, insuranceFund, vaultTvl] = await Promise.all([
+    pool.query('SELECT total_staked FROM staking_state WHERE id = 1').catch(() => ({ rows: [] })),
+    chain.getInsuranceFundUsd().catch(() => 0),
+    chain.getVaultTvlUsd().catch(() => 0),
+  ]);
+  let openInterest = 0;
+  try {
+    const oiResult = await pool.query(
+      `SELECT COALESCE(SUM(ABS(t.size) * t.price) / ${VOL_DIV}, 0)::float8 as oi
+       FROM (
+         SELECT DISTINCT ON (market_id, taker) market_id, taker, size, price
+         FROM trades ORDER BY market_id, taker, block_timestamp DESC
+       ) t`
+    );
+    openInterest = Number(oiResult.rows[0]?.oi || 0);
+  } catch (_) {}
+  return {
+    volume24h: Number(vol24h.rows[0].v),
+    volume7d: Number(vol7d.rows[0].v),
+    totalTrades: Number(totalTrades.rows[0].c),
+    uniqueTraders: Number(uniqueTraders.rows[0].c),
+    vaultTvl,
+    totalStaked: Number(stakingStateDb.rows[0]?.total_staked || 0),
+    insuranceFund,
+    openInterest,
+  };
+}
+
+async function cachedStats() {
+  const now = Date.now();
+  if (statsCache.body && now - statsCache.at < STATS_TTL_MS) return statsCache.body;
+  if (!statsCache.inflight) {
+    statsCache.inflight = computeStats()
+      .then((body) => { statsCache = { at: Date.now(), body, inflight: null }; return body; })
+      .catch((e) => { statsCache.inflight = null; throw e; });
+  }
+  // A stale body is better than a 1 s wait while the refresh runs.
+  return statsCache.body || statsCache.inflight;
+}
+
 async function handleStats(req, res) {
   try {
-    // trades.price and trades.size are plain integer chain units.
-    const VOL_DIV = '1.0';
-    const [vol24h, vol7d, totalTrades, uniqueTraders, blockNum] = await Promise.all([
-      pool.query(`SELECT COALESCE(SUM(price * size) / ${VOL_DIV}, 0)::float8 as v FROM trades WHERE block_timestamp > NOW() - interval '24 hours'`),
-      pool.query(`SELECT COALESCE(SUM(price * size) / ${VOL_DIV}, 0)::float8 as v FROM trades WHERE block_timestamp > NOW() - interval '7 days'`),
-      pool.query('SELECT COUNT(*) as c FROM trades'),
-      pool.query('SELECT COUNT(DISTINCT taker) as c FROM trades'),
-      chain.getBlockNumber().catch(() => 0),
-    ]);
-
-    // Read real on-chain values; fall back to mocked DB tables if RPC fails.
-    // The DB rows are placeholders for the not-yet-launched LP yield-vault.
-    const [vaultStateDb, stakingStateDb, insuranceFund, vaultTvl] = await Promise.all([
-      pool.query('SELECT total_tvl FROM vault_state WHERE id = 1').catch(() => ({ rows: [] })),
-      pool.query('SELECT total_staked FROM staking_state WHERE id = 1').catch(() => ({ rows: [] })),
-      chain.getInsuranceFundUsd().catch(() => 0),
-      chain.getVaultTvlUsd().catch(() => 0),
-    ]);
-
-    let openInterest = 0;
-    try {
-      const oiResult = await pool.query(
-        `SELECT COALESCE(SUM(ABS(t.size) * t.price) / ${VOL_DIV}, 0)::float8 as oi
-         FROM (
-           SELECT DISTINCT ON (market_id, taker) market_id, taker, size, price
-           FROM trades ORDER BY market_id, taker, block_timestamp DESC
-         ) t`
-      );
-      openInterest = Number(oiResult.rows[0]?.oi || 0);
-    } catch (_) {}
-
-    res.json({
-      volume24h: Number(vol24h.rows[0].v),
-      volume7d: Number(vol7d.rows[0].v),
-      totalTrades: Number(totalTrades.rows[0].c),
-      uniqueTraders: Number(uniqueTraders.rows[0].c),
+    const [agg, blockNum] = await Promise.all([cachedStats(), chain.getBlockNumber().catch(() => 0)]);
+    res.set('Cache-Control', 'public, max-age=5');
+    return res.json({
+      volume24h: agg.volume24h,
+      volume7d: agg.volume7d,
+      totalTrades: agg.totalTrades,
+      uniqueTraders: agg.uniqueTraders,
       markets: chain.MARKETS.length,
       blockHeight: blockNum,
-      // vaultTvl: real USDC held by collateral Vault contract (on-chain).
-      vaultTvl,
-      // totalStaked: from staking_state DB (mocked until staking launches).
-      totalStaked: Number(stakingStateDb.rows[0]?.total_staked || 0),
-      // insuranceFund: real on-chain Vault.insuranceFund() balance in USDC.
-      insuranceFund,
+      vaultTvl: agg.vaultTvl,
+      totalStaked: agg.totalStaked,
+      insuranceFund: agg.insuranceFund,
       feeTiers: FEE_TIERS,
-      openInterest,
+      openInterest: agg.openInterest,
+      statsAgeMs: Date.now() - statsCache.at,
       timestamp: Date.now(),
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    return res.status(500).json({ error: e.message });
   }
 }
 
