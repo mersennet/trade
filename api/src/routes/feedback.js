@@ -82,15 +82,17 @@ router.post('/', postLimiter, async (req, res) => {
       [category, message, contact || null, wallet || null, userAgent || null, page || null, ipHash]
     );
 
-    // Optional: Telegram (the ops group). The group may be public, so the
-    // contact field is never forwarded — only whether one was given; read it
-    // with the admin key: GET /api/v1/feedback?limit=50.
+    // Optional: Telegram (the ops group). The contact field is forwarded only
+    // when FEEDBACK_TELEGRAM_INCLUDE_CONTACT=1 (private group); otherwise the
+    // message says whether one was given — read it with the admin key:
+    // GET /api/v1/feedback?limit=50.
     const tgToken = process.env.FEEDBACK_TELEGRAM_BOT_TOKEN;
     const tgChat = process.env.FEEDBACK_TELEGRAM_CHAT_ID;
     if (tgToken && tgChat) {
+      const showContact = process.env.FEEDBACK_TELEGRAM_INCLUDE_CONTACT === '1';
       const text = `📝 [${category}] feedback #${r.rows[0].id}` +
         (wallet ? `\nwallet ${wallet}` : '') +
-        `\ncontact: ${contact ? 'provided (see admin API)' : 'none'}` +
+        `\ncontact: ${contact ? (showContact ? contact : 'provided (see admin API)') : 'none'}` +
         (page ? `\npage: ${page.slice(0, 120)}` : '') +
         `\n\n${message.slice(0, 1500)}`;
       fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
