@@ -12,12 +12,15 @@ const RPC_URL = process.env.RPC_URL || 'https://rpc.mersennet.com';
 
 // Seeds must match the market maker's so the outlier filter anchors on the
 // same price regime (ARB in particular quotes around 100, not 1).
+// `seed` and `tick` are HUMAN prices, converted to chain units with the
+// market's live priceScale (see scale.js).
+const { refreshScales, toChain, chainTick } = require('./scale');
 const MARKETS = {
-  1:  { symbol: 'MRSN',  weight: 3.0, seed: 115,   tick: 1,  sizeRange: [1, 10]  },
-  2:  { symbol: 'BTC',   weight: 5.0, seed: 77000, tick: 10, sizeRange: [1, 2]   },
-  3:  { symbol: 'ETH',   weight: 4.0, seed: 2500,  tick: 1,  sizeRange: [1, 5]   },
-  4:  { symbol: 'SOL',   weight: 3.0, seed: 100,   tick: 1,  sizeRange: [1, 8]   },
-  5:  { symbol: 'ARB',   weight: 1.5, seed: 100,   tick: 1,  sizeRange: [5, 40]  },
+  1:  { symbol: 'MRSN',  weight: 3.0, seed: 115,   tick: 0.05, sizeRange: [1, 10]  },
+  2:  { symbol: 'BTC',   weight: 5.0, seed: 77000, tick: 10,   sizeRange: [1, 2]   },
+  3:  { symbol: 'ETH',   weight: 4.0, seed: 2500,  tick: 1,    sizeRange: [1, 5]   },
+  4:  { symbol: 'SOL',   weight: 3.0, seed: 100,   tick: 0.05, sizeRange: [1, 8]   },
+  5:  { symbol: 'ARB',   weight: 1.5, seed: 100,   tick: 0.05, sizeRange: [5, 40]  },
 };
 const liveMid = {};
 function hexToNum(h) { return h ? Number(BigInt(h)) : 0; }
@@ -108,12 +111,15 @@ async function refreshReferencePrices() {
     if (v.length) refPrice[id] = { price: v.length === 2 ? (v[0] + v[1]) / 2 : v[0], at: Date.now() };
   }));
 }
+/** Fresh reference price in CHAIN units, or null. */
 function referenceFor(id) {
   const r = refPrice[id];
-  return r && Date.now() - r.at < 5 * 60_000 ? r.price : null;
+  return r && Date.now() - r.at < 5 * 60_000 ? toChain(r.price, id) : null;
 }
 setInterval(() => refreshReferencePrices().catch(() => {}), 30_000);
 refreshReferencePrices().catch(() => {});
+refreshScales(rpcCall).catch(() => {});
+setInterval(() => refreshScales(rpcCall).catch(() => {}), 60_000);
 
 async function fetchMidPrices() {
   for (const [id, m] of Object.entries(MARKETS)) {
@@ -122,7 +128,7 @@ async function fetchMidPrices() {
       if (!ob) continue;
       const bids = ob.bids || [];
       const asks = ob.asks || [];
-      const seed = m.seed;
+      const seed = toChain(m.seed, id);
 
       // Levels arrive in ascending price order on both sides: best bid is the
       // highest bid, best ask the lowest ask. Raw top of book feeds the
@@ -183,7 +189,8 @@ function generateTrade() {
   const marketId = pickMarket();
   const m = MARKETS[marketId];
   const taker = randEl(TAKERS);
-  const mid = liveMid[marketId] || m.seed;
+  const mid = liveMid[marketId] || toChain(m.seed, marketId);
+  const tick = chainTick(m.tick, marketId);
 
   // Side bias against on-chain inventory: flat -> 50/50; heavily long ->
   // mostly sells; heavily short -> mostly buys. Full bias at 20x base size.
@@ -201,9 +208,9 @@ function generateTrade() {
   // the touch and the remainder is dropped, which is what a taker wants.
   let price;
   if (side === 'buy') {
-    price = mid + m.tick;
+    price = mid + tick;
   } else {
-    price = mid - m.tick;
+    price = mid - tick;
   }
   if (price < 1) price = 1;
 

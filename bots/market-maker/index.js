@@ -30,12 +30,16 @@ const maker = new BotWallet(RPC_URL, 'maker', process.env.MM_PRIVATE_KEY);
 // sides x N levels per cycle faster than the chain mines wedges the maker's
 // mempool slot (nonce backlog) and stalls all its future orders. Keep the
 // per-cycle order count at/under what mines in one refresh interval.
+// `seed` and `tick` are HUMAN prices; scale.js converts them to chain units
+// with the market's live priceScale (a $0.05 tick is 1 unit at scale 1 and
+// 5 units once the market trades on $0.01 ticks).
+const { refreshScales, scaleOf, toChain, chainTick } = require('./scale');
 const MARKETS = {
-  1: { symbol: 'MRSN', seed: 115,   tick: 1,    baseSize: 150, levels: 3 }, // top level absorbs a whole taker wave (5 × 10) between refreshes
+  1: { symbol: 'MRSN', seed: 115,   tick: 0.05, baseSize: 150, levels: 3 }, // top level absorbs a whole taker wave (5 × 10) between refreshes
   2: { symbol: 'BTC',  seed: 77000, tick: 10,   baseSize: 3,   levels: 5 }, // busiest market: deeper ask side so takers don't empty it between cycles
   3: { symbol: 'ETH',  seed: 2500,  tick: 1,    baseSize: 8,   levels: 3 },
-  4: { symbol: 'SOL',  seed: 100,   tick: 1,    baseSize: 60,  levels: 3 },
-  5: { symbol: 'ARB',  seed: 100,   tick: 1,    baseSize: 500, levels: 3 },
+  4: { symbol: 'SOL',  seed: 100,   tick: 0.05, baseSize: 60,  levels: 3 },
+  5: { symbol: 'ARB',  seed: 100,   tick: 0.05, baseSize: 500, levels: 3 },
 };
 
 const CONFIG = {
@@ -90,11 +94,11 @@ async function refreshReferencePrices() {
   }));
 }
 
-/** Price anchor for a market: live reference when fresh, else the seed. */
+/** Price anchor for a market in CHAIN units: live reference when fresh, else the seed. */
 function anchorFor(marketId) {
   const ref = refPrice[marketId];
-  if (ref && Date.now() - ref.at < REF_TTL_MS) return ref.price;
-  return MARKETS[marketId].seed;
+  if (ref && Date.now() - ref.at < REF_TTL_MS) return toChain(ref.price, marketId);
+  return toChain(MARKETS[marketId].seed, marketId);
 }
 
 // Node 20 global fetch — protocol/port aware, so http:// and https:// (incl.
@@ -126,7 +130,7 @@ async function fetchMidPrice(marketId) {
     if (!ob) return null;
     const bids = ob.bids || [];
     const asks = ob.asks || [];
-    const seed = MARKETS[marketId]?.seed || 100;
+    const seed = toChain(MARKETS[marketId]?.seed || 100, marketId);
     // The RPC returns levels in ascending price order on both sides, so the
     // best bid is the *last* bid, not bids[0]. Use max/min explicitly.
     const bidPrices = bids.map((b) => hexToNum(b.price)).filter((p) => p > 0);
@@ -180,7 +184,7 @@ async function submitOrder(marketId, side, price, size) {
 
 function buildOrders(marketId, mid) {
   const m = MARKETS[marketId];
-  const tick = m.tick;
+  const tick = chainTick(m.tick, marketId);
   const levels = m.levels;
   const orders = [];
 
@@ -329,7 +333,7 @@ async function refreshQuotes() {
     // sequential txs from one sender, so a flat per-market concatenation
     // left later markets perpetually behind and unfilled.
     const perMarket = CONFIG.markets.map((marketId) =>
-      buildOrders(marketId, liveMid[marketId] || MARKETS[marketId].seed),
+      buildOrders(marketId, liveMid[marketId] || toChain(MARKETS[marketId].seed, marketId)),
     );
     const ladder = [];
     const maxLen = Math.max(0, ...perMarket.map((o) => o.length));
@@ -425,6 +429,9 @@ async function main() {
   await ensureMarkets();
   await ensureCollateral();
 
+  await refreshScales(rpcCall);
+  setInterval(() => refreshScales(rpcCall), 60_000);
+  console.log(`[mm] price scales: ${CONFIG.markets.map((id) => `${MARKETS[id].symbol}=${scaleOf(id)}`).join(' ')}`);
   await refreshReferencePrices().catch(() => {});
   setInterval(() => refreshReferencePrices().catch(() => {}), 30_000);
   console.log(`[mm] reference prices: ${Object.keys(REF_SYMBOLS).map((id) => `${MARKETS[id].symbol}=${refPrice[id] ? Math.round(refPrice[id].price) : 'seed'}`).join(' ')}`);
