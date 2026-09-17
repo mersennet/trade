@@ -61,6 +61,11 @@ async function cachedStats() {
   return statsCache.body || statsCache.inflight;
 }
 
+// Keep the cache warm so no request ever pays for the aggregate (first call
+// after a restart included): refresh in the background every TTL.
+setTimeout(() => cachedStats().catch(() => {}), 1500);
+setInterval(() => { statsCache.at = 0; cachedStats().catch(() => {}); }, STATS_TTL_MS).unref?.();
+
 async function handleStats(req, res) {
   try {
     const [agg, blockNum] = await Promise.all([cachedStats(), chain.getBlockNumber().catch(() => 0)]);
