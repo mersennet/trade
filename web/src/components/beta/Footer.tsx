@@ -35,6 +35,7 @@ const FOOTER_LINKS = [
       { label: 'Run a node', href: 'https://docs.mersennet.com/validators/run-a-node/', external: true },
       { label: 'Downloads', href: 'https://mersennet.com/downloads/', external: true },
       { label: 'Feedback', href: '/feedback' },
+      { label: 'Telegram chat', href: 'https://t.me/Mersennet', external: true },
     ],
   },
   {

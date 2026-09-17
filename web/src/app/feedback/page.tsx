@@ -73,6 +73,7 @@ export default function FeedbackPage() {
         <h1 className="page-title">Beta feedback</h1>
         <p className="page-sub">
           Found a bug? Want a feature? Confused by something? Tell us. Beta testers shape the product.
+          {' '}Prefer to talk? The official chat is <a href="https://t.me/Mersennet" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">t.me/Mersennet</a>.
         </p>
       </header>
 

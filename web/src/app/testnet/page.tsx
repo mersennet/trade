@@ -185,6 +185,11 @@ export default function TestnetPage() {
           <h3 className="text-sm font-semibold text-foreground mb-1">Network status</h3>
           <p className="text-xs text-dim leading-relaxed">Live uptime of RPC, explorer, faucet, terminal and the snapshot server.</p>
         </a>
+        <a href="https://t.me/Mersennet" target="_blank" rel="noopener noreferrer" className="bg-surface border border-border rounded-xl p-5 hover:border-primary/20 transition-colors duration-200">
+          <p className="text-[10px] font-mono text-primary mb-2">official chat · t.me/Mersennet</p>
+          <h3 className="text-sm font-semibold text-foreground mb-1">Telegram</h3>
+          <p className="text-xs text-dim leading-relaxed">Questions, node help, release announcements and switch heights — the team is there.</p>
+        </a>
       </div>
 
       {/* Note */}
