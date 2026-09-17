@@ -1009,6 +1009,48 @@ function startTradeReportServer() {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Launch metrics: one row per UTC day with cumulative network counters read
+// once per run (faucet transactions = the faucet wallet's nonce; verified
+// nodes; active validators; block height). The API turns consecutive rows
+// into per-day deltas and joins them with human-vs-bot trading from `trades`.
+// Cheap (three RPC calls + one SELECT), idempotent, so it runs every 5 minutes.
+// ---------------------------------------------------------------------------
+const FAUCET_ADDRESS = (process.env.FAUCET_ADDRESS || '0xecef1bb56f77fad9ed34b2fb4300393ace974ee6').toLowerCase();
+async function ensureDailyMetricsSchema() {
+  await pool.query(`CREATE TABLE IF NOT EXISTS daily_metrics (
+    day DATE PRIMARY KEY,
+    faucet_txs BIGINT,
+    verified_nodes INT,
+    validators INT,
+    block_height BIGINT,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`);
+}
+async function snapshotDailyMetrics() {
+  try {
+    const [nonceHex, heightHex, vset, nodes] = await Promise.all([
+      rpc('eth_getTransactionCount', [FAUCET_ADDRESS, 'latest']).catch(() => null),
+      rpc('eth_blockNumber', []).catch(() => null),
+      rpc('mersennet_validatorSet', []).catch(() => null),
+      pool.query('SELECT COUNT(*)::int AS n FROM verified_nodes WHERE consecutive_failures < 3').then((r) => r.rows[0].n).catch(() => null),
+    ]);
+    const validators = vset && Array.isArray(vset.activeSet) ? vset.activeSet.length : null;
+    await pool.query(`
+      INSERT INTO daily_metrics (day, faucet_txs, verified_nodes, validators, block_height, updated_at)
+      VALUES (CURRENT_DATE, $1, $2, $3, $4, NOW())
+      ON CONFLICT (day) DO UPDATE SET
+        faucet_txs = COALESCE(EXCLUDED.faucet_txs, daily_metrics.faucet_txs),
+        verified_nodes = COALESCE(EXCLUDED.verified_nodes, daily_metrics.verified_nodes),
+        validators = COALESCE(EXCLUDED.validators, daily_metrics.validators),
+        block_height = COALESCE(EXCLUDED.block_height, daily_metrics.block_height),
+        updated_at = NOW()
+    `, [nonceHex ? Number(BigInt(nonceHex)) : null, nodes, validators, heightHex ? Number(BigInt(heightHex)) : null]);
+  } catch (e) {
+    console.error('[metrics] daily snapshot failed:', e.message);
+  }
+}
+
 async function main() {
   console.log('[indexer] Mersennet Trade Indexer starting...');
   console.log(`[indexer] RPC: ${RPC_URL}`);
@@ -1044,6 +1086,8 @@ async function main() {
   aggregateCandles();
   updateLeaderboard();
   ensurePointsSchema().then(() => awardPoints());
+  ensureDailyMetricsSchema().then(() => snapshotDailyMetrics()).catch((e) => console.error('[metrics] schema:', e.message));
+  setInterval(snapshotDailyMetrics, 300_000);
 
   // Fire-and-forget historical backfill — don't block startup.
   // We delay 5s to let the API service finish its own oracle warmup.

@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
+const chain = require('../services/chain');
 
 const router = Router();
 
@@ -26,10 +27,10 @@ router.get('/:marketId', async (req, res) => {
       [marketId, resolution, from, to, limit]
     );
 
-    // Candles are aggregated from trades, which store plain integer chain
-    // units — no decimal rescaling needed.
-    const toUsd = (v) => { try { return Number(BigInt(String(v))); } catch { return Number(v) || 0; } };
-    const toBase = toUsd;
+    // Candles are aggregated from trades: prices in chain units (human ×
+    // the market's priceScale), volume in plain integer size units.
+    const toUsd = (v) => chain.toHumanPrice(marketId, v);
+    const toBase = (v) => { try { return Number(BigInt(String(v))); } catch { return Number(v) || 0; } };
 
     res.json({
       marketId: Number(marketId),

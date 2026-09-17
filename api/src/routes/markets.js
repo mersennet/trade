@@ -13,15 +13,14 @@ router.get('/:marketId/orderbook', async (req, res) => {
   try {
     const marketId = Number(req.params.marketId);
 
-    // Mersennet CLOB stores prices and sizes as plain integer units —
-    // no decimal rescaling needed, just hex/string -> number conversion.
-    const parsePrice = (v) => {
+    // Chain prices are human × priceScale; sizes are plain integer units.
+    const parsePrice = (v) => chain.toHumanPrice(marketId, v);
+    const parseSize = (v) => {
       if (v == null) return 0;
       const s = String(v);
       const n = s.startsWith('0x') ? Number(BigInt(s)) : Number(s);
       return Number.isFinite(n) ? n : 0;
     };
-    const parseSize = parsePrice;
     const parseLevels = (levels) =>
       (levels || []).map((l) => {
         if (Array.isArray(l)) return [parsePrice(l[0]), parseSize(l[1])];
@@ -52,14 +51,15 @@ router.get('/:marketId/orderbook', async (req, res) => {
 });
 
 async function getMarketStats(marketId) {
-  // trades.price and trades.size are stored in plain integer chain units.
+  // trades.price is in chain units (human × priceScale); size is plain integer units.
+  const scale = chain.priceScaleOf(marketId);
   const [volResult, changeResult] = await Promise.all([
     pool.query(
-      `SELECT COALESCE(SUM(price * size), 0)::float8 as volume,
+      `SELECT COALESCE(SUM(price * size), 0)::float8 / $2 as volume,
               COUNT(*) as trades
          FROM trades
          WHERE market_id = $1 AND block_timestamp > NOW() - interval '24 hours'`,
-      [marketId]
+      [marketId, scale]
     ),
     // Reference close from ~24h ago (not the first candle ever) and the
     // latest close, both in the SAME chain price units.
@@ -78,8 +78,8 @@ async function getMarketStats(marketId) {
 
   const volume24h = Number(volResult.rows[0]?.volume || 0);
   const trades24h = Number(volResult.rows[0]?.trades || 0);
-  const refClose = Number(changeResult.rows[0]?.ref_close || 0);
-  const lastClose = Number(changeResult.rows[0]?.last_close || 0);
+  const refClose = Number(changeResult.rows[0]?.ref_close || 0) / scale;
+  const lastClose = Number(changeResult.rows[0]?.last_close || 0) / scale;
 
   return { volume24h, trades24h, refClose, lastClose };
 }
@@ -94,13 +94,8 @@ router.get('/:marketId/ticker', async (req, res) => {
     const wsCache = dataCache?.tickers?.get(marketId);
     const { volume24h, trades24h, refClose, lastClose } = await getMarketStats(marketId);
 
-    // The on-chain CLOB stores prices as plain integer units.
-    const toUsd = (raw) => {
-      const s = String(raw ?? '0');
-      const n = s.startsWith('0x') ? Number(BigInt(s)) : Number(s);
-      if (!Number.isFinite(n) || n <= 0) return 0;
-      return n;
-    };
+    // Chain prices are human × priceScale.
+    const toUsd = (raw) => { const n = chain.toHumanPrice(marketId, raw); return n > 0 ? n : 0; };
 
     let bestBid, bestAsk, wsMark;
     if (wsCache) {

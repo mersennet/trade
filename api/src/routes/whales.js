@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
+const chain = require('../services/chain');
 const { strictLimiter } = require('../middleware/rateLimit');
 
 const router = Router();
@@ -13,7 +14,7 @@ router.get('/activity', async (req, res) => {
       `SELECT t.id, t.market_id, t.taker, t.side, t.price, t.size, t.block_timestamp, m.symbol
        FROM trades t
        LEFT JOIN markets m ON t.market_id = m.id
-       WHERE (t.price * ABS(t.size)) >= $1
+       WHERE (t.price * ABS(t.size) / ${chain.priceScaleSql('t.market_id')}) >= $1
        ORDER BY t.block_timestamp DESC
        LIMIT $2`,
       [minValue, limit]
@@ -26,9 +27,9 @@ router.get('/activity', async (req, res) => {
         market_id: r.market_id,
         symbol: r.symbol,
         side: r.side,
-        price: Number(r.price),
+        price: chain.toHumanPrice(r.market_id, r.price),
         size: Number(r.size),
-        value: Math.abs(Number(r.price) * Number(r.size)),
+        value: Math.abs(chain.toHumanPrice(r.market_id, r.price) * Number(r.size)),
         taker: r.taker,
         time: r.block_timestamp,
       })),
@@ -51,7 +52,7 @@ router.get('/wallets', async (req, res) => {
     const result = await pool.query(
       `SELECT taker as address,
               COUNT(*) as trade_count,
-              SUM(ABS(price * size))::float8 as total_volume,
+              SUM(ABS(price * size / ${chain.priceScaleSql('market_id')}))::float8 as total_volume,
               MAX(block_timestamp) as last_trade
        FROM trades
        WHERE block_timestamp > NOW() - $1::interval

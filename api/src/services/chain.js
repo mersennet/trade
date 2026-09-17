@@ -86,6 +86,9 @@ async function refreshMarkets() {
           fundingRate: params.fundingRate,
           tickSize: toInt(m.tickSize),
           lotSize: toInt(m.lotSize),
+          // On-chain price = human price × priceScale (1 until a market is
+          // rescaled to finer ticks). Every consumer divides by it.
+          priceScale: Math.max(1, toInt(m.priceScale ?? 1)),
         };
       });
     MARKETS.length = 0;
@@ -170,12 +173,13 @@ async function getPosition(marketId, address) {
     const [size, entryPrice] = PRECOMPILE_IFACE.decodeFunctionResult('getPosition', r);
     const sizeRaw = size.toString();
     const entryPriceRaw = entryPrice.toString();
-    const notionalRaw = (BigInt(sizeRaw) < 0n ? -BigInt(sizeRaw) : BigInt(sizeRaw)) * BigInt(entryPriceRaw) / SIZE_UNIT;
+    const scale = BigInt(priceScaleOf(marketId));
+    const notionalRaw = (BigInt(sizeRaw) < 0n ? -BigInt(sizeRaw) : BigInt(sizeRaw)) * BigInt(entryPriceRaw) / SIZE_UNIT / scale;
     return {
-      sizeRaw,                                                // raw 1e18 (signed)
+      sizeRaw,                                                // raw (signed), plain integer units
       size: rawToUnits(sizeRaw, SIZE_DECIMALS),               // human base units
-      entryPriceRaw,                                          // raw 1e18
-      entryPrice: rawToUnits(entryPriceRaw, PRICE_DECIMALS),  // human quote
+      entryPriceRaw,                                          // chain units (human × priceScale)
+      entryPrice: toHumanPrice(marketId, entryPriceRaw),      // human quote
       entryNotionalRaw: notionalRaw.toString(),
       entryNotional: rawToUnits(notionalRaw.toString(), USDC_DECIMALS),
       reservedMargin: 0,        // margin reservation is internal to the precompile
@@ -422,8 +426,40 @@ async function getOnChainVotingPower(address) {
   return Number(totalWei / 10n ** 18n);
 }
 
+/** Chain price (hex/decimal string/number) → human price for `marketId`. */
+function toHumanPrice(marketId, raw) {
+  if (raw == null) return 0;
+  const s = String(raw);
+  let n;
+  try { n = s.startsWith('0x') ? Number(BigInt(s)) : Number(s); } catch { return 0; }
+  if (!Number.isFinite(n)) return 0;
+  return n / priceScaleOf(marketId);
+}
+
+/** Human price → chain price (BigInt) for `marketId`. */
+function toChainPrice(marketId, human) {
+  return BigInt(Math.round(Number(human) * priceScaleOf(marketId)));
+}
+
+/** Price scale of a market (1 when unknown). */
+function priceScaleOf(marketId) {
+  const m = MARKETS.find((x) => x.id === Number(marketId));
+  return m && m.priceScale ? m.priceScale : 1;
+}
+
+/** SQL fragment: divide a chain price by its market's scale (`col` is the market_id column). */
+function priceScaleSql(col = 'market_id') {
+  const cases = MARKETS.filter((m) => m.priceScale && m.priceScale !== 1)
+    .map((m) => `WHEN ${Number(m.id)} THEN ${Number(m.priceScale)}`).join(' ');
+  return cases ? `(CASE ${col} ${cases} ELSE 1 END)` : '1';
+}
+
 module.exports = {
   MARKETS,
+  priceScaleOf,
+  priceScaleSql,
+  toHumanPrice,
+  toChainPrice,
   rpcCall,
   ethCall,
   // Decimal helpers (exposed so routes can convert raw -> human consistently)

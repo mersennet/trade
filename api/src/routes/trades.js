@@ -22,7 +22,7 @@ router.get('/export/:address', async (req, res) => {
     for (const r of result.rows) {
       const date = new Date(r.block_timestamp).toISOString();
       const market = marketMap[r.market_id] || `Market #${r.market_id}`;
-      const price = (() => { try { return Number(BigInt(String(r.price))); } catch { return Number(r.price) || 0; } })();
+      const price = chain.toHumanPrice(r.market_id, r.price);
       const size  = (() => { try { return Number(BigInt(String(r.size))); } catch { return Number(r.size) || 0; } })();
       const fee = (price * size * 0.0005).toFixed(6);
       // Cash-flow PnL model (same as the leaderboard): a sell brings cash in,
@@ -85,11 +85,9 @@ router.get('/:marketId', async (req, res) => {
       'SELECT COUNT(*) FROM trades WHERE market_id = $1', [marketId]
     );
 
-    // Stored as plain integer chain units — no decimal rescaling.
-    const toUsd = (raw) => {
-      try { return Number(BigInt(String(raw))); } catch { return Number(raw) || 0; }
-    };
-    const toBase = toUsd;
+    // Prices are stored in chain units (human × priceScale); sizes as plain integers.
+    const toUsd = (raw) => chain.toHumanPrice(marketId, raw);
+    const toBase = (raw) => { try { return Number(BigInt(String(raw))); } catch { return Number(raw) || 0; } };
 
     res.json({
       trades: result.rows.map(r => ({
@@ -124,14 +122,13 @@ router.get('/user/:address', async (req, res) => {
       [addr, limit, offset]
     );
 
-    const toUsd = (r) => { try { return Number(BigInt(String(r))); } catch { return Number(r) || 0; } };
-    const toBase = toUsd;
+    const toBase = (r) => { try { return Number(BigInt(String(r))); } catch { return Number(r) || 0; } };
 
     res.json({
       trades: result.rows.map(r => ({
         id: r.id, block: r.block_number, time: r.block_timestamp,
         marketId: r.market_id, taker: r.taker, maker: r.maker, side: r.side,
-        price: toUsd(r.price), size: toBase(r.size),
+        price: chain.toHumanPrice(r.market_id, r.price), size: toBase(r.size),
       })),
       limit, offset,
     });

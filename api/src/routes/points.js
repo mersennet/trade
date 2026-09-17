@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
+const chain = require('../services/chain');
 
 const router = Router();
 
@@ -16,7 +17,7 @@ router.get('/sprint', async (req, res) => {
     const end = new Date(start.getTime() + 7 * 86_400_000);
     const [standings, last] = await Promise.all([
       pool.query(
-        `SELECT LOWER(taker) AS address, SUM(price * size)::float8 AS volume, COUNT(*)::int AS trades
+        `SELECT LOWER(taker) AS address, SUM(price * size / ${chain.priceScaleSql('market_id')})::float8 AS volume, COUNT(*)::int AS trades
            FROM trades
           WHERE taker IS NOT NULL AND block_timestamp >= $1
             AND LOWER(taker) NOT LIKE '0x00000000000000000000000000000000000000%'

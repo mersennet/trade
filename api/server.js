@@ -110,6 +110,7 @@ app.use('/api/v1/builder-codes', builderCodesRouter);
 app.use('/api/v1/referrals', require('./src/routes/referrals'));
 app.use('/api/v1/api-keys', apiKeysRouter);
 app.use('/api/v1/governance', governanceRouter);
+app.use('/api/v1/stats/launch', require('./src/routes/launch'));
 app.use('/api/v1/stats', statsRouter);
 app.use('/api/v1', statsRouter);
 app.use('/api/v1/spot', spotRouter);

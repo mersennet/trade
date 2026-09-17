@@ -1,19 +1,20 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
+const chain = require('../services/chain');
 const { strictLimiter } = require('../middleware/rateLimit');
 
 const router = Router();
 
 const INITIAL_BALANCE = 100000;
 
-// Latest traded price for a market_id (plain-integer units, matching the
-// platform-wide convention). Used as the paper execution/mark price.
+// Latest traded price for a market_id in human units (chain price ÷ the
+// market's priceScale). Used as the paper execution/mark price.
 async function latestPrice(client, marketId) {
   const r = await client.query(
     `SELECT price FROM trades WHERE market_id = $1 ORDER BY block_timestamp DESC LIMIT 1`,
     [marketId]
   );
-  return Number(r.rows[0]?.price || 0);
+  return chain.toHumanPrice(marketId, r.rows[0]?.price || 0);
 }
 
 // Sign convention: paper UI uses 'buy'/'sell' (long/short). Accept either.

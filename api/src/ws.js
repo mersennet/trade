@@ -112,17 +112,19 @@ function setupWebSocket(server) {
     const start = Date.now();
 
     try {
-      // Mersennet CLOB units are plain integers — no decimal rescaling.
-      const toUsd = (v) => {
+      // Chain prices are human × the market's priceScale; sizes are plain integers.
+      const toUsdFor = (marketId) => (v) => { const n = chain.toHumanPrice(marketId, v); return n > 0 ? n : 0; };
+      const toBase = (v) => {
         if (v == null) return 0;
         const s = String(v);
         const n = s.startsWith('0x') ? Number(BigInt(s)) : Number(s);
         return Number.isFinite(n) && n > 0 ? n : 0;
       };
-      const toBase = toUsd;
 
       const tickerPromises = chain.MARKETS.map(async (m) => {
         try {
+          const toUsd = toUsdFor(m.id);
+          const scale = chain.priceScaleOf(m.id);
           const [{ bestBid, bestAsk }, oraclePx] = await Promise.all([
             chain.getBestBidAsk(m.id),
             chain.getOraclePriceForDisplay(m.id).catch(() => ({ price: '0', age: 0 })),
@@ -146,11 +148,11 @@ function setupWebSocket(server) {
           // trades.price and trades.size are plain integer chain units.
           const [volR, chgR] = await Promise.all([
             pool.query(
-              `SELECT COALESCE(SUM(price * size), 0)::float8 as volume,
+              `SELECT COALESCE(SUM(price * size), 0)::float8 / $2 as volume,
                       COUNT(*) as trades
                  FROM trades
                  WHERE market_id = $1 AND block_timestamp > NOW() - interval '24 hours'`,
-              [m.id]
+              [m.id, scale]
             ),
             // Reference candle from ~24h ago and the latest candle, both in
             // the SAME chain price units, so the % is unit-consistent.
@@ -180,8 +182,8 @@ function setupWebSocket(server) {
           if (Number.isFinite(cached)) {
             change24h = Math.round(cached * 100) / 100;
           } else {
-            const ref = Number(chgR.rows[0]?.ref_close || 0);
-            const last = Number(chgR.rows[0]?.last_close || 0);
+            const ref = Number(chgR.rows[0]?.ref_close || 0) / scale;
+            const last = Number(chgR.rows[0]?.last_close || 0) / scale;
             if (ref > 0 && last > 0) {
               change24h = Math.round(((last - ref) / ref) * 10000) / 100;
             }
@@ -207,6 +209,7 @@ function setupWebSocket(server) {
       const orderbookPromises = chain.MARKETS.map(async (m) => {
         try {
           const book = await chain.getOrderBook(m.id);
+          const toUsd = toUsdFor(m.id);
           const parseLevel = (l) => {
             if (Array.isArray(l)) return [toUsd(l[0]), toBase(l[1])];
             return [toUsd(l.price), toBase(l.size)];
@@ -251,7 +254,7 @@ function setupWebSocket(server) {
           for (const row of result.rows) {
             const tradeData = {
               type: 'trade', id: row.id, marketId: row.market_id,
-              side: row.side, price: Number(row.price), size: Number(row.size),
+              side: row.side, price: chain.toHumanPrice(m.id, row.price), size: Number(row.size),
               time: row.block_timestamp, taker: row.taker, maker: row.maker,
             };
             broadcastToChannel(`trades:${m.id}`, tradeData);

@@ -27,7 +27,7 @@ function parseChainOrder(o) {
       owner: o.owner,
       market_id: typeof o.market_id === 'string' && o.market_id.startsWith('0x') ? Number(BigInt(o.market_id)) : o.market_id,
       side: o.side?.charAt(0).toUpperCase() + o.side?.slice(1).toLowerCase(),
-      price: typeof o.price === 'string' && o.price.startsWith('0x') ? Number(BigInt(o.price)) : Number(o.price),
+      price: chain.toHumanPrice(typeof o.market_id === 'string' && o.market_id.startsWith('0x') ? Number(BigInt(o.market_id)) : o.market_id, o.price),
       size: typeof o.size === 'string' && o.size.startsWith('0x') ? Number(BigInt(o.size)) : Number(o.size),
       tif: o.tif,
     };

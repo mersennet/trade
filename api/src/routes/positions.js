@@ -34,14 +34,14 @@ router.get('/:address', async (req, res) => {
       let oracleUsd = 0;
       try {
         const o = await chain.getOraclePriceForDisplay(m.id);
-        oracleUsd = chain.rawToUnits(o.price, chain.PRICE_DECIMALS) || 0;
+        oracleUsd = chain.toHumanPrice(m.id, o.price) || 0;
       } catch { /* ignore */ }
 
       let markPrice = oracleUsd || entryPrice;
       try {
         const { bestBid, bestAsk } = await chain.getBestBidAsk(m.id);
-        const bid = Number(bestBid);
-        const ask = Number(bestAsk);
+        const bid = chain.toHumanPrice(m.id, bestBid);
+        const ask = chain.toHumanPrice(m.id, bestAsk);
         if (bid > 0 && ask > 0 && oracleUsd > 0) {
           const mid = (bid + ask) / 2;
           if (Math.abs(mid - oracleUsd) / oracleUsd < 0.05) markPrice = mid;
