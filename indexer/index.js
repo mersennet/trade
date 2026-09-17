@@ -271,6 +271,65 @@ const API_BASE = process.env.API_BASE || 'http://127.0.0.1:4005/api/v1';
 
 /** Read live oracle prices for all markets via the local API (already polling
  *  the chain). Returns Map<marketId, priceFloat>. Empty markets are skipped. */
+// ---------------------------------------------------------------------------
+// Price scale. On-chain prices are human × the market's priceScale (from
+// `mersennet_orders_getMarkets`, 1 until a market is rescaled to finer ticks).
+// Stored rows (trades, orders_history, candles) always carry chain prices at
+// the CURRENT scale: when the chain scale of a market grows by k, the rows
+// are multiplied by k once, in a transaction, so every reader can divide
+// uniformly by the current scale. `market_price_scales` remembers the scale
+// each market's rows are stored at.
+// ---------------------------------------------------------------------------
+const PRICE_SCALES = new Map(); // market_id -> scale the DB rows are stored at
+function priceScaleOf(marketId) { return PRICE_SCALES.get(Number(marketId)) || 1; }
+function priceScaleSql(col = 'market_id') {
+  const cases = [...PRICE_SCALES.entries()].filter(([, sc]) => sc !== 1)
+    .map(([id, sc]) => `WHEN ${Number(id)} THEN ${Number(sc)}`).join(' ');
+  return cases ? `(CASE ${col} ${cases} ELSE 1 END)` : '1';
+}
+async function ensurePriceScaleSchema() {
+  await pool.query(`CREATE TABLE IF NOT EXISTS market_price_scales (
+    market_id INT PRIMARY KEY, scale BIGINT NOT NULL DEFAULT 1, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+  const r = await pool.query('SELECT market_id, scale FROM market_price_scales');
+  for (const row of r.rows) PRICE_SCALES.set(Number(row.market_id), Number(row.scale));
+}
+async function syncPriceScales() {
+  let live;
+  try { live = await rpc('mersennet_orders_getMarkets', []); } catch (e) { return; }
+  if (!Array.isArray(live)) return;
+  for (const m of live) {
+    const id = Number(m.id);
+    let chainScale = 1;
+    try { chainScale = Math.max(1, Number(BigInt(m.priceScale ?? 1))); } catch { chainScale = 1; }
+    const stored = priceScaleOf(id);
+    if (chainScale === stored) continue;
+    if (chainScale < stored || chainScale % stored !== 0) {
+      console.error(`[scale] market ${id}: chain scale ${chainScale} not a multiple of stored ${stored}; refusing to migrate`);
+      continue;
+    }
+    const k = chainScale / stored;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      // Serialize against concurrent inserts for this market while rows are rescaled.
+      await client.query('LOCK TABLE trades, orders_history, candles IN SHARE ROW EXCLUSIVE MODE');
+      const t = await client.query('UPDATE trades SET price = price * $2 WHERE market_id = $1', [id, k]);
+      const o = await client.query('UPDATE orders_history SET price = price * $2 WHERE market_id = $1', [id, k]);
+      const c = await client.query('UPDATE candles SET open = open * $2, high = high * $2, low = low * $2, close = close * $2 WHERE market_id = $1', [id, k]);
+      await client.query(`INSERT INTO market_price_scales (market_id, scale, updated_at) VALUES ($1, $2, NOW())
+        ON CONFLICT (market_id) DO UPDATE SET scale = EXCLUDED.scale, updated_at = NOW()`, [id, chainScale]);
+      await client.query('COMMIT');
+      PRICE_SCALES.set(id, chainScale);
+      console.log(`[scale] market ${id}: ${stored} -> ${chainScale} (×${k}); rescaled ${t.rowCount} trades, ${o.rowCount} orders, ${c.rowCount} candles`);
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => {});
+      console.error(`[scale] market ${id} migration failed:`, e.message);
+    } finally {
+      client.release();
+    }
+  }
+}
+
 async function fetchOraclePrices() {
   const out = new Map();
   await Promise.all(ORACLE_MARKETS.map(async (m) => {
@@ -287,11 +346,10 @@ async function fetchOraclePrices() {
   return out;
 }
 
-/** Mersennet CLOB prices are plain units — store the USD price as-is
- *  (rounded to 8 dp so the numeric column stays tidy). */
-function usdToRaw(usd) {
+/** Human USD → chain price units for `marketId` (× priceScale; integer column). */
+function usdToRaw(usd, marketId) {
   if (!Number.isFinite(usd) || usd <= 0) return 0;
-  return Math.round(usd * 1e8) / 1e8;
+  return Math.round(usd * priceScaleOf(marketId));
 }
 
 /** Upsert a single OHLCV row, but never clobber a candle a real trade
@@ -342,7 +400,7 @@ async function synthesizeOracleCandles() {
   }
 
   for (const [marketId, px] of prices) {
-    const raw = usdToRaw(px);
+    const raw = usdToRaw(px, marketId);
     if (raw === 0) continue;
     for (const [resolution, mult] of Object.entries(MINUTE_MULTIPLIERS)) {
       try {
@@ -405,7 +463,7 @@ async function backfillMarket(market, flatPriceUsd) {
       try {
         await upsertSyntheticCandle(
           market.id, '1m', k.openTime,
-          usdToRaw(k.open), usdToRaw(k.high), usdToRaw(k.low), usdToRaw(k.close),
+          usdToRaw(k.open, market.id), usdToRaw(k.high, market.id), usdToRaw(k.low, market.id), usdToRaw(k.close, market.id),
         );
         inserted++;
       } catch (_) {}
@@ -443,7 +501,7 @@ async function backfillMarket(market, flatPriceUsd) {
 
   // No Binance source. Lay a flat oracle price across the last 60 buckets per tf.
   if (flatPriceUsd <= 0) return;
-  const raw = usdToRaw(flatPriceUsd);
+  const raw = usdToRaw(flatPriceUsd, market.id);
   const now = new Date();
   for (const [resolution, mult] of Object.entries(MINUTE_MULTIPLIERS)) {
     const bucketMs = mult * 60 * 1000;
@@ -519,8 +577,7 @@ async function aggregateCandles() {
   }
 }
 
-// Trades are stored in plain integer chain units, so price*size is already
-// a plain USD-equivalent number. No rescaling needed before persisting.
+// Notional = price × size ÷ the market's priceScale (see syncPriceScales).
 const TRADE_USD_SCALE = '1';
 
 async function updateLeaderboard() {
@@ -548,8 +605,8 @@ async function updateLeaderboard() {
         `WITH per_market AS (
            SELECT taker AS address,
                   market_id,
-                  SUM(CASE WHEN side = 'buy' THEN -(price * size) ELSE price * size END)::numeric AS raw_pnl,
-                  SUM(price * size)::numeric AS raw_vol,
+                  SUM(CASE WHEN side = 'buy' THEN -(price * size) ELSE price * size END)::numeric / ${priceScaleSql('market_id')} AS raw_pnl,
+                  SUM(price * size)::numeric / ${priceScaleSql('market_id')} AS raw_vol,
                   COUNT(*) AS trade_count
            FROM trades
            WHERE block_timestamp IS NOT NULL
@@ -649,7 +706,7 @@ async function awardPoints() {
       [BOT_ADDRESSES]
     ).catch((e) => console.error('[points] bot purge (empty rows):', e.message));
     const vol = await pool.query(
-      `SELECT LOWER(taker) AS address, SUM(price * size)::numeric AS volume
+      `SELECT LOWER(taker) AS address, SUM(price * size / ${priceScaleSql('market_id')})::numeric AS volume
        FROM trades
        WHERE taker IS NOT NULL AND block_timestamp IS NOT NULL
          -- Exclude legacy zero-prefixed accounts AND configured bot wallets
@@ -808,7 +865,7 @@ async function awardWeeklySprint(season) {
     const done = await pool.query(`SELECT 1 FROM weekly_sprint_awards WHERE week_start = $1 LIMIT 1`, [iso]);
     if (done.rowCount > 0) return;
     const top = await pool.query(
-      `SELECT LOWER(taker) AS address, SUM(price * size)::numeric AS volume
+      `SELECT LOWER(taker) AS address, SUM(price * size / ${priceScaleSql('market_id')})::numeric AS volume
          FROM trades
         WHERE taker IS NOT NULL AND block_timestamp >= $1 AND block_timestamp < $2
           AND LOWER(taker) NOT LIKE '0x00000000000000000000000000000000000000%'
@@ -1070,6 +1127,10 @@ async function main() {
     }
   }
   
+  await ensurePriceScaleSchema().catch((e) => console.error('[scale] schema:', e.message));
+  await syncPriceScales();
+  setInterval(syncPriceScales, 15_000);
+
   await backfill();
   
   connectWebSocket();
