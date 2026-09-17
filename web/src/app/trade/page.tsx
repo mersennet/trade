@@ -104,8 +104,10 @@ export default function TradePage() {
         ))}
       </div>
 
-      {/* Mobile layout — chart/book/positions swap; the Trade tab opens as a
-          bottom sheet OVER the chart (HL-style) so market context stays visible */}
+      {/* Mobile layout — chart/book/positions swap. The Trade tab is a sheet
+          that takes the panel: market context (price, change) is already in the
+          MarketBar above, and the chart strip that used to peek out behind the
+          sheet showed only its toolbar, never the plot. */}
       <div className="flex-1 md:hidden min-h-0 overflow-hidden relative">
         {mobileTab === 'chart' && (
           <div className="h-full"><Chart /></div>
@@ -117,17 +119,11 @@ export default function TradePage() {
           <div className="h-full overflow-hidden"><PositionsTable /></div>
         )}
         {mobileTab === 'trade' && (
-          <>
-            <div className="h-full"><Chart /></div>
-            <div className="absolute inset-x-0 bottom-0 top-[15%] z-30 flex flex-col bg-surface border-t border-border rounded-t-2xl shadow-2xl animate-[slideUp_0.25s_ease-out]">
-              <div className="flex items-center justify-center py-2 shrink-0 border-b border-border/50">
-                <div className="w-9 h-1 rounded-full bg-border" />
-              </div>
-              <div className="flex-1 overflow-y-auto">
-                <GettingStarted /><TradeForm /><PrivacyPanel />
-              </div>
+          <div className="absolute inset-0 z-30 flex flex-col bg-surface animate-[slideUp_0.2s_ease-out]">
+            <div className="flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
+              <GettingStarted /><TradeForm /><PrivacyPanel />
             </div>
-          </>
+          </div>
         )}
       </div>
 

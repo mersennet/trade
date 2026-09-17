@@ -1,7 +1,7 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
 const chain = require('../services/chain');
-const { FEE_TIERS } = require('../services/feeTiers');
+const { FEE_TIERS, FEES_CHARGED } = require('../services/feeTiers');
 
 const router = Router();
 
@@ -76,6 +76,8 @@ async function handleStats(req, res) {
       totalStaked: agg.totalStaked,
       insuranceFund: agg.insuranceFund,
       feeTiers: FEE_TIERS,
+      // false on the testnet: the engine charges no maker/taker fee; the tiers are the planned schedule.
+      feesCharged: FEES_CHARGED,
       openInterest: agg.openInterest,
       statsAgeMs: Date.now() - statsCache.at,
       timestamp: Date.now(),

@@ -301,7 +301,7 @@ export default function OrderBook() {
             // void above the asks; dense sides still cap at half the panel.
             <div className="flex-1 overflow-hidden flex flex-col justify-center min-h-0">
               {asks.length === 0 && (
-                <div className="py-4 text-center text-[10px] text-dim/70">
+                <div className="py-4 text-center text-[10px] text-dim">
                   No asks resting — sells fill instantly
                 </div>
               )}
@@ -321,7 +321,7 @@ export default function OrderBook() {
                     <div className="absolute inset-y-0 right-0 bg-red/[0.10]" style={{ width: `${level.pct}%` }} />
                     <span className="relative text-red font-semibold tabular-nums">{formatPrice(level.price)}</span>
                     <span className="relative text-right text-foreground/70 tabular-nums">{sizeUnit === 'usd' ? formatNumber(level.size * level.price, 0) : formatNumber(level.size, 0)}</span>
-                    <span className="relative text-right text-dim/70 tabular-nums">{sizeUnit === 'usd' ? formatNumber(level.total * level.price, 0) : formatNumber(level.total, 0)}</span>
+                    <span className="relative text-right text-dim tabular-nums">{sizeUnit === 'usd' ? formatNumber(level.total * level.price, 0) : formatNumber(level.total, 0)}</span>
                   </div>
                 ))}
               </div>
@@ -339,7 +339,7 @@ export default function OrderBook() {
               </div>
 
               {bids.length === 0 && (
-                <div className="py-4 text-center text-[10px] text-dim/70">
+                <div className="py-4 text-center text-[10px] text-dim">
                   No bids resting — buys fill instantly
                 </div>
               )}
@@ -359,7 +359,7 @@ export default function OrderBook() {
                     <div className="absolute inset-y-0 right-0 bg-green/[0.10]" style={{ width: `${level.pct}%` }} />
                     <span className="relative text-green font-semibold tabular-nums">{formatPrice(level.price)}</span>
                     <span className="relative text-right text-foreground/70 tabular-nums">{sizeUnit === 'usd' ? formatNumber(level.size * level.price, 0) : formatNumber(level.size, 0)}</span>
-                    <span className="relative text-right text-dim/70 tabular-nums">{sizeUnit === 'usd' ? formatNumber(level.total * level.price, 0) : formatNumber(level.total, 0)}</span>
+                    <span className="relative text-right text-dim tabular-nums">{sizeUnit === 'usd' ? formatNumber(level.total * level.price, 0) : formatNumber(level.total, 0)}</span>
                   </div>
                 ))}
               </div>

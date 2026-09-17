@@ -356,7 +356,7 @@ export interface Competition { id: number; name: string; description: string; co
 export interface CompetitionDetail { competition: Competition; standings: { address: string; pnl: number; roi: number; volume: number; rank: number }[]; }
 export interface BuilderCode { code: string; owner: string; label: string; fee_share_bps: number; total_volume: number; total_fees_earned: number; total_orders: number; }
 export interface ChainHealth { ok: boolean; head: number; headAgeSec: number; avgBlockMs: number; window: number; timestamp: number; }
-export interface ProtocolStats { volume24h: number; volume7d: number; totalTrades: number; uniqueTraders: number; markets: number; blockHeight: number; vaultTvl: number; totalStaked: number; insuranceFund: number; feeTiers?: FeeTier[]; }
+export interface ProtocolStats { volume24h: number; volume7d: number; totalTrades: number; uniqueTraders: number; markets: number; blockHeight: number; vaultTvl: number; totalStaked: number; insuranceFund: number; feeTiers?: FeeTier[]; feesCharged?: boolean; }
 export interface FundingRate { timestamp: string; rate: number; marketId: number; }
 export interface FeeTier { name: string; minVolume: number; makerFee: number; takerFee: number; }
 export interface GovernanceProposal { id: number; title: string; description: string; for_votes: number; against_votes: number; status: string; end_time: string; created_at: string; }

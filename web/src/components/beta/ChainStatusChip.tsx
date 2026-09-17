@@ -54,8 +54,8 @@ export default function ChainStatusChip() {
     >
       <span className={`w-1.5 h-1.5 rounded-full ${healthy ? 'bg-green animate-pulse' : 'bg-yellow'}`} />
       <span>Block {block.toLocaleString()}</span>
-      {ageSec != null && <span className="text-dim/70">· {ageSec}s ago</span>}
-      {latencyMs != null && <span className="text-dim/70">· {latencyMs}ms</span>}
+      {ageSec != null && <span className="text-dim">· {ageSec}s ago</span>}
+      {latencyMs != null && <span className="text-dim">· {latencyMs}ms</span>}
     </a>
   );
 }

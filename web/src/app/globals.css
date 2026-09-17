@@ -1,8 +1,10 @@
 @import "tailwindcss";
-/* Schibsted Grotesk + JetBrains Mono are loaded via <link> in app/layout.tsx — putting any @import after
-   `@import "tailwindcss"` makes Tailwind v4 silently drop its expanded output
-   (the resulting bundle would have an @import after other rules, which is
-   spec-invalid). Load fonts through layout.tsx or next/font instead. */
+/* Fonts: self-hosted variable woff2 (latin subset) from /public/fonts, declared
+   below with @font-face — which is allowed after @import; any further @import
+   after `@import "tailwindcss"` would make Tailwind v4 silently drop its
+   expanded output, so never load fonts with @import here. */
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 400 800; font-display: swap; src: url("/fonts/JetBrainsMono.woff2") format("woff2"); }
+@font-face { font-family: "Schibsted Grotesk"; font-style: normal; font-weight: 400 800; font-display: swap; src: url("/fonts/SchibstedGrotesk.woff2") format("woff2"); }
 
 @theme inline {
   --color-background: var(--background);
@@ -445,4 +447,16 @@ button, a {
 
 @media (max-width: 767px) {
   * { -webkit-text-size-adjust: 100%; }
+}
+
+/* Touch devices: every button is at least 28 px tall (WCAG 2.5.8 asks for
+   24). The terminal's dense 18–22 px chips are fine with a mouse and
+   miss-tap prone with a thumb; this only changes phones and tablets. */
+@media (pointer: coarse) {
+  button, [role="button"], input[type="checkbox"], input[type="radio"] {
+    min-height: 28px;
+  }
+  input[type="checkbox"], input[type="radio"] {
+    min-width: 20px;
+  }
 }

@@ -33,6 +33,7 @@ export default function AccountPanel() {
   // 'MRSN' or a registered token symbol — which asset the transfer panel moves.
   const [transferAsset, setTransferAsset] = useState('MRSN');
   const [feeTier, setFeeTier] = useState<{ name: string; makerFee: number; takerFee: number } | null>(null);
+  const [feesCharged, setFeesCharged] = useState(false);
   const [points, setPoints] = useState<{ total: number; tier: string } | null>(null);
 
   // Points balance chip (Paradex keeps XP visible while trading).
@@ -52,6 +53,7 @@ export default function AccountPanel() {
         const vol = Number(profile?.stats?.['30d']?.volume ?? profile?.stats?.['all']?.volume ?? 0);
         const tier = [...tiers].sort((a, b) => b.minVolume - a.minVolume).find((t) => vol >= t.minVolume) || tiers[0];
         if (tier) setFeeTier(tier);
+        setFeesCharged(stats.feesCharged === true);
       })
       .catch(() => {});
   }, [address]);
@@ -199,7 +201,7 @@ export default function AccountPanel() {
               className="flex items-center justify-between"
               title={`${a.symbol} margin collateral, counted at ${(a.weightBps / 100).toFixed(0)}% of value · wallet balance ${formatNumber(b.wallet, 2)}`}
             >
-              <span className="text-[11px] text-dim">{a.symbol} Collateral <span className="text-dim/60">({(a.weightBps / 100).toFixed(0)}%)</span></span>
+              <span className="text-[11px] text-dim">{a.symbol} Collateral <span className="text-dim">({(a.weightBps / 100).toFixed(0)}%)</span></span>
               <span className="text-xs font-mono font-medium text-foreground">
                 {formatNumber(b.deposited, 2)} <span className="text-dim">/ {formatNumber(b.wallet, 2)} wallet</span>
               </span>
@@ -207,10 +209,12 @@ export default function AccountPanel() {
           );
         })}
         {feeTier && (
-          <div className="flex items-center justify-between" title="Your fee tier from 30d trading volume">
-            <span className="text-[11px] text-dim">Fee Tier</span>
+          <div className="flex items-center justify-between" title={feesCharged ? 'Your fee tier from 30d trading volume (maker / taker)' : `Planned schedule from 30d volume — the testnet charges no trading fee. ${feeTier.name}: ${(feeTier.makerFee * 100).toFixed(3)}% maker / ${(feeTier.takerFee * 100).toFixed(3)}% taker`}>
+            <span className="text-[11px] text-dim">{feesCharged ? 'Fee Tier' : 'Fees'}</span>
             <span className="text-xs font-mono font-medium text-primary">
-              {feeTier.name} · {(feeTier.makerFee * 100).toFixed(3)}%/{(feeTier.takerFee * 100).toFixed(3)}%
+              {feesCharged
+                ? `${feeTier.name} · ${(feeTier.makerFee * 100).toFixed(3)}%/${(feeTier.takerFee * 100).toFixed(3)}%`
+                : `0% on testnet · ${feeTier.name} tier`}
             </span>
           </div>
         )}

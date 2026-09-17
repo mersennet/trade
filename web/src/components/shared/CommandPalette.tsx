@@ -8,11 +8,7 @@ const COMMANDS = [
   { label: 'Go to Portfolio', action: '/portfolio', keys: 'P' },
   { label: 'Go to Vault', action: '/vault', keys: 'V' },
   { label: 'Go to Leaderboard', action: '/leaderboard', keys: 'L' },
-  { label: 'Go to Analytics', action: '/analytics', keys: 'A' },
   { label: 'Go to Points', action: '/points', keys: '' },
-  { label: 'Go to Competitions', action: '/competitions', keys: '' },
-  { label: 'Go to Copy Trading', action: '/copy-trading', keys: '' },
-  { label: 'Go to Sub-Accounts', action: '/sub-accounts', keys: '' },
   { label: 'Go to API Docs', action: '/api', keys: '' },
   { label: 'Go to Referrals', action: '/referrals', keys: '' },
 ];

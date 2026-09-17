@@ -55,7 +55,10 @@ export default function TradeForm() {
 
   // Real fee tier from 30d volume — same source AccountPanel uses. Falls back
   // to the Base tier so the confirm sheet never shows a hardcoded stale rate.
-  const [feeRates, setFeeRates] = useState<{ maker: number; taker: number }>({ maker: 0.0002, taker: 0.0005 });
+  const [feeRates, setFeeRates] = useState<{ maker: number; taker: number }>({ maker: 0, taker: 0.00035 });
+  // The testnet engine charges no maker/taker fee; the schedule is the planned
+  // one. While feesCharged is false the estimate is 0 and the sheet says why.
+  const [feesCharged, setFeesCharged] = useState(false);
   useEffect(() => {
     if (!address) return;
     Promise.all([api.getStats(), api.getTraderProfile(address)])
@@ -64,6 +67,7 @@ export default function TradeForm() {
         const vol = Number(profile?.stats?.['30d']?.volume ?? profile?.stats?.['all']?.volume ?? 0);
         const tier = [...tiers].sort((a, b) => b.minVolume - a.minVolume).find((t) => vol >= t.minVolume) || tiers[0];
         if (tier) setFeeRates({ maker: tier.makerFee, taker: tier.takerFee });
+        setFeesCharged(stats.feesCharged === true);
       })
       .catch(() => {});
   }, [address]);
@@ -85,10 +89,10 @@ export default function TradeForm() {
     const liquidationPrice = trade.side === 'buy'
       ? Math.max(0, price - liqDistance)
       : price + liqDistance;
-    const fee = notional * (trade.orderType === 'market' ? feeRates.taker : feeRates.maker);
+    const fee = feesCharged ? notional * (trade.orderType === 'market' ? feeRates.taker : feeRates.maker) : 0;
 
     return { notional, marginRequired, liquidationPrice, fee };
-  }, [tickers, market.id, trade, feeRates]);
+  }, [tickers, market.id, trade, feeRates, feesCharged]);
 
   const calcSize = () => {
     const r = parseFloat(riskPct) / 100;
@@ -418,9 +422,9 @@ export default function TradeForm() {
                 </div>
               )}
               {orderSummary && (
-                <div className="flex justify-between pt-1.5 border-t border-border/50">
-                  <span className="text-dim">Est. Fee</span>
-                  <span className="text-foreground">{formatNumber(orderSummary.fee, 4)} {market.quote}</span>
+                <div className="flex justify-between pt-1.5 border-t border-border/50" title={feesCharged ? 'Maker/taker fee at your 30-day volume tier' : 'The testnet charges no trading fee; the planned schedule starts at 0% maker / 0.035% taker'}>
+                  <span className="text-dim">{feesCharged ? 'Est. Fee' : 'Fee (testnet)'}</span>
+                  <span className="text-foreground">{feesCharged ? `${formatNumber(orderSummary.fee, 4)} ${market.quote}` : '0 — no trading fees on testnet'}</span>
                 </div>
               )}
             </div>
@@ -814,7 +818,9 @@ export default function TradeForm() {
         onClick={handleSubmit}
         disabled={loading || !isConnected}
         className={cn(
-          'w-full py-2.5 text-[11px] font-extrabold uppercase tracking-[0.2em] transition-colors disabled:cursor-not-allowed mt-0.5',
+          // On phones the form lives in a bottom sheet: keep the action in view
+          // while the fields above scroll (sticky within the sheet's scroller).
+          'w-full py-2.5 min-h-[44px] md:min-h-0 text-[11px] font-extrabold uppercase tracking-[0.2em] transition-colors disabled:cursor-not-allowed mt-0.5 sticky bottom-0 md:static z-10',
           !isConnected
             ? 'bg-surface-2 text-dim border border-border'
             : trade.side === 'buy'
@@ -851,9 +857,9 @@ export default function TradeForm() {
               <span className="font-mono text-yellow">{formatPrice(orderSummary.liquidationPrice)}</span>
             </div>
           )}
-          <div className="flex items-center justify-between text-[10px]">
-            <span className="text-dim">Est. Fee</span>
-            <span className="font-mono text-foreground/60">{formatNumber(orderSummary.fee, 4)} {market.quote}</span>
+          <div className="flex items-center justify-between text-[10px]" title={feesCharged ? 'Maker/taker fee at your 30-day volume tier' : 'The testnet charges no trading fee; the planned schedule starts at 0% maker / 0.035% taker'}>
+            <span className="text-dim">{feesCharged ? 'Est. Fee' : 'Fee'}</span>
+            <span className="font-mono text-dim">{feesCharged ? `${formatNumber(orderSummary.fee, 4)} ${market.quote}` : '0 (testnet)'}</span>
           </div>
         </div>
       )}

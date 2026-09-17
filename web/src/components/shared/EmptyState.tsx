@@ -40,7 +40,7 @@ export default function EmptyState({
       <div className="text-center px-4">
         <FiveBars size={compact ? 18 : 24} className="mx-auto mb-2 text-dim/40" />
         <p className="text-[11px] uppercase tracking-wider text-muted font-mono">{label}</p>
-        {hint && <p className="text-[11px] text-dim/60 mt-1 max-w-[240px] mx-auto leading-relaxed">{hint}</p>}
+        {hint && <p className="text-[11px] text-dim mt-1 max-w-[240px] mx-auto leading-relaxed">{hint}</p>}
         {action && <div className="mt-3 flex justify-center">{action}</div>}
       </div>
     </div>

@@ -4,13 +4,13 @@ import Link from 'next/link';
 import { ANNOUNCEMENTS } from '@/config/announcements';
 
 /**
- * Rotating announcement strip under the header (edgeX-style release
- * merchandising). Each announcement is dismissible on its own; the list is
- * content-driven from config/announcements.ts.
+ * Announcement line under the header. Shows the newest undismissed entry
+ * from config/announcements.ts; dismissing it reveals the next one. It does
+ * not rotate — a strip that changes every few seconds on a trading screen
+ * pulls the eye away from the book for no reason.
  */
 export default function AnnouncementBar() {
   const [dismissed, setDismissed] = useState<string[]>([]);
-  const [index, setIndex] = useState(0);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -22,14 +22,8 @@ export default function AnnouncementBar() {
 
   const active = ANNOUNCEMENTS.filter((a) => !dismissed.includes(a.id));
 
-  useEffect(() => {
-    if (active.length < 2) return;
-    const t = setInterval(() => setIndex((i) => (i + 1) % active.length), 6000);
-    return () => clearInterval(t);
-  }, [active.length]);
-
   if (!hydrated || active.length === 0) return null;
-  const current = active[index % active.length];
+  const current = active[0];
 
   const dismiss = () => {
     const next = [...dismissed, current.id];
@@ -46,9 +40,6 @@ export default function AnnouncementBar() {
         <Link href={current.link.href} className="text-primary-bright font-semibold uppercase tracking-[0.08em] text-[10px] hover:underline shrink-0">
           {current.link.label} →
         </Link>
-      )}
-      {active.length > 1 && (
-        <span className="text-[9px] text-dim shrink-0">{index % active.length + 1}/{active.length}</span>
       )}
       <button
         onClick={dismiss}

@@ -44,7 +44,7 @@ export default function FaucetPage() {
           </a>
         </div>
 
-        <p className="text-[11px] text-dim/70">
+        <p className="text-[11px] text-dim">
           Chain ID 131071 · native MRSN · explorer.mersennet.com
         </p>
       </div>
