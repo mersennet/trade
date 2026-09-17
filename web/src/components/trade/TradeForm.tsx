@@ -616,13 +616,15 @@ export default function TradeForm() {
       {/* Order type. Stop / Trail / TWAP arm client-side and fire as signed
           orders; Scale places its ladder now. Spot keeps Limit / Market. */}
       <div className="relative">
-        <div className="flex gap-px bg-background rounded-md border border-border overflow-hidden">
+        {/* Two types → one row; six → a 3×2 grid so labels never collide in the 280 px column. */}
+        <div className={cn('gap-px bg-background rounded-md border border-border overflow-hidden', isSpot ? 'flex' : 'grid grid-cols-3')}>
           {(isSpot ? SPOT_ORDER_TYPES : PERP_ORDER_TYPES).map((ot) => (
             <button
               key={ot.value}
               onClick={() => setTrade({ orderType: ot.value as never })}
               className={cn(
-                'basis-0 flex-1 min-w-0 px-1 py-1.5 text-[11px] font-semibold transition-colors whitespace-nowrap',
+                'min-w-0 px-1 py-1.5 text-[11px] font-semibold transition-colors whitespace-nowrap',
+                isSpot && 'basis-0 flex-1',
                 trade.orderType === ot.value
                   ? 'bg-foreground/[0.07] text-foreground'
                   : 'bg-surface-2 text-dim hover:text-foreground'
