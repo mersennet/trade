@@ -146,11 +146,11 @@ export default function LeaderboardPage() {
                         <span className="text-foreground font-mono text-[12.5px]">{shortenAddress(p.address, 6)}</span>
                       </Link>
                     </td>
-                    <td className="px-4 py-2.5 text-right font-mono font-semibold tabular-nums text-primary">{formatNumber(p.totalPoints, 0)}</td>
-                    <td className="px-4 py-2.5 text-right font-mono tabular-nums text-foreground/70 hidden md:table-cell">{formatNumber(p.tradingPoints || 0, 0)}</td>
-                    <td className="px-4 py-2.5 text-right font-mono tabular-nums text-foreground/70 hidden md:table-cell">{formatNumber(p.nodePoints || 0, 0)}</td>
-                    <td className="px-4 py-2.5 text-right font-mono tabular-nums text-foreground/70 hidden md:table-cell">{formatNumber(p.referralPoints || 0, 0)}</td>
-                    <td className="px-4 py-2.5 text-right font-mono tabular-nums text-foreground/70 hidden md:table-cell">{formatNumber(p.bonusPoints || 0, 0)}</td>
+                    <td className="px-4 py-2.5 text-right font-mono font-semibold tabular-nums text-primary">{Math.round(p.totalPoints).toLocaleString()}</td>
+                    <td className="px-4 py-2.5 text-right font-mono tabular-nums text-foreground/70 hidden md:table-cell">{Math.round(p.tradingPoints || 0).toLocaleString()}</td>
+                    <td className="px-4 py-2.5 text-right font-mono tabular-nums text-foreground/70 hidden md:table-cell">{Math.round(p.nodePoints || 0).toLocaleString()}</td>
+                    <td className="px-4 py-2.5 text-right font-mono tabular-nums text-foreground/70 hidden md:table-cell">{Math.round(p.referralPoints || 0).toLocaleString()}</td>
+                    <td className="px-4 py-2.5 text-right font-mono tabular-nums text-foreground/70 hidden md:table-cell">{Math.round(p.bonusPoints || 0).toLocaleString()}</td>
                     <td className="px-4 py-2.5 text-right text-[11px] text-dim">{p.tier}</td>
                   </tr>
                 );
