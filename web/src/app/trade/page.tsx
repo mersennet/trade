@@ -61,6 +61,13 @@ const MOBILE_TABS: { key: MobileTab; label: string; icon: React.ReactNode }[] = 
 
 export default function TradePage() {
   const [mobileTab, setMobileTab] = useState<MobileTab>('chart');
+  // The header's Deposit button lands here from any page: on a phone the
+  // account panel lives in the Trade tab, so switch to it (the panel then
+  // scrolls itself into view and opens in deposit mode).
+  const depositRequestTs = useStore((s) => s.depositRequestTs);
+  useEffect(() => {
+    if (depositRequestTs) setMobileTab('trade');
+  }, [depositRequestTs]);
   const { market, tickers } = useStore();
   // Watch TP/SL brackets and fire signed closing orders when triggers cross.
   useBrackets();
@@ -124,7 +131,7 @@ export default function TradePage() {
         {mobileTab === 'trade' && (
           <div className="absolute inset-0 z-30 flex flex-col bg-surface animate-[slideUp_0.2s_ease-out]">
             <div className="flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
-              <ReferralConfirm /><GettingStarted /><TradeForm /><PrivacyPanel />
+              <ReferralConfirm /><GettingStarted /><TradeForm /><AccountPanel /><PrivacyPanel />
             </div>
           </div>
         )}

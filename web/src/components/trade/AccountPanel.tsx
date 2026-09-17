@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useState, useEffect, useCallback } from 'react';
+import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useStore } from '@/stores/useStore';
 import { useWallet } from '@/hooks/useWallet';
@@ -60,10 +60,21 @@ export default function AccountPanel() {
   // The header's Deposit button navigates here and bumps this timestamp —
   // open the transfer panel in deposit mode when it fires.
   const depositRequestTs = useStore((s) => s.depositRequestTs);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const [flash, setFlash] = useState(false);
   useEffect(() => {
     if (!depositRequestTs) return;
     setTransferMode('deposit');
     setShowTransfer(true);
+    // The panel sits at the bottom of the right column (or inside the mobile
+    // Trade sheet): bring it on screen and flash it so the click visibly did
+    // something ("deposit doesn't work" report, 17 Sep).
+    const t = setTimeout(() => {
+      panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setFlash(true);
+      setTimeout(() => setFlash(false), 1600);
+    }, 120);
+    return () => clearTimeout(t);
   }, [depositRequestTs]);
 
   const refreshBalances = useCallback(async () => {
@@ -141,7 +152,7 @@ export default function AccountPanel() {
   }
 
   return (
-    <div className="bg-surface border border-border rounded-xl md:border-0 md:rounded-none p-3 flex flex-col gap-2 shrink-0">
+    <div ref={panelRef} className={cn('bg-surface border border-border rounded-xl md:border-0 md:rounded-none p-3 flex flex-col gap-2 shrink-0 transition-shadow duration-500', flash && 'ring-2 ring-primary/70 ring-inset')}>
       <h3 className="text-[11px] text-dim font-medium uppercase tracking-wider">Account</h3>
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">

@@ -251,8 +251,18 @@ export default function ValidatorSetPanel() {
             <span className="flex-1" />
             {!v.genesis && !v.exiting && (
               <>
-                <input value={topUp[v.identity] || ''} onChange={(e) => setTopUp({ ...topUp, [v.identity]: e.target.value })} placeholder="MRSN" className="w-24 bg-surface-2 border border-border rounded-lg px-2 py-1 text-[11px] font-mono" />
-                <button disabled={!!busy} onClick={() => act('top', () => addSelfStake(provider, v.identity, topUp[v.identity] || '0'), 'Self-stake added')} className="text-[10px] uppercase tracking-wider text-primary hover:underline">Add stake</button>
+                <input value={topUp[v.identity] || ''} onChange={(e) => setTopUp({ ...topUp, [v.identity]: e.target.value })} placeholder="MRSN" title={balance !== null ? `Wallet balance ${balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} MRSN` : undefined} className={cn('w-24 bg-surface-2 border rounded-lg px-2 py-1 text-[11px] font-mono', balance !== null && Number(topUp[v.identity] || 0) + 0.001 > balance ? 'border-down/60 text-down' : 'border-border')} />
+                <button disabled={!!busy} onClick={() => {
+                  const amt = Number(topUp[v.identity] || 0);
+                  if (!(amt > 0)) { toast('Enter the amount of MRSN to add', 'error'); return; }
+                  // The bond is taken from the wallet balance after gas: refuse
+                  // before the wallet popup instead of letting the transaction fail.
+                  if (balance !== null && amt + 0.001 > balance) {
+                    toast(`You have ${balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} MRSN in this wallet — enter at most ${Math.max(0, Math.floor(balance - 0.001)).toLocaleString()} (the faucet gives 1,001 an hour)`, 'error');
+                    return;
+                  }
+                  act('top', () => addSelfStake(provider, v.identity, String(amt)), `Added ${amt.toLocaleString()} MRSN to the self-stake of ${shortenAddress(v.identity)}`);
+                }} className="text-[10px] uppercase tracking-wider text-primary hover:underline">Add stake</button>
                 <button disabled={!!busy} onClick={() => { if (confirm('Leave the validator set at the next epoch? Your self-stake unbonds afterwards.')) act('exit', () => unregisterValidator(provider, v.identity), 'Exit scheduled for the next epoch'); }} className="text-[10px] uppercase tracking-wider text-down hover:underline">Unregister</button>
               </>
             )}

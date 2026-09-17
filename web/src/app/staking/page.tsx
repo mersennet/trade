@@ -4,6 +4,7 @@ import { useWallet } from '@/hooks/useWallet';
 import { useToast } from '@/components/shared/Toast';
 import { cn, shortenAddress } from '@/lib/utils';
 import { startPoll } from '@/lib/poll';
+import { getDefaultChain } from '@/lib/chain';
 import ValidatorSetPanel from '@/components/staking/ValidatorSetPanel';
 import {
   claimRewards,
@@ -45,6 +46,21 @@ export default function StakingPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [mode, setMode] = useState<Record<string, 'delegate' | 'undelegate'>>({});
+  // Native balance, so delegate/undelegate amounts are checked before the
+  // wallet popup (a 50,000 MRSN delegation from a 5,500 MRSN wallet reached
+  // the signer on 17 Sep and would only have failed on-chain).
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  useEffect(() => {
+    if (!address) { setWalletBalance(null); return; }
+    let alive = true;
+    const load = () => fetch(getDefaultChain().rpcUrls[0], {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_getBalance', params: [address, 'latest'] }),
+    }).then((r) => r.json()).then((j) => { if (alive && j.result) setWalletBalance(Number(BigInt(j.result)) / 1e18); }).catch(() => {});
+    load();
+    const stop = startPoll(load, 15_000);
+    return () => { alive = false; stop(); };
+  }, [address]);
 
   const refresh = useCallback(async (): Promise<boolean> => {
     try {
@@ -200,13 +216,22 @@ export default function StakingPage() {
                         className="w-20 bg-surface-2 border border-border rounded-lg px-2 py-1 text-xs font-mono text-right focus:outline-none focus:border-primary"
                       />
                       <button
-                        onClick={() =>
+                        onClick={() => {
+                          const n = Number(amt);
+                          if (m === 'delegate' && walletBalance !== null && n + 0.001 > walletBalance) {
+                            toast(`You have ${walletBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })} MRSN in this wallet — you can delegate at most ${Math.max(0, Math.floor(walletBalance - 0.001)).toLocaleString()} (keep a little for gas; the faucet gives 1,001 an hour)`, 'error');
+                            return;
+                          }
+                          if (m === 'undelegate' && n > Number(BigInt(r.myDelegation)) / 1e18 + 1e-9) {
+                            toast(`You have ${(Number(BigInt(r.myDelegation)) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 4 })} MRSN delegated to this validator`, 'error');
+                            return;
+                          }
                           act(
                             `stake-${r.address}`,
                             () => (m === 'delegate' ? delegate(provider, r.address, amt) : undelegate(provider, r.address, amt)),
                             m === 'delegate' ? `Delegated ${amt} MRSN` : `Unbonding ${amt} MRSN started (~4h)`,
-                          )
-                        }
+                          );
+                        }}
                         disabled={busy !== null || !amt || Number(amt) <= 0}
                         className={cn(
                           'px-3 py-1 rounded-lg text-[11px] font-semibold transition-all disabled:opacity-40',
