@@ -7,9 +7,9 @@
  * it fills (or the chase is stopped / runs out of reprices).
  *
  * Mersennet has no off-chain sequencer, so every reprice is a real on-chain
- * cancel + place. Chasing therefore REQUIRES one-click trading: the session
- * key signs the reprice transactions silently. Without it every tick of the
- * book would open a wallet popup.
+ * cancel + place. Chasing therefore REQUIRES one-click trading: the agent key
+ * signs the reprice transactions silently (the precompile books them to the
+ * granting wallet). Without it every tick of the book would open a popup.
  *
  * The engine lives in the browser tab. Closing the tab stops the chase but
  * leaves the last resting order on the book (it is a normal GTC order).
@@ -30,6 +30,8 @@ export interface ChaseParams {
   /** Integer chain units (same convention as placeOrderOnChain). */
   size: string;
   sessionKey: string;
+  /** The account the orders belong to (the wallet that granted the agent). */
+  owner: string;
   /** Stop chasing after this many reprices (default 50). */
   maxReprices?: number;
   onEvent?: (evt: ChaseEvent) => void;
@@ -207,8 +209,7 @@ async function tick(id: string): Promise<void> {
 
 /** Start chasing. Returns the chase id (used to stop it). */
 export async function startChase(params: ChaseParams): Promise<string> {
-  const { ethers } = await import('ethers');
-  const owner = new ethers.Wallet(params.sessionKey).address;
+  const owner = params.owner.toLowerCase();
   const id = `chase-${params.marketId}-${Date.now()}`;
   const state: ChaseState = {
     params: {

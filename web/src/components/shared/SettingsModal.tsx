@@ -4,6 +4,7 @@ import { useStore } from '@/stores/useStore';
 import { useWallet } from '@/hooks/useWallet';
 import { api, type ApiKey } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { agentStatus, enableAgent, disableAgent, topUpAgentGas, loadAgent, AGENT_GAS_LOW_MRSN, AGENT_GAS_TOPUP_MRSN, type AgentStatus } from '@/lib/agent';
 
 const SLIPPAGE_PRESETS = [0.1, 0.5, 1.0, 2.0];
 
@@ -110,7 +111,6 @@ export default function SettingsModal() {
     slippage, setSlippage,
     soundEnabled, setSoundEnabled,
     skipConfirm, setSkipConfirm,
-    oneClickEnabled, setOneClick,
     deadManEnabled, setDeadMan,
     theme, setTheme,
   } = useStore();
@@ -188,12 +188,7 @@ export default function SettingsModal() {
           {/* Trading Options */}
           <div className="space-y-3">
             <h3 className="text-xs font-medium text-foreground">Trading</h3>
-            <ToggleRow
-              label="One-Click Trading"
-              description="Skip wallet confirmation for faster execution"
-              checked={oneClickEnabled}
-              onChange={setOneClick}
-            />
+            <OneClickSection />
             <ToggleRow
               label="Skip Order Confirmation"
               description="Don't show confirm dialog before placing orders"
@@ -251,6 +246,95 @@ export default function SettingsModal() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * One-click trading = an agent key. Enabling grants the key on-chain (one
+ * confirmation), funds it with gas (a second one), then orders, brackets and
+ * conditional orders sign silently while positions stay on the main wallet.
+ */
+function OneClickSection() {
+  const { address, provider, isConnected } = useWallet();
+  const { oneClickEnabled, setOneClick, setSessionKey } = useStore();
+  const [status, setStatus] = useState<AgentStatus | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [step, setStep] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const rec = address ? loadAgent(address) : null;
+
+  const refresh = async () => {
+    if (!address) { setStatus(null); return; }
+    try {
+      const st = await agentStatus(address);
+      setStatus(st);
+      const r = loadAgent(address);
+      // The toggle is only "on" when the grant is live on-chain and the key is here.
+      const live = st.active && st.granted && !!r;
+      setSessionKey(live ? r!.key : null);
+      setOneClick(live);
+    } catch { /* rpc hiccup */ }
+  };
+  useEffect(() => { refresh(); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [address]);
+
+  const enable = async () => {
+    if (!address || !provider) return;
+    setBusy('enable'); setError(null);
+    try {
+      await enableAgent(provider, address, setStep);
+      await refresh();
+    } catch (e) {
+      const msg = (e as Error).message || 'failed';
+      setError(/user (rejected|denied)/i.test(msg) ? 'Cancelled in wallet.' : msg.slice(0, 200));
+    } finally { setBusy(null); setStep(null); }
+  };
+  const disable = async () => {
+    if (!address || !provider) return;
+    setBusy('disable'); setError(null);
+    try { await disableAgent(provider, address); setSessionKey(null); setOneClick(false); await refresh(); }
+    catch (e) { setError((e as Error).message?.slice(0, 200) || 'failed'); }
+    finally { setBusy(null); }
+  };
+  const topUp = async () => {
+    if (!address || !provider) return;
+    setBusy('gas'); setError(null);
+    try { await topUpAgentGas(provider, address); await refresh(); }
+    catch (e) { setError((e as Error).message?.slice(0, 200) || 'failed'); }
+    finally { setBusy(null); }
+  };
+
+  const blocksLeft = status?.expiresAtBlock ? Math.max(0, status.expiresAtBlock - status.height) : 0;
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <span className="text-[11px] text-foreground block">One-Click Trading (agent key)</span>
+          <span className="text-[10px] text-dim">
+            A key kept in this browser signs orders, TP/SL and conditional orders without a wallet popup. It can trade for your account, never withdraw from it.
+          </span>
+        </div>
+        {isConnected && status?.active && (
+          oneClickEnabled
+            ? <button onClick={disable} disabled={!!busy} className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider border border-border rounded-md text-dim hover:text-red hover:border-red/40 shrink-0">{busy === 'disable' ? 'Revoking…' : 'Revoke'}</button>
+            : <button onClick={enable} disabled={!!busy} className="px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider bg-primary text-[#02120a] rounded-md shrink-0">{busy === 'enable' ? 'Setting up…' : 'Enable'}</button>
+        )}
+      </div>
+      {!isConnected && <p className="text-[10px] text-dim">Connect a wallet to set up one-click trading.</p>}
+      {isConnected && status && !status.active && (
+        <p className="text-[10px] text-dim">Activates at block {status.agentDelegationHeight ? status.agentDelegationHeight.toLocaleString() : '—'} (now {status.height.toLocaleString()}).</p>
+      )}
+      {step && <p className="text-[10px] text-primary">{step}</p>}
+      {error && <p className="text-[10px] text-red">{error}</p>}
+      {isConnected && oneClickEnabled && rec && status && (
+        <div className="text-[10px] text-dim font-mono flex flex-wrap gap-x-3 gap-y-0.5">
+          <span>agent {rec.address.slice(0, 8)}…{rec.address.slice(-4)}</span>
+          <span>gas {status.gasMrsn === null ? '—' : status.gasMrsn.toFixed(3)} MRSN{status.gasMrsn !== null && status.gasMrsn < AGENT_GAS_LOW_MRSN ? ' (low)' : ''}</span>
+          <span>expires in ~{Math.round(blocksLeft * 2 / 3600)} h</span>
+          <button onClick={topUp} disabled={!!busy} className="text-primary hover:underline">{busy === 'gas' ? 'sending…' : `top up ${AGENT_GAS_TOPUP_MRSN} MRSN gas`}</button>
+        </div>
+      )}
     </div>
   );
 }

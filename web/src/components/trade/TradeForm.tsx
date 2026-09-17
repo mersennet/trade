@@ -286,16 +286,10 @@ export default function TradeForm() {
         return;
       }
 
-      let orderOwner = walletAddress;
-      if (useOneClick) {
-        try {
-          const { ethers } = await import('ethers');
-          const sessionWallet = new ethers.Wallet(sessionKey!);
-          orderOwner = sessionWallet.address;
-        } catch {
-          orderOwner = walletAddress;
-        }
-      }
+      // With agent delegation the one-click key signs the transaction but the
+      // precompile books the order to the granting account: the owner of every
+      // order, position and fill is the connected wallet.
+      const orderOwner = walletAddress;
 
       // Attach the captured referral builder code (from a ?ref= link) so the
       // referrer is credited — this is the only signal the API records.
@@ -385,6 +379,7 @@ export default function TradeForm() {
             isBuy: trade.side === 'buy',
             size: toChainUnits(trade.size),
             sessionKey,
+            owner: walletAddress,
             onEvent: (evt) => {
               if (evt.kind === 'repriced') {
                 setChaseReprices(evt.reprices || 0);
@@ -486,7 +481,11 @@ export default function TradeForm() {
       if (useStore.getState().soundEnabled) playSound('fill');
       setTrade({ size: '' });
     } catch (e) {
-      toast(`Order failed: ${(e as Error).message}`, 'error');
+      const raw = (e as Error).message || '';
+      const msg = useOneClick && /insufficient funds|insufficient balance for gas/i.test(raw)
+        ? 'Your one-click agent key is out of gas — top it up in Settings (3 MRSN lasts ~1,500 orders).'
+        : raw;
+      toast(`Order failed: ${msg}`, 'error');
       if (useStore.getState().soundEnabled) playSound('alert');
     } finally {
       setLoading(false);

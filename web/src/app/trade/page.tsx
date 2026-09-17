@@ -13,6 +13,7 @@ import ReferralConfirm from '@/components/shared/ReferralConfirm';
 import OnboardingTour from '@/components/trade/OnboardingTour';
 import { useBrackets } from '@/hooks/useBrackets';
 import { useConditionalOrders } from '@/hooks/useConditionalOrders';
+import { useAgentSession } from '@/hooks/useAgentSession';
 import { usePriceAlerts } from '@/hooks/usePriceAlerts';
 import { useAccountEvents } from '@/hooks/useAccountEvents';
 import { cn, formatPrice } from '@/lib/utils';
@@ -70,6 +71,7 @@ export default function TradePage() {
   }, [depositRequestTs]);
   const { market, tickers } = useStore();
   // Watch TP/SL brackets and fire signed closing orders when triggers cross.
+  useAgentSession();
   useBrackets();
   useConditionalOrders();
   // Watch price alerts and notify on crossings.
