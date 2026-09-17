@@ -117,10 +117,6 @@ export const api = {
   getSprint: () => memo('sprint', 15_000, () => apiFetch<SprintStatus>('/points/sprint')),
   getVaultState: () => apiFetch<VaultState>('/vault/state'),
   getVaultUser: (addr: string) => apiFetch<VaultUserState>(`/vault/user/${addr}`),
-  vaultDeposit: (address: string, amount: number) =>
-    apiFetch<{ shares: number }>('/vault/deposit', { method: 'POST', body: JSON.stringify({ address, amount }) }),
-  vaultWithdraw: (address: string, shares: number) =>
-    apiFetch<{ amount: number }>('/vault/withdraw', { method: 'POST', body: JSON.stringify({ address, shares }) }),
   getStakingState: () => apiFetch<StakingState>('/staking/state'),
   getStakingUser: (addr: string) => apiFetch<StakingUserState>(`/staking/user/${addr}`),
   stake: (address: string, amount: number) =>
@@ -357,7 +353,7 @@ export interface SprintStatus { weekStart: string; awardAt: string; prizes: numb
 export interface ReferralStatus { referredBy: { referrer: string; code: string; at: string } | null; referees: number; referralPoints: number; share: number; }
 export interface VerifiedNode { identity: string; operator?: string; host: string; version: string; height: number; first_verified_at: string; last_seen_at: string; active: boolean; registration_proof?: string | null; build_sha?: string | null; outdated?: boolean; }
 export interface VaultState { totalShares: number; totalTvl: number; totalPnl: number; apy7d: number; apy30d: number; depositors: number; }
-export interface VaultUserState { address: string; shares: number; value: number; shareOfVault: string; history: unknown[]; }
+export interface VaultUserState { address: string; shares: number; value: number; shareOfVault: string; lpPoints?: number; history: unknown[]; }
 export interface StakingState { totalStaked: number; totalRewardsDistributed: number; rewardRate: number; stakersCount: number; }
 export interface StakingUserState { address: string; staked: number; rewardsPending: number; unbonding: number; unbondAvailableAt: string | null; }
 export interface Competition { id: number; name: string; description: string; comp_type: string; start_at: string; end_at: string; prize_pool: number; status: string; }

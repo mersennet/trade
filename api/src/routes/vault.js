@@ -9,6 +9,26 @@ function validateAddress(addr) {
   return typeof addr === 'string' && ETH_ADDR_RE.test(addr);
 }
 
+// The vault is an on-chain contract now (MakerVault). Deposits and
+// withdrawals are wallet-signed transactions to it; the indexer tails its
+// events into vault_deposits / vault_state. These endpoints tell old clients.
+const VAULT_ADDRESS = process.env.VAULT_ADDRESS || '0x2ccc6FB9a1853Ad4C217047CC74Bd0D032325284';
+const gone = (_req, res) => res.status(410).json({
+  error: 'The strategy vault is on-chain: send deposit()/withdraw(shares) to the MakerVault contract from your wallet.',
+  vault: VAULT_ADDRESS,
+});
+router.post('/deposit', strictLimiter, gone);
+router.post('/withdraw', strictLimiter, gone);
+
+router.get('/info', (_req, res) => res.json({
+  address: VAULT_ADDRESS,
+  symbol: 'mvMRSN',
+  asset: 'MRSN',
+  minDepositMrsn: 1,
+  reserveBps: Number(process.env.VAULT_RESERVE_BPS || 1000),
+  lpPointsPerMrsnDay: Number(process.env.LP_POINTS_PER_MRSN_DAY || 0.1),
+}));
+
 router.get('/state', async (req, res) => {
   try {
     const state = await pool.query('SELECT * FROM vault_state WHERE id = 1');
@@ -35,7 +55,7 @@ router.get('/user/:address', async (req, res) => {
     if (!validateAddress(addr)) return res.status(400).json({ error: 'Invalid address' });
 
     const deposits = await pool.query(
-      `SELECT action, amount, shares, vault_tvl_after, created_at
+      `SELECT action, amount, shares, vault_tvl_after, created_at, tx_hash
        FROM vault_deposits WHERE address = $1 ORDER BY created_at DESC LIMIT 50`,
       [addr]
     );
@@ -57,6 +77,7 @@ router.get('/user/:address', async (req, res) => {
       shares: userShares,
       value: userValue,
       shareOfVault: totalShares > 0 ? ((userShares / totalShares) * 100).toFixed(4) : '0',
+      lpPoints: await pool.query('SELECT COALESCE(SUM(lp_points), 0)::float8 AS p FROM points_balance WHERE address = $1', [addr]).then((r) => Number(r.rows[0].p)).catch(() => 0),
       history: deposits.rows,
     });
   } catch (e) {
@@ -65,91 +86,6 @@ router.get('/user/:address', async (req, res) => {
   }
 });
 
-router.post('/deposit', strictLimiter, async (req, res) => {
-  const client = await pool.connect();
-  try {
-    const { address, amount } = req.body;
-    if (!address || !amount) return res.status(400).json({ error: 'Missing address or amount' });
-    const addr = address.toLowerCase();
-    if (!validateAddress(addr)) return res.status(400).json({ error: 'Invalid address' });
-    const amt = Number(amount);
-    if (!Number.isFinite(amt) || amt <= 0) return res.status(400).json({ error: 'Amount must be positive' });
 
-    const state = await client.query('SELECT total_shares, total_tvl FROM vault_state WHERE id = 1');
-    if (!state.rows[0]) return res.status(500).json({ error: 'Vault not initialized' });
-    const totalShares = Number(state.rows[0].total_shares);
-    const totalTvl = Number(state.rows[0].total_tvl);
-    const shares = totalShares === 0 ? amt : (amt / totalTvl) * totalShares;
-
-    await client.query('BEGIN');
-    await client.query(
-      `INSERT INTO vault_deposits (address, action, amount, shares, vault_tvl_after)
-       VALUES ($1, 'deposit', $2, $3, $4)`,
-      [addr, amt, shares, totalTvl + amt]
-    );
-    await client.query(
-      `UPDATE vault_state SET total_shares = total_shares + $1, total_tvl = total_tvl + $2,
-       depositors = (SELECT COUNT(DISTINCT address) FROM vault_deposits), updated_at = NOW() WHERE id = 1`,
-      [shares, amt]
-    );
-    await client.query('COMMIT');
-
-    res.json({ shares, newTvl: totalTvl + amt, timestamp: Date.now() });
-  } catch (e) {
-    await client.query('ROLLBACK').catch(() => {});
-    console.error('[vault] POST /deposit error:', e.message);
-    res.status(500).json({ error: e.message });
-  } finally {
-    client.release();
-  }
-});
-
-router.post('/withdraw', strictLimiter, async (req, res) => {
-  const client = await pool.connect();
-  try {
-    const { address, shares } = req.body;
-    if (!address || !shares) return res.status(400).json({ error: 'Missing address or shares' });
-    const addr = address.toLowerCase();
-    if (!validateAddress(addr)) return res.status(400).json({ error: 'Invalid address' });
-    const sharesToBurn = Number(shares);
-    if (!Number.isFinite(sharesToBurn) || sharesToBurn <= 0) return res.status(400).json({ error: 'Shares must be positive' });
-
-    const userShares = await client.query(
-      `SELECT COALESCE(SUM(CASE WHEN action='deposit' THEN shares ELSE -shares END), 0) as net
-       FROM vault_deposits WHERE address = $1`,
-      [addr]
-    );
-    if (Number(userShares.rows[0]?.net || 0) < sharesToBurn) {
-      return res.status(400).json({ error: 'Insufficient shares' });
-    }
-
-    const state = await client.query('SELECT total_shares, total_tvl FROM vault_state WHERE id = 1');
-    if (!state.rows[0]) return res.status(500).json({ error: 'Vault not initialized' });
-    const totalShares = Number(state.rows[0].total_shares);
-    const totalTvl = Number(state.rows[0].total_tvl);
-    if (totalShares <= 0) return res.status(400).json({ error: 'No shares in vault' });
-    const amount = (sharesToBurn / totalShares) * totalTvl;
-
-    await client.query('BEGIN');
-    await client.query(
-      `INSERT INTO vault_deposits (address, action, amount, shares, vault_tvl_after)
-       VALUES ($1, 'withdraw', $2, $3, $4)`,
-      [addr, amount, sharesToBurn, totalTvl - amount]
-    );
-    await client.query(
-      `UPDATE vault_state SET total_shares = total_shares - $1, total_tvl = total_tvl - $2, updated_at = NOW() WHERE id = 1`,
-      [sharesToBurn, amount]
-    );
-    await client.query('COMMIT');
-
-    res.json({ amount, remainingTvl: totalTvl - amount, timestamp: Date.now() });
-  } catch (e) {
-    await client.query('ROLLBACK').catch(() => {});
-    console.error('[vault] POST /withdraw error:', e.message);
-    res.status(500).json({ error: e.message });
-  } finally {
-    client.release();
-  }
-});
 
 module.exports = router;

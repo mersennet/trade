@@ -1108,6 +1108,114 @@ async function snapshotDailyMetrics() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// MakerVault index. Deposit/Withdraw events of the on-chain vault are tailed
+// into `vault_deposits` (one row per event, MRSN + shares in human units) and
+// `vault_state` mirrors the contract (NAV, shares, depositors, share-price
+// derived PnL/APY). LP points accrue to depositors pro-rata to the MRSN value
+// of their shares: LP_POINTS_PER_MRSN_DAY per MRSN per day, credited every run.
+// ---------------------------------------------------------------------------
+const VAULT_ADDRESS = (process.env.VAULT_ADDRESS || '0x2ccc6FB9a1853Ad4C217047CC74Bd0D032325284').toLowerCase();
+const VAULT_DEPLOY_BLOCK = Number(process.env.VAULT_DEPLOY_BLOCK || 1476800);
+const LP_POINTS_PER_MRSN_DAY = Number(process.env.LP_POINTS_PER_MRSN_DAY || 0.1); // 1,000 MRSN parked for a day = 100 pts
+// keccak topics / selectors precomputed (cast keccak / cast sig) — no ABI lib needed:
+// the event data is three plain uint256 words.
+const VAULT_TOPICS = {
+  deposit: '0x36af321ec8d3c75236829c5317affd40ddb308863a1236d2d277a4025cccee1e',  // Deposit(address,uint256,uint256,uint256)
+  withdraw: '0x02f25270a4d87bea75db541cdfe559334a275b4a233520ed6c0a2429667cca94', // Withdraw(address,uint256,uint256,uint256)
+};
+const VAULT_SELECTORS = { 'nav()': '0xc1590cd7', 'totalShares()': '0x3a98ef39', 'depositors()': '0xaaa46688' };
+const abi = { decode: (_types, data) => { const h = data.slice(2); const w = []; for (let i = 0; i + 64 <= h.length; i += 64) w.push(BigInt('0x' + h.slice(i, i + 64))); return w; } };
+const WEI = 1e18;
+
+async function ensureVaultSchema() {
+  await pool.query(`CREATE TABLE IF NOT EXISTS vault_index_state (id SMALLINT PRIMARY KEY DEFAULT 1, last_block BIGINT NOT NULL DEFAULT 0, lp_points_at TIMESTAMPTZ)`);
+  await pool.query(`ALTER TABLE vault_deposits ADD COLUMN IF NOT EXISTS tx_hash TEXT`).catch(() => {});
+  await pool.query(`ALTER TABLE vault_deposits ADD COLUMN IF NOT EXISTS block_number BIGINT`).catch(() => {});
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_vault_deposits_tx ON vault_deposits (tx_hash, address, action) WHERE tx_hash IS NOT NULL`).catch(() => {});
+  await pool.query(`INSERT INTO vault_index_state (id, last_block) VALUES (1, $1) ON CONFLICT DO NOTHING`, [VAULT_DEPLOY_BLOCK]);
+}
+
+async function vaultCall(sig) {
+  const selector = VAULT_SELECTORS[sig];
+  if (!selector) throw new Error(`no selector for ${sig}`);
+  const r = await rpc('eth_call', [{ to: VAULT_ADDRESS, data: selector }, 'latest']);
+  return BigInt(r && r !== '0x' ? r : '0x0');
+}
+
+async function indexVault() {
+  try {
+    const st = await pool.query('SELECT last_block FROM vault_index_state WHERE id = 1');
+    let from = Number(st.rows[0]?.last_block || VAULT_DEPLOY_BLOCK) + 1;
+    const head = Number(BigInt(await rpc('eth_blockNumber', [])));
+    // Chunked so a long gap after downtime cannot blow the RPC's log limit.
+    while (from <= head) {
+      const to = Math.min(head, from + 4999);
+      const logs = await rpc('eth_getLogs', [{ address: VAULT_ADDRESS, fromBlock: '0x' + from.toString(16), toBlock: '0x' + to.toString(16), topics: [[VAULT_TOPICS.deposit, VAULT_TOPICS.withdraw]] }]).catch(() => []);
+      for (const lg of logs || []) {
+        const isDeposit = (lg.topics[0] || '').toLowerCase() === VAULT_TOPICS.deposit;
+        const account = ('0x' + lg.topics[1].slice(26)).toLowerCase();
+        const [a, b, navAfter] = abi.decode(['uint256', 'uint256', 'uint256'], lg.data);
+        // Deposit(account, amount, shares, navAfter) · Withdraw(account, shares, amount, navAfter)
+        const amount = Number(isDeposit ? a : b) / WEI;
+        const shares = Number(isDeposit ? b : a) / WEI;
+        await pool.query(
+          `INSERT INTO vault_deposits (address, action, amount, shares, vault_tvl_after, tx_hash, block_number)
+           VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING`,
+          [account, isDeposit ? 'deposit' : 'withdraw', amount, shares, Number(navAfter) / WEI, lg.transactionHash, Number(BigInt(lg.blockNumber))]
+        );
+      }
+      await pool.query('UPDATE vault_index_state SET last_block = $1 WHERE id = 1', [to]);
+      from = to + 1;
+    }
+    // Mirror the contract: NAV, shares, depositors; PnL = NAV − net deposits.
+    const [nav, shares, depositors] = await Promise.all([vaultCall('nav()'), vaultCall('totalShares()'), vaultCall('depositors()')]);
+    const net = await pool.query(`SELECT COALESCE(SUM(CASE WHEN action = 'deposit' THEN amount ELSE -amount END), 0)::float8 AS net FROM vault_deposits WHERE tx_hash IS NOT NULL`);
+    const navH = Number(nav) / WEI;
+    const pnl = navH - Number(net.rows[0].net || 0);
+    // 7d / 30d APY from the share price trajectory (first event in the window vs now).
+    const apy = async (days) => {
+      const r = await pool.query(`SELECT shares, amount FROM vault_deposits WHERE tx_hash IS NOT NULL AND created_at <= NOW() - ($1 || ' days')::interval AND shares > 0 ORDER BY created_at DESC LIMIT 1`, [String(days)]);
+      if (!r.rows[0] || Number(shares) === 0) return 0;
+      const oldPx = Number(r.rows[0].amount) / Number(r.rows[0].shares);
+      const nowPx = navH / (Number(shares) / WEI);
+      return oldPx > 0 ? ((nowPx / oldPx) ** (365 / days) - 1) * 100 : 0;
+    };
+    await pool.query(
+      `INSERT INTO vault_state (id, total_shares, total_tvl, total_pnl, apy_7d, apy_30d, depositors, updated_at)
+       VALUES (1, $1, $2, $3, $4, $5, $6, NOW())
+       ON CONFLICT (id) DO UPDATE SET total_shares = $1, total_tvl = $2, total_pnl = $3, apy_7d = $4, apy_30d = $5, depositors = $6, updated_at = NOW()`,
+      [Number(shares) / WEI, navH, pnl, await apy(7), await apy(30), Number(depositors)]
+    );
+    await awardLpPoints(navH, Number(shares) / WEI);
+  } catch (e) {
+    console.error('[vault] index failed:', e.message);
+  }
+}
+
+async function awardLpPoints(navH, totalShares) {
+  if (totalShares <= 0 || navH <= 0) { await pool.query('UPDATE vault_index_state SET lp_points_at = NOW() WHERE id = 1'); return; }
+  const st = await pool.query('SELECT lp_points_at FROM vault_index_state WHERE id = 1');
+  const last = st.rows[0]?.lp_points_at ? new Date(st.rows[0].lp_points_at).getTime() : Date.now();
+  const days = Math.max(0, (Date.now() - last) / 86_400_000);
+  await pool.query('UPDATE vault_index_state SET lp_points_at = NOW() WHERE id = 1');
+  if (days <= 0) return;
+  const pricePerShare = navH / totalShares;
+  const holders = await pool.query(`SELECT address, SUM(CASE WHEN action = 'deposit' THEN shares ELSE -shares END)::float8 AS shares FROM vault_deposits WHERE tx_hash IS NOT NULL GROUP BY address HAVING SUM(CASE WHEN action = 'deposit' THEN shares ELSE -shares END) > 0`);
+  const season = await pool.query('SELECT COALESCE(MAX(season), 1) AS s FROM points_balance').then((r) => Number(r.rows[0].s) || 1).catch(() => 1);
+  for (const h of holders.rows) {
+    const pts = Number(h.shares) * pricePerShare * LP_POINTS_PER_MRSN_DAY * days;
+    if (pts <= 0) continue;
+    await pool.query(
+      `INSERT INTO points_balance (address, season, trading_points, lp_points, referral_points, total_points, tier)
+       VALUES ($1, $2, 0, $3, 0, $3, 'Bronze')
+       ON CONFLICT (address, season) DO UPDATE SET lp_points = points_balance.lp_points + $3`,
+      [h.address, season, pts]
+    ).catch((e) => console.error('[vault] lp points:', e.message));
+  }
+  await normalizeTotals(season);
+}
+
 async function main() {
   console.log('[indexer] Mersennet Trade Indexer starting...');
   console.log(`[indexer] RPC: ${RPC_URL}`);
@@ -1149,6 +1257,8 @@ async function main() {
   ensurePointsSchema().then(() => awardPoints());
   ensureDailyMetricsSchema().then(() => snapshotDailyMetrics()).catch((e) => console.error('[metrics] schema:', e.message));
   setInterval(snapshotDailyMetrics, 300_000);
+  ensureVaultSchema().then(() => indexVault()).catch((e) => console.error('[vault] schema:', e.message));
+  setInterval(indexVault, 60_000);
 
   // Fire-and-forget historical backfill — don't block startup.
   // We delay 5s to let the API service finish its own oracle warmup.

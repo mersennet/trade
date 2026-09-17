@@ -107,8 +107,27 @@ services:
       BOT_SEED: ${BOT_SEED:-mersennet-bot-v1}
       CHAIN_ID: ${CHAIN_ID:-131071}
       MM_PRIVATE_KEY: ${MM_PRIVATE_KEY:-}
+      # Quote for the MakerVault through agent delegation (effective only once
+      # the vault has granted the maker key; see vault-manager).
+      MM_OWNER: ${VAULT_ADDRESS:-}
     depends_on:
       - indexer
+    profiles: ["bots"]
+
+  # Keeps the MakerVault wired to the maker: agent grant, deposits → collateral
+  # (10 % reserve for withdrawals), price scales. Manager key = maker key.
+  vault-manager:
+    build:
+      context: ./bots/market-maker
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["node", "vault-manager.js"]
+    environment:
+      RPC_URL: ${RPC_URL:-https://rpc.mersennet.com}
+      BOT_SEED: ${BOT_SEED:-mersennet-bot-v1}
+      CHAIN_ID: ${CHAIN_ID:-131071}
+      MM_PRIVATE_KEY: ${MM_PRIVATE_KEY:-}
+      VAULT_ADDRESS: ${VAULT_ADDRESS:-0x2ccc6FB9a1853Ad4C217047CC74Bd0D032325284}
     profiles: ["bots"]
 
   taker:

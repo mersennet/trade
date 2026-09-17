@@ -276,7 +276,10 @@ function OneClickSection() {
       setOneClick(live);
     } catch { /* rpc hiccup */ }
   };
-  useEffect(() => { refresh(); // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const t = setTimeout(() => { void refresh(); }, 0);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address]);
 
   const enable = async () => {

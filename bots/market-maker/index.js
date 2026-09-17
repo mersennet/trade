@@ -42,8 +42,16 @@ const MARKETS = {
   5: { symbol: 'ARB',  seed: 100,   tick: 0.05, baseSize: 500, levels: 3 },
 };
 
+// MM_OWNER: quote for another account through agent delegation — the vault.
+// Orders signed by the maker key are booked to MM_OWNER once the vault has
+// granted the maker as its agent (vault-manager.js does that); until then the
+// precompile books them to the maker itself. Open orders / fills are read for
+// the owner, and collateral is the owner's, so seeding is skipped.
+const OWNER = (process.env.MM_OWNER || maker.address).toLowerCase();
 const CONFIG = {
-  owner: maker.address,
+  // Effective owner: MM_OWNER only while its grant to the maker is live on
+  // chain (checked every minute by resolveOwner), else the maker itself.
+  owner: maker.address.toLowerCase(),
   markets: [1, 2, 3, 4, 5],
   // With quote maintenance a cycle only replaces the few levels takers
   // consumed (~6-12 txs), so 5s keeps the book two-sided between waves
@@ -295,7 +303,32 @@ async function ensureMarkets() {
 
 // Deposit collateral for the maker wallet (signed tx) so its orders pass the
 // margin check. Requires the wallet to be genesis-funded with native MRSN.
+let ownerCheckedAt = 0;
+async function resolveOwner() {
+  if (OWNER === maker.address.toLowerCase()) return;
+  if (Date.now() - ownerCheckedAt < 60_000) return;
+  ownerCheckedAt = Date.now();
+  try {
+    const view = await rpcCall('mersennet_orders_getAgents', [OWNER]);
+    const mine = (view?.agents || []).find((a) => a.agent.toLowerCase() === maker.address.toLowerCase());
+    const live = !!view?.active && !!mine && !mine.expired;
+    const next = live ? OWNER : maker.address.toLowerCase();
+    if (next !== CONFIG.owner) {
+      console.log(live
+        ? `[mm] agent grant live — quoting for ${OWNER}`
+        : `[mm] no live agent grant from ${OWNER} (delegation ${view?.active ? 'active' : 'inactive'}) — quoting for own account`);
+      CONFIG.owner = next;
+    }
+  } catch (e) {
+    /* keep the current owner on rpc hiccups */
+  }
+}
+
 async function ensureCollateral() {
+  if (OWNER !== maker.address.toLowerCase()) {
+    console.log(`[mm] acting as agent for ${OWNER}: collateral is the vault's, not seeding`);
+    return;
+  }
   try {
     const txHash = await maker.depositCollateral(BigInt(CONFIG.seedCollateral));
     console.log(`[mm] deposited ${CONFIG.seedCollateral} collateral for ${CONFIG.owner} (tx ${txHash})`);
@@ -307,6 +340,7 @@ async function ensureCollateral() {
 async function refreshQuotes() {
   if (isRefreshing) return;
   isRefreshing = true;
+  await resolveOwner();
   cycleCount++;
   submitErrLogged = false;
   marketMissing = false;

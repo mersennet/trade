@@ -22,7 +22,7 @@ const PAGE_TITLE_KEYS: Record<string, { key: string; fallback: string }> = {
   '/trade': { key: 'nav.trade', fallback: 'Trade' },
   '/markets': { key: 'nav.markets', fallback: 'Markets' },
   '/portfolio': { key: 'nav.portfolio', fallback: 'Portfolio' },
-  '/vault': { key: 'nav.vault', fallback: 'Mersennet Vault' },
+  '/vault': { key: 'nav.vault', fallback: 'Maker Vault' },
   '/leaderboard': { key: 'nav.leaderboard', fallback: 'Leaderboard' },
   '/analytics': { key: 'nav.analytics', fallback: 'Analytics' },
   '/points': { key: 'nav.points', fallback: 'Points' },
