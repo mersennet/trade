@@ -68,8 +68,12 @@ async function refreshMarkets() {
     const toInt = (v) => {
       try { return Number(BigInt(v ?? '0x1')); } catch { return 1; }
     };
+    // Listings from automated end-to-end runs (symbols E2E<n>) are real
+    // on-chain markets but noise for traders; hide them from every list.
+    const hidden = new RegExp(process.env.HIDDEN_MARKET_PATTERN || '^E2E\\d*$', 'i');
     const mapped = live
       .filter((m) => (m.status ?? 'active') === 'active')
+      .filter((m) => !hidden.test(String(m.symbol || '')))
       .map((m) => {
         const base = String(m.symbol || `MKT${m.id}`).toUpperCase();
         const params = MARKET_PARAMS[base] || DEFAULT_PARAMS;
