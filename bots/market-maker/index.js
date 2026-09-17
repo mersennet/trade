@@ -31,10 +31,10 @@ const maker = new BotWallet(RPC_URL, 'maker', process.env.MM_PRIVATE_KEY);
 // mempool slot (nonce backlog) and stalls all its future orders. Keep the
 // per-cycle order count at/under what mines in one refresh interval.
 const MARKETS = {
-  1: { symbol: 'MRSN', seed: 115,   tick: 1,    baseSize: 50,  levels: 3 },
+  1: { symbol: 'MRSN', seed: 115,   tick: 1,    baseSize: 150, levels: 3 }, // top level absorbs a whole taker wave (5 × 10) between refreshes
   2: { symbol: 'BTC',  seed: 77000, tick: 10,   baseSize: 3,   levels: 5 }, // busiest market: deeper ask side so takers don't empty it between cycles
   3: { symbol: 'ETH',  seed: 2500,  tick: 1,    baseSize: 8,   levels: 3 },
-  4: { symbol: 'SOL',  seed: 100,   tick: 1,    baseSize: 25,  levels: 3 },
+  4: { symbol: 'SOL',  seed: 100,   tick: 1,    baseSize: 60,  levels: 3 },
   5: { symbol: 'ARB',  seed: 100,   tick: 1,    baseSize: 500, levels: 3 },
 };
 

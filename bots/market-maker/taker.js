@@ -194,12 +194,16 @@ function generateTrade() {
   const side = Math.random() < buyProb ? 'buy' : 'sell';
   const size = randInt(m.sizeRange[0], m.sizeRange[1]);
 
-  // Cross the spread aggressively to guarantee fills
+  // Cross to the touch only: one tick through mid is the maker's best quote.
+  // Crossing 1–5 ticks (the old behaviour) swept three maker levels whenever
+  // a wave exhausted the top one, and every hourly candle spanned ±3 ticks
+  // (112–118 on MRSN) — the chart read as broken. IOC fills what rests at
+  // the touch and the remainder is dropped, which is what a taker wants.
   let price;
   if (side === 'buy') {
-    price = mid + randInt(1, 5) * m.tick;
+    price = mid + m.tick;
   } else {
-    price = mid - randInt(1, 5) * m.tick;
+    price = mid - m.tick;
   }
   if (price < 1) price = 1;
 
