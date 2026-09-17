@@ -197,6 +197,45 @@ app.get('/api/v1/health/validator-set', async (req, res) => {
   }
 });
 
+/**
+ * Are the ACTIVE validators on the current node release? Red (503) only when
+ * it matters: an active validator is on an older build and a consensus switch
+ * height is less than SWITCH_WARN_HOURS away (or already passed). Kuma posts
+ * this to the ops group; the staking page tells the operator the same thing.
+ */
+app.get('/api/v1/health/validators-current', async (req, res) => {
+  const { rpcCall } = require('./src/services/chain');
+  const nodes = require('./src/routes/nodes');
+  const SWITCH_WARN_HOURS = Number(process.env.SWITCH_WARN_HOURS || 48);
+  try {
+    const [v, latest] = await Promise.all([rpcCall('mersennet_validatorSet', []), nodes.latestReleaseSha()]);
+    const height = Number(v?.height || 0);
+    const p = v?.params || {};
+    const switches = [p.rewardsToOperatorHeight, p.jailEscalationHeight, p.benchHeight]
+      .map(Number).filter((h) => h > height);
+    const nextSwitch = switches.length ? Math.min(...switches) : null;
+    const hoursToSwitch = nextSwitch ? ((nextSwitch - height) * 2.1) / 3600 : null;
+    const activeIds = (v?.validators || []).filter((x) => x.status === 'active').map((x) => ({ identity: String(x.identity).toLowerCase(), operator: x.operator }));
+    const r = await require('./src/db/pool').query('SELECT identity, version FROM verified_nodes');
+    const byId = new Map(r.rows.map((n) => [String(n.identity).toLowerCase(), n.version]));
+    const report = activeIds.map((a) => {
+      const version = byId.get(a.identity) || null;
+      const build = nodes.buildShaOf(version);
+      return { identity: a.identity, operator: a.operator, version, build, outdated: !!latest && !!build && build !== latest, unknown: !version };
+    });
+    const outdated = report.filter((x) => x.outdated);
+    const urgent = outdated.length > 0 && hoursToSwitch !== null && hoursToSwitch <= SWITCH_WARN_HOURS;
+    const ok = !urgent;
+    res.status(ok ? 200 : 503).json({
+      ok, latest, height, nextSwitch, hoursToSwitch: hoursToSwitch === null ? null : Math.round(hoursToSwitch * 10) / 10,
+      active: report.length, outdated: outdated.length, unknown: report.filter((x) => x.unknown).length,
+      validators: report, timestamp: Date.now(),
+    });
+  } catch (e) {
+    res.status(503).json({ ok: false, error: e.message });
+  }
+});
+
 setupWebSocket(server);
 
 const pool = require('./src/db/pool');

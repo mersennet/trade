@@ -362,3 +362,6 @@ setTimeout(() => discoverFromPeers().catch(() => {}), 90 * 1000);
 setInterval(() => discoverFromPeers().catch(() => {}), DISCOVER_MS);
 
 module.exports = router;
+// Shared with the health endpoints in server.js.
+module.exports.latestReleaseSha = latestReleaseSha;
+module.exports.buildShaOf = buildShaOf;
