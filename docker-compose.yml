@@ -37,6 +37,9 @@ services:
       RPC_URL: ${RPC_URL:-https://rpc.mersennet.com}
       # Read feedback / validator registrations: GET /api/v1/feedback with X-Admin-Key
       ADMIN_API_KEY: ${ADMIN_API_KEY:-}
+      # Forward feedback submissions to the Telegram ops group (contact field withheld)
+      FEEDBACK_TELEGRAM_BOT_TOKEN: ${FEEDBACK_TELEGRAM_BOT_TOKEN:-}
+      FEEDBACK_TELEGRAM_CHAT_ID: ${FEEDBACK_TELEGRAM_CHAT_ID:-}
       WS_URL: ${WS_URL:-wss://rpc.mersennet.com}
       # Report user-order fills to the indexer (the node emits no WS trade event
       # for submitOrder RPC fills) so trades/volume/charts populate.

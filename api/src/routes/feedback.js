@@ -82,6 +82,25 @@ router.post('/', postLimiter, async (req, res) => {
       [category, message, contact || null, wallet || null, userAgent || null, page || null, ipHash]
     );
 
+    // Optional: Telegram (the ops group). The group may be public, so the
+    // contact field is never forwarded — only whether one was given; read it
+    // with the admin key: GET /api/v1/feedback?limit=50.
+    const tgToken = process.env.FEEDBACK_TELEGRAM_BOT_TOKEN;
+    const tgChat = process.env.FEEDBACK_TELEGRAM_CHAT_ID;
+    if (tgToken && tgChat) {
+      const text = `📝 [${category}] feedback #${r.rows[0].id}` +
+        (wallet ? `\nwallet ${wallet}` : '') +
+        `\ncontact: ${contact ? 'provided (see admin API)' : 'none'}` +
+        (page ? `\npage: ${page.slice(0, 120)}` : '') +
+        `\n\n${message.slice(0, 1500)}`;
+      fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: tgChat, text, disable_web_page_preview: true }),
+      }).then((res) => { if (!res.ok) console.warn('[feedback] telegram status', res.status); })
+        .catch((e) => console.warn('[feedback] telegram fail:', e.message));
+    }
+
     // Optional: forward to a webhook (Discord, Slack, ntfy.sh, etc.)
     const hook = process.env.FEEDBACK_WEBHOOK_URL;
     if (hook) {
