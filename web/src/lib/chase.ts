@@ -16,6 +16,7 @@
  */
 
 import { MERSENNET_ORDERS_PRECOMPILE, getDefaultChain } from './chain';
+import { getPriceScale, priceScaleSync } from './priceScale';
 
 export interface ChaseEvent {
   kind: 'placed' | 'repriced' | 'filled' | 'stopped' | 'error';
@@ -195,7 +196,7 @@ async function tick(id: string): Promise<void> {
     await cancelCurrent(state);
     await placeAt(state, want);
     state.reprices += 1;
-    state.params.onEvent?.({ kind: 'repriced', price: Number(want), reprices: state.reprices });
+    state.params.onEvent?.({ kind: 'repriced', price: Number(want) / priceScaleSync(state.params.marketId), reprices: state.reprices });
   } catch (err) {
     // Transient RPC hiccups are fine; a failed reprice leaves either the old
     // order (cancel failed) or no order (place failed) — the next tick heals
@@ -209,6 +210,7 @@ async function tick(id: string): Promise<void> {
 
 /** Start chasing. Returns the chase id (used to stop it). */
 export async function startChase(params: ChaseParams): Promise<string> {
+  await getPriceScale(params.marketId); // warm the scale so event prices are human
   const owner = params.owner.toLowerCase();
   const id = `chase-${params.marketId}-${Date.now()}`;
   const state: ChaseState = {
@@ -234,7 +236,7 @@ export async function startChase(params: ChaseParams): Promise<string> {
     const want = targetPrice(params.isBuy, bid, ask);
     if (want === 0n) throw new Error('Empty book — nothing to chase. Place a plain limit order instead.');
     await placeAt(state, want);
-    state.params.onEvent?.({ kind: 'placed', price: Number(want) });
+    state.params.onEvent?.({ kind: 'placed', price: Number(want) / priceScaleSync(state.params.marketId) });
   } catch (err) {
     active.delete(id);
     throw err;

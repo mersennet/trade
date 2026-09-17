@@ -333,11 +333,13 @@ export default function TradeForm() {
         const lo = Math.min(a, b), hi = Math.max(a, b);
         const step = (hi - lo) / (n - 1);
         const total = Number(trade.size);
+        const { getPriceScale: gps, roundToTick } = await import('@/lib/priceScale');
+        const scaleScale = await gps(market.id);
         const per = Number((total / n).toFixed(8));
         if (!useOneClick) toast(`Placing ${n} orders — your wallet will ask ${n} times (enable one-click to skip)`, 'info');
         let placed = 0;
         for (let i = 0; i < n; i++) {
-          const px = Math.round(lo + step * i); // integer ticks on the CLOB
+          const px = roundToTick(lo + step * i, scaleScale); // the market's finest tick
           try {
             await placeOrderOnChain(provider, {
               marketId: market.id,

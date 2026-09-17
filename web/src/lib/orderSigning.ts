@@ -9,8 +9,9 @@
  *   placeOrder(uint64 marketId, bool isBuy, uint256 price, uint256 size, uint8 tif)
  *     -> (uint256 orderId, uint256 filled, uint256 remaining)
  *
- * Units: the chain stores prices and sizes as plain integer units (no
- * decimal scaling) — matching the original MersennetTrade terminal conventions.
+ * Units: sizes are plain integer units; prices are human × the market's
+ * priceScale (1 for integer-priced markets, 100 once a market trades on
+ * $0.01 ticks). `placeOrderOnChain` takes HUMAN prices and scales them.
  *
  * Two signing modes:
  *   1. Wallet popup (default): pass `provider`.
@@ -18,6 +19,7 @@
  */
 
 import { MERSENNET_ORDERS_PRECOMPILE, getDefaultChain } from './chain';
+import { getPriceScale } from './priceScale';
 
 export type Tif = 'Gtc' | 'Ioc' | 'Fok';
 
@@ -49,11 +51,11 @@ export interface MakerFlags {
   expireAtBlock?: number;
 }
 
-/** Convert a human number string to integer chain units (rounds decimals). */
-export function toChainUnits(human: string | number): string {
+/** Convert a human number string to integer chain units (× scale, rounds). */
+export function toChainUnits(human: string | number, scale = 1): string {
   const n = Number(String(human).trim());
   if (!Number.isFinite(n) || n < 0) throw new Error(`Invalid number: ${human}`);
-  return String(Math.round(n));
+  return String(Math.round(n * scale));
 }
 
 /**
@@ -75,8 +77,11 @@ export async function marketableLimitPrice(
   markFallback = 0,
 ): Promise<string> {
   const rpcUrl = getDefaultChain().rpcUrls[0];
+  // Work in chain units (the book is raw), return a HUMAN price.
+  const scale = await getPriceScale(marketId);
   const toInt = (v: unknown): number =>
     typeof v === 'string' && v.startsWith('0x') ? parseInt(v, 16) : Number(v);
+  markFallback = markFallback * scale;
 
   let bestBid = 0;
   let bestAsk = 0;
@@ -100,12 +105,12 @@ export async function marketableLimitPrice(
     const ref = bestAsk || markFallback;
     if (!ref) throw new Error('No ask-side liquidity or mark price — cannot place a market buy right now.');
     // Cross the best ask by at least one tick, then widen by slippage.
-    return String(Math.max(Math.ceil(ref * (1 + slip)), Math.ceil(ref) + 1));
+    return String(Math.max(Math.ceil(ref * (1 + slip)), Math.ceil(ref) + 1) / scale);
   }
   const ref = bestBid || markFallback;
   if (!ref) throw new Error('No bid-side liquidity or mark price — cannot place a market sell right now.');
   // Cross the best bid by at least one tick (floor to 1), then widen by slippage.
-  return String(Math.max(1, Math.min(Math.floor(ref * (1 - slip)), Math.floor(ref) - 1)));
+  return String(Math.max(1, Math.min(Math.floor(ref * (1 - slip)), Math.floor(ref) - 1)) / scale);
 }
 
 /**
@@ -145,7 +150,7 @@ export async function placeOrderOnChain(
   }
 
   const tif: Tif = params.tif ?? 'Gtc';
-  const price = toChainUnits(params.priceUsd);
+  const price = toChainUnits(params.priceUsd, await getPriceScale(params.marketId));
   const size = toChainUnits(params.sizeBase);
   if (BigInt(size) <= BigInt(0)) throw new Error('Size must be > 0');
   if (BigInt(price) <= BigInt(0)) throw new Error('Price must be > 0');

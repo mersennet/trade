@@ -272,7 +272,7 @@ export function createWsConnection() {
   return new WebSocket(WS_BASE);
 }
 
-export interface Market { id: number; symbol: string; base: string; quote: string; fundingRate: number; maxLeverage: number; }
+export interface Market { id: number; symbol: string; base: string; quote: string; fundingRate: number; maxLeverage: number; tickSize?: number; lotSize?: number; /** on-chain price = human × priceScale (1 = integer prices) */ priceScale?: number; }
 export interface OrderBook { bids: [number, number][]; asks: [number, number][]; }
 export interface Ticker { marketId: number; bestBid: number; bestAsk: number; markPrice: number; volume24h: number; trades24h: number; change24h?: number; oracleMarkUsd?: number; oracleAgeSec?: number; openInterest?: number; longAccounts?: number; shortAccounts?: number; }
 export interface Candle { time: number; open: number; high: number; low: number; close: number; volume: number; trades: number; }
