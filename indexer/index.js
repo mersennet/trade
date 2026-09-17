@@ -629,12 +629,12 @@ async function awardPoints() {
     await pool.query(
       `UPDATE points_balance
           SET trading_points = 0,
-              total_points = COALESCE(node_points, 0) + COALESCE(lp_points, 0) + COALESCE(referral_points, 0),
+              total_points = COALESCE(node_points, 0) + COALESCE(lp_points, 0) + COALESCE(referral_points, 0) + COALESCE(bonus_points, 0),
               tier = CASE
-                WHEN COALESCE(node_points, 0) + COALESCE(lp_points, 0) + COALESCE(referral_points, 0) >= 1000000 THEN 'Diamond'
-                WHEN COALESCE(node_points, 0) + COALESCE(lp_points, 0) + COALESCE(referral_points, 0) >= 100000 THEN 'Platinum'
-                WHEN COALESCE(node_points, 0) + COALESCE(lp_points, 0) + COALESCE(referral_points, 0) >= 10000 THEN 'Gold'
-                WHEN COALESCE(node_points, 0) + COALESCE(lp_points, 0) + COALESCE(referral_points, 0) >= 1000 THEN 'Silver'
+                WHEN COALESCE(node_points, 0) + COALESCE(lp_points, 0) + COALESCE(referral_points, 0) + COALESCE(bonus_points, 0) >= 1000000 THEN 'Diamond'
+                WHEN COALESCE(node_points, 0) + COALESCE(lp_points, 0) + COALESCE(referral_points, 0) + COALESCE(bonus_points, 0) >= 100000 THEN 'Platinum'
+                WHEN COALESCE(node_points, 0) + COALESCE(lp_points, 0) + COALESCE(referral_points, 0) + COALESCE(bonus_points, 0) >= 10000 THEN 'Gold'
+                WHEN COALESCE(node_points, 0) + COALESCE(lp_points, 0) + COALESCE(referral_points, 0) + COALESCE(bonus_points, 0) >= 1000 THEN 'Silver'
                 ELSE 'Bronze' END,
               updated_at = NOW()
         WHERE LOWER(address) = ANY($1::text[]) AND trading_points <> 0`,
@@ -667,11 +667,11 @@ async function awardPoints() {
       if (trading <= 0) continue;
 
       const existing = await pool.query(
-        `SELECT trading_points, lp_points, referral_points, COALESCE(node_points, 0) AS node_points FROM points_balance
+        `SELECT trading_points, lp_points, referral_points, COALESCE(node_points, 0) AS node_points, COALESCE(bonus_points, 0) AS bonus_points FROM points_balance
          WHERE address = $1 AND season = $2`,
         [address, season]
-      ).catch(() => pool.query(   // column added by the API on first start; tolerate its absence
-        `SELECT trading_points, lp_points, referral_points, 0 AS node_points FROM points_balance
+      ).catch(() => pool.query(   // columns added lazily; tolerate their absence
+        `SELECT trading_points, lp_points, referral_points, 0 AS node_points, 0 AS bonus_points FROM points_balance
          WHERE address = $1 AND season = $2`,
         [address, season]
       ));
@@ -682,7 +682,8 @@ async function awardPoints() {
       const lp = Number(prev.lp_points) || 0;
       const ref = Number(prev.referral_points) || 0;
       const nodePts = Number(prev.node_points) || 0; // awarded by the API for verified node runners
-      const total = trading + lp + ref + nodePts;
+      const bonus = Number(prev.bonus_points) || 0;  // weekly sprint awards (below)
+      const total = trading + lp + ref + nodePts + bonus;
 
       await pool.query(
         `INSERT INTO points_balance
@@ -706,9 +707,158 @@ async function awardPoints() {
     // Bound the history table — it gets one row per active trader per run.
     // Balances live in points_balance; 30 days of event history is plenty.
     await pool.query(`DELETE FROM points WHERE created_at < NOW() - interval '30 days'`).catch(() => {});
+
+    await awardReferralPoints(season);
+    await awardWeeklySprint(season);
+    await normalizeTotals(season);
   } catch (e) {
     console.error('[points] Error awarding:', e.message);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Referral points: a referrer earns 10 % of each referee's trading points.
+// Attribution rows come from the API (POST /api/v1/referrals/attribute, wallet-
+// signed, first code wins) into `referrals(referee, referrer, code)`.
+// Recomputed from scratch every run so it is idempotent.
+// ---------------------------------------------------------------------------
+const REFERRAL_SHARE = 0.10;
+
+async function ensurePointsSchema() {
+  await pool.query(`ALTER TABLE points_balance ADD COLUMN IF NOT EXISTS bonus_points NUMERIC(20,4) NOT NULL DEFAULT 0`).catch(() => {});
+  // Single source of truth for "not a real trader": the API's live standings
+  // (weekly sprint) read this table instead of carrying their own bot list.
+  await pool.query(`CREATE TABLE IF NOT EXISTS excluded_addresses (address TEXT PRIMARY KEY, reason TEXT, updated_at TIMESTAMPTZ DEFAULT NOW())`).catch(() => {});
+  await pool.query(
+    `INSERT INTO excluded_addresses (address, reason) SELECT UNNEST($1::text[]), 'bot' ON CONFLICT (address) DO UPDATE SET updated_at = NOW()`,
+    [BOT_ADDRESSES]
+  ).catch(() => {});
+  await pool.query(`CREATE TABLE IF NOT EXISTS referrals (
+    referee TEXT PRIMARY KEY,
+    referrer TEXT NOT NULL,
+    code TEXT,
+    attributed_at TIMESTAMPTZ DEFAULT NOW()
+  )`).catch(() => {});
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals (referrer)`).catch(() => {});
+  await pool.query(`CREATE TABLE IF NOT EXISTS weekly_sprint_awards (
+    week_start DATE NOT NULL,
+    address TEXT NOT NULL,
+    rank INTEGER NOT NULL,
+    volume NUMERIC(78,4) NOT NULL DEFAULT 0,
+    points NUMERIC(20,4) NOT NULL,
+    awarded_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (week_start, address)
+  )`).catch(() => {});
+}
+
+async function awardReferralPoints(season) {
+  try {
+    const r = await pool.query(
+      `SELECT LOWER(r.referrer) AS referrer, COALESCE(SUM(pb.trading_points), 0)::numeric AS referee_trading
+         FROM referrals r
+         LEFT JOIN points_balance pb ON LOWER(pb.address) = LOWER(r.referee) AND pb.season = $1
+        WHERE LOWER(r.referrer) <> LOWER(r.referee)
+        GROUP BY LOWER(r.referrer)`,
+      [season]
+    );
+    let changed = 0;
+    for (const row of r.rows) {
+      const earned = Math.floor(Number(row.referee_trading) * REFERRAL_SHARE);
+      const cur = await pool.query(`SELECT referral_points FROM points_balance WHERE address = $1 AND season = $2`, [row.referrer, season]);
+      const prev = Number(cur.rows[0]?.referral_points) || 0;
+      if (earned === prev) continue;
+      await pool.query(
+        `INSERT INTO points_balance (address, season, total_points, trading_points, lp_points, referral_points, tier, updated_at)
+         VALUES ($1, $2, $3, 0, 0, $3, 'Bronze', NOW())
+         ON CONFLICT (address, season) DO UPDATE SET referral_points = EXCLUDED.referral_points, updated_at = NOW()`,
+        [row.referrer, season, earned]
+      );
+      if (earned > prev) {
+        await pool.query(`INSERT INTO points (address, season, point_type, amount, reason) VALUES ($1, $2, 'referral', $3, 'Referee trading (10%)')`, [row.referrer, season, earned - prev]).catch(() => {});
+      }
+      changed++;
+    }
+    if (changed > 0) console.log(`[points] referral points updated for ${changed} referrer(s)`);
+  } catch (e) {
+    console.error('[points] referral award:', e.message);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Weekly sprint: every Monday 00:00 UTC the previous week's top three traders
+// by taker volume (real traders only) receive bonus points 3,000 / 2,000 /
+// 1,000. One award per (week, address); safe to run every cycle.
+// ---------------------------------------------------------------------------
+const SPRINT_PRIZES = [3000, 2000, 1000];
+
+function lastCompletedWeekStartUtc(now = new Date()) {
+  // Monday 00:00 UTC of the week that just ended.
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const dow = (d.getUTCDay() + 6) % 7; // Monday = 0
+  d.setUTCDate(d.getUTCDate() - dow);   // this week's Monday
+  d.setUTCDate(d.getUTCDate() - 7);     // previous Monday
+  return d;
+}
+
+async function awardWeeklySprint(season) {
+  try {
+    const weekStart = lastCompletedWeekStartUtc();
+    const weekEnd = new Date(weekStart.getTime() + 7 * 86_400_000);
+    const iso = weekStart.toISOString().slice(0, 10);
+    const done = await pool.query(`SELECT 1 FROM weekly_sprint_awards WHERE week_start = $1 LIMIT 1`, [iso]);
+    if (done.rowCount > 0) return;
+    const top = await pool.query(
+      `SELECT LOWER(taker) AS address, SUM(price * size)::numeric AS volume
+         FROM trades
+        WHERE taker IS NOT NULL AND block_timestamp >= $1 AND block_timestamp < $2
+          AND LOWER(taker) NOT LIKE '0x00000000000000000000000000000000000000%'
+          AND LOWER(taker) <> ALL($3::text[])
+        GROUP BY LOWER(taker)
+        ORDER BY volume DESC
+        LIMIT 3`,
+      [weekStart.toISOString(), weekEnd.toISOString(), BOT_ADDRESSES]
+    );
+    if (top.rowCount === 0) {
+      // Nobody traded that week: record a marker row so we do not re-query forever.
+      await pool.query(`INSERT INTO weekly_sprint_awards (week_start, address, rank, volume, points) VALUES ($1, 'none', 0, 0, 0) ON CONFLICT DO NOTHING`, [iso]);
+      return;
+    }
+    for (let i = 0; i < top.rows.length; i++) {
+      const { address, volume } = top.rows[i];
+      const pts = SPRINT_PRIZES[i];
+      await pool.query(
+        `INSERT INTO weekly_sprint_awards (week_start, address, rank, volume, points) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING`,
+        [iso, address, i + 1, volume, pts]
+      );
+      await pool.query(
+        `INSERT INTO points_balance (address, season, total_points, trading_points, lp_points, referral_points, bonus_points, tier, updated_at)
+         VALUES ($1, $2, $3, 0, 0, 0, $3, 'Bronze', NOW())
+         ON CONFLICT (address, season) DO UPDATE SET bonus_points = points_balance.bonus_points + $3, updated_at = NOW()`,
+        [address, season, pts]
+      );
+      await pool.query(`INSERT INTO points (address, season, point_type, amount, reason) VALUES ($1, $2, 'competition', $3, $4)`, [address, season, pts, `Weekly sprint #${i + 1}, week of ${iso}`]).catch(() => {});
+    }
+    console.log(`[points] weekly sprint awarded for week ${iso}: ${top.rows.map((r, i) => `${r.address.slice(0, 8)}=${SPRINT_PRIZES[i]}`).join(', ')}`);
+  } catch (e) {
+    console.error('[points] weekly sprint:', e.message);
+  }
+}
+
+/** total = trading + lp + referral + node + bonus, tier from total. One statement, every run. */
+async function normalizeTotals(season) {
+  await pool.query(
+    `UPDATE points_balance
+        SET total_points = COALESCE(trading_points,0) + COALESCE(lp_points,0) + COALESCE(referral_points,0) + COALESCE(node_points,0) + COALESCE(bonus_points,0),
+            tier = CASE
+              WHEN COALESCE(trading_points,0) + COALESCE(lp_points,0) + COALESCE(referral_points,0) + COALESCE(node_points,0) + COALESCE(bonus_points,0) >= 1000000 THEN 'Diamond'
+              WHEN COALESCE(trading_points,0) + COALESCE(lp_points,0) + COALESCE(referral_points,0) + COALESCE(node_points,0) + COALESCE(bonus_points,0) >= 100000 THEN 'Platinum'
+              WHEN COALESCE(trading_points,0) + COALESCE(lp_points,0) + COALESCE(referral_points,0) + COALESCE(node_points,0) + COALESCE(bonus_points,0) >= 10000 THEN 'Gold'
+              WHEN COALESCE(trading_points,0) + COALESCE(lp_points,0) + COALESCE(referral_points,0) + COALESCE(node_points,0) + COALESCE(bonus_points,0) >= 1000 THEN 'Silver'
+              ELSE 'Bronze' END
+      WHERE season = $1
+        AND total_points <> COALESCE(trading_points,0) + COALESCE(lp_points,0) + COALESCE(referral_points,0) + COALESCE(node_points,0) + COALESCE(bonus_points,0)`,
+    [season]
+  ).catch((e) => console.error('[points] normalize:', e.message));
 }
 
 // ---------------------------------------------------------------------------
@@ -893,7 +1043,7 @@ async function main() {
 
   aggregateCandles();
   updateLeaderboard();
-  awardPoints();
+  ensurePointsSchema().then(() => awardPoints());
 
   // Fire-and-forget historical backfill — don't block startup.
   // We delay 5s to let the API service finish its own oracle warmup.

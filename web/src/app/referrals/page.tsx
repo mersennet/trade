@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useWallet } from '@/hooks/useWallet';
 import { useToast } from '@/components/shared/Toast';
-import { api, type BuilderCode } from '@/lib/api';
+import { api, type BuilderCode, type ReferralStatus } from '@/lib/api';
 import { shortenAddress, formatNumber } from '@/lib/utils';
 
 export default function ReferralsPage() {
@@ -12,6 +12,7 @@ export default function ReferralsPage() {
   const [newLabel, setNewLabel] = useState('');
   const [newCode, setNewCode] = useState('');
   const [referralPoints, setReferralPoints] = useState(0);
+  const [referralStatus, setReferralStatus] = useState<ReferralStatus | null>(null);
 
   const loadMyCodes = (addr: string) =>
     api.getBuilderCodesByOwner(addr)
@@ -24,6 +25,7 @@ export default function ReferralsPage() {
       api.getPoints(address)
         .then((r) => setReferralPoints(r.referralPoints || 0))
         .catch(() => {});
+      api.getReferralStatus(address).then(setReferralStatus).catch(() => {});
     }
   }, [address]);
 
@@ -51,14 +53,17 @@ export default function ReferralsPage() {
         <p className="page-sub">Earn revenue share by referring traders or building integrations</p>
       </div>
 
-      {/* Attribution from signed on-chain orders is not wired up yet, so
-          counters cannot grow from real trading. Say so instead of showing a
-          forever-zero dashboard under revenue-share promises. */}
-      <div className="max-w-2xl mx-auto flex items-start gap-2 px-4 py-3 rounded-lg bg-yellow/10 border border-yellow/30">
-        <span className="text-yellow text-sm leading-none mt-0.5">⚠</span>
-        <p className="text-xs text-yellow/90 leading-relaxed">
-          Early preview — referral attribution for signed on-chain orders is still being built,
-          so points and order counters may not reflect your referred traders&apos; activity yet.
+      {/* How attribution works: the referee signs a one-line statement once
+          (ReferralConfirm on the trade page); the indexer then credits 10 % of
+          their trading points to the referrer every few minutes. */}
+      <div className="max-w-2xl mx-auto px-4 py-3 rounded-lg bg-primary/[0.06] border border-primary/20">
+        <p className="text-xs text-foreground/85 leading-relaxed">
+          <span className="text-primary font-semibold">How it works.</span> Share your link. When a trader opens it and connects a wallet, the terminal asks them to
+          confirm the referral with one signature — that is what makes it trustworthy. From then on you earn <span className="font-mono">10%</span> of their trading points
+          as a bonus (nothing is deducted from them), updated every few minutes. First code wins; self-referrals do not count.
+          {referralStatus?.referredBy && (
+            <> You were referred by code <span className="font-mono text-primary">{referralStatus.referredBy.code}</span>.</>
+          )}
         </p>
       </div>
 
@@ -72,8 +77,8 @@ export default function ReferralsPage() {
               <span className="text-foreground font-medium font-mono">{formatNumber(referralPoints)}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-dim">Orders via your codes</span>
-              <span className="text-foreground font-medium font-mono">{myCodes.reduce((s, c) => s + Number(c.total_orders || 0), 0)}</span>
+              <span className="text-dim">Traders you referred</span>
+              <span className="text-foreground font-medium font-mono">{referralStatus?.referees ?? 0}</span>
             </div>
           </div>
         </div>

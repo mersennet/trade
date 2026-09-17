@@ -107,6 +107,7 @@ app.use('/api/v1/vault', vaultRouter);
 app.use('/api/v1/staking', stakingRouter);
 app.use('/api/v1/competitions', competitionsRouter);
 app.use('/api/v1/builder-codes', builderCodesRouter);
+app.use('/api/v1/referrals', require('./src/routes/referrals'));
 app.use('/api/v1/api-keys', apiKeysRouter);
 app.use('/api/v1/governance', governanceRouter);
 app.use('/api/v1/stats', statsRouter);

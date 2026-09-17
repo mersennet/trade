@@ -9,6 +9,7 @@ import PositionsTable from '@/components/trade/PositionsTable';
 import AccountPanel from '@/components/trade/AccountPanel';
 import PrivacyPanel from '@/components/trade/PrivacyPanel';
 import GettingStarted from '@/components/trade/GettingStarted';
+import ReferralConfirm from '@/components/shared/ReferralConfirm';
 import OnboardingTour from '@/components/trade/OnboardingTour';
 import { useBrackets } from '@/hooks/useBrackets';
 import { useConditionalOrders } from '@/hooks/useConditionalOrders';
@@ -123,7 +124,7 @@ export default function TradePage() {
         {mobileTab === 'trade' && (
           <div className="absolute inset-0 z-30 flex flex-col bg-surface animate-[slideUp_0.2s_ease-out]">
             <div className="flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
-              <GettingStarted /><TradeForm /><PrivacyPanel />
+              <ReferralConfirm /><GettingStarted /><TradeForm /><PrivacyPanel />
             </div>
           </div>
         )}
@@ -145,6 +146,7 @@ export default function TradePage() {
           <OrderBook />
         </div>
         <div className="min-h-0 min-w-0 overflow-y-auto bg-surface flex flex-col gap-px">
+          <ReferralConfirm />
           <GettingStarted />
           <TradeForm />
           <AccountPanel />

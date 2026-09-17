@@ -113,7 +113,8 @@ export const api = {
   getVerifiedNodes: () => apiFetch<{ nodes: VerifiedNode[]; total: number; active: number; pointsPerDay: number }>('/nodes/verified'),
   verifyNode: (body: { host: string; wallet: string; signature: string }) =>
     apiFetch<{ ok: boolean; identity: string; height: number; version: string; pointsPerDay: number }>('/nodes/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
-  getPointsLeaderboard: (season = 1) => apiFetch<{ leaderboard: PointsEntry[] }>(`/points/leaderboard/season/${season}`),
+  getPointsLeaderboard: (season = 1) => apiFetch<{ leaderboard: PointsEntry[] }>(`/points/leaderboard/season/${season}?limit=100`),
+  getSprint: () => memo('sprint', 15_000, () => apiFetch<SprintStatus>('/points/sprint')),
   getVaultState: () => apiFetch<VaultState>('/vault/state'),
   getVaultUser: (addr: string) => apiFetch<VaultUserState>(`/vault/user/${addr}`),
   vaultDeposit: (address: string, amount: number) =>
@@ -133,6 +134,11 @@ export const api = {
   getCompetition: (id: number) => apiFetch<CompetitionDetail>(`/competitions/${id}`),
   joinCompetition: (id: number, address: string) =>
     apiFetch<{ joined: boolean }>(`/competitions/${id}/join`, { method: 'POST', body: JSON.stringify({ address }) }),
+  // Referral attribution (wallet-signed, first code wins)
+  getReferralStatus: (wallet: string) => apiFetch<ReferralStatus>(`/referrals/status/${wallet}`),
+  getReferralMessage: (code: string, wallet: string) => apiFetch<{ message: string }>(`/referrals/message?code=${encodeURIComponent(code)}&wallet=${wallet}`),
+  attributeReferral: (wallet: string, code: string, signature: string) =>
+    apiFetch<{ ok: boolean; referrer: string; code: string; alreadyAttributed?: boolean }>('/referrals/attribute', { method: 'POST', body: JSON.stringify({ wallet, code, signature }) }),
   getBuilderCodes: () => apiFetch<{ codes: BuilderCode[] }>('/builder-codes'),
   getBuilderCodesByOwner: (address: string) => apiFetch<{ codes: BuilderCode[] }>(`/builder-codes/owner/${address}`),
   createBuilderCode: (owner: string, label?: string, code?: string) =>
@@ -345,8 +351,10 @@ export interface TraderStatRow {
   max_drawdown?: number | string;
 }
 export interface TraderProfile { address: string; stats: Record<string, TraderStatRow>; recentTrades: Trade[]; }
-export interface PointsResponse { address: string; totalPoints: number; tradingPoints: number; lpPoints: number; referralPoints: number; nodePoints?: number; tier: string; rank: number; history: { point_type: string; amount: number; reason: string; created_at: string }[]; }
-export interface PointsEntry { rank: number; address: string; totalPoints: number; tier: string; }
+export interface PointsResponse { address: string; totalPoints: number; tradingPoints: number; lpPoints: number; referralPoints: number; nodePoints?: number; bonusPoints?: number; tier: string; rank: number; history: { point_type: string; amount: number; reason: string; created_at: string }[]; }
+export interface PointsEntry { rank: number; address: string; totalPoints: number; tier: string; tradingPoints?: number; nodePoints?: number; referralPoints?: number; bonusPoints?: number; }
+export interface SprintStatus { weekStart: string; awardAt: string; prizes: number[]; standings: { rank: number; address: string; volume: number; trades: number }[]; lastWinners: { week_start: string; address: string; rank: number; volume: number; points: number }[]; }
+export interface ReferralStatus { referredBy: { referrer: string; code: string; at: string } | null; referees: number; referralPoints: number; share: number; }
 export interface VerifiedNode { identity: string; operator?: string; host: string; version: string; height: number; first_verified_at: string; last_seen_at: string; active: boolean; registration_proof?: string | null; build_sha?: string | null; outdated?: boolean; }
 export interface VaultState { totalShares: number; totalTvl: number; totalPnl: number; apy7d: number; apy30d: number; depositors: number; }
 export interface VaultUserState { address: string; shares: number; value: number; shareOfVault: string; history: unknown[]; }

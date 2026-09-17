@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useWallet } from '@/hooks/useWallet';
 import { api, type PointsResponse, type PointsEntry } from '@/lib/api';
@@ -43,19 +44,17 @@ export default function PointsPage() {
           <h1 className="page-title">Points & Rewards</h1>
           <span className="px-1.5 py-0.5 bg-primary/10 text-primary rounded text-[9px] font-semibold uppercase tracking-wider">Season 1 · Live</span>
         </div>
-        <p className="page-sub">Earn points by trading and by running a verified node — liquidity and referral points are next</p>
+        <p className="page-sub">Earn points by trading, running a verified node, referring traders and winning the weekly sprint — liquidity points are next</p>
       </header>
 
-      {/* Trading points are live (accrued from on-chain volume). LP / referral /
-          competition multipliers are still being wired up. */}
+      {/* Trading, node, referral and sprint points are live; LP points wait for the vault. */}
       <div className="flex items-start gap-2.5 bg-primary/[0.06] border border-primary/20 rounded-xl px-4 py-3">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary shrink-0 mt-0.5">
           <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" />
         </svg>
         <p className="text-[12px] leading-relaxed text-foreground/80">
-          <span className="text-primary font-semibold">Trading and node-runner points are live.</span>{' '}
-          Trading points accrue automatically from your on-chain volume (updated every few minutes); a verified node earns 500 points a day while it is online (see below).
-          LP, referral, and competition points are coming soon and currently read zero.
+          <span className="text-primary font-semibold">Trading, node-runner, referral and weekly-sprint points are live.</span>{' '}
+          Trading points accrue from your on-chain volume (updated every few minutes); a verified node earns 500 points a day while it is online (below); a referrer earns 10% of each referee&apos;s trading points; the top three traders by volume each week (Monday 00:00 UTC) receive 3,000 / 2,000 / 1,000 bonus points — see the <Link href="/leaderboard" className="text-primary hover:underline">leaderboard</Link>. LP points start with the vault.
         </p>
       </div>
 
@@ -96,11 +95,12 @@ export default function PointsPage() {
           </div>
 
           {/* Earn-by-source breakdown */}
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-5 gap-3">
             <SourceTile label="Trading"  value={points.tradingPoints} />
             <SourceTile label="Node"     value={points.nodePoints || 0} />
-            <SourceTile label="LP"       value={points.lpPoints} />
             <SourceTile label="Referral" value={points.referralPoints} />
+            <SourceTile label="Sprint"   value={points.bonusPoints || 0} />
+            <SourceTile label="LP"       value={points.lpPoints} />
           </div>
         </>
       )}
@@ -117,8 +117,8 @@ export default function PointsPage() {
             { action: 'Trading',     desc: '1 point per $1 of volume traded',       mult: 'Live',   tone: 'text-primary', live: true  },
             { action: 'Node runner', desc: '500 points per day for a verified, online full node', mult: 'Live', tone: 'text-primary', live: true },
             { action: 'Vault LP',    desc: '2 points per 1 MRSN deposited per day', mult: 'Soon',   tone: 'text-dim',     live: false },
-            { action: 'Referrals',   desc: '10% of referee trading points',         mult: 'Soon',   tone: 'text-dim',     live: false },
-            { action: 'Competitions',desc: 'Bonus points for top finishers',        mult: 'Soon',   tone: 'text-dim',     live: false },
+            { action: 'Referrals',   desc: '10% of referee trading points — share your code from the Referrals page; the referee confirms with one signature', mult: 'Live', tone: 'text-primary', live: true },
+            { action: 'Weekly sprint', desc: 'Top 3 by volume each week (Monday 00:00 UTC): 3,000 / 2,000 / 1,000 bonus points', mult: 'Live', tone: 'text-primary', live: true },
           ].map((e) => (
             <div key={e.action} className="flex items-center justify-between px-4 py-3">
               <div>
