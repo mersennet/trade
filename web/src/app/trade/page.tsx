@@ -11,6 +11,7 @@ import PrivacyPanel from '@/components/trade/PrivacyPanel';
 import GettingStarted from '@/components/trade/GettingStarted';
 import OnboardingTour from '@/components/trade/OnboardingTour';
 import { useBrackets } from '@/hooks/useBrackets';
+import { useConditionalOrders } from '@/hooks/useConditionalOrders';
 import { usePriceAlerts } from '@/hooks/usePriceAlerts';
 import { useAccountEvents } from '@/hooks/useAccountEvents';
 import { cn, formatPrice } from '@/lib/utils';
@@ -62,6 +63,7 @@ export default function TradePage() {
   const { market, tickers } = useStore();
   // Watch TP/SL brackets and fire signed closing orders when triggers cross.
   useBrackets();
+  useConditionalOrders();
   // Watch price alerts and notify on crossings.
   usePriceAlerts();
   useAccountEvents();

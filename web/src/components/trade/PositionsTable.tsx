@@ -31,6 +31,8 @@ export default function PositionsTable() {
   const [slInput, setSlInput] = useState('');
   const [tpslSaving, setTpslSaving] = useState(false);
   const brackets = useStore((s) => s.brackets);
+  const conditionals = useStore((s) => s.conditionals);
+  const removeConditional = useStore((s) => s.removeConditional);
   const setBracket = useStore((s) => s.setBracket);
   const removeBracket = useStore((s) => s.removeBracket);
 
@@ -220,13 +222,16 @@ export default function PositionsTable() {
     }
   }, [orders, pendingOrders, address, removePendingOrder]);
 
+  const myConditionals = address
+    ? conditionals.filter((c) => c.owner.toLowerCase() === address.toLowerCase())
+    : [];
   const visiblePending = pendingOrders.filter(
     (p) => address && p.owner.toLowerCase() === address.toLowerCase() && (!hideOtherSymbols || p.market_id === market.id)
   );
 
   const TABS: { key: Tab; label: string; count?: number }[] = [
     { key: 'positions', label: 'Positions', count: filteredPositions.length },
-    { key: 'orders', label: 'Orders', count: filteredOrders.length },
+    { key: 'orders', label: 'Orders', count: filteredOrders.length + myConditionals.length },
     { key: 'trades', label: 'Trades' },
     { key: 'funding', label: 'Funding' },
     { key: 'history', label: 'History' },
@@ -459,7 +464,7 @@ export default function PositionsTable() {
         )}
 
         {tab === 'orders' && (
-          (filteredOrders.length > 0 || visiblePending.length > 0) ? (
+          (filteredOrders.length > 0 || visiblePending.length > 0 || myConditionals.length > 0) ? (
             <table className="w-full text-xs">
               <thead><tr className="text-dim text-[10px] border-b border-border">
                 <th className="text-left px-3 py-2 font-medium">Side</th>
@@ -469,6 +474,28 @@ export default function PositionsTable() {
                 <th className="text-right px-2 py-2 font-medium"></th>
               </tr></thead>
               <tbody>
+                {/* Armed conditional orders (client-side; fire while a tab is open) */}
+                {myConditionals.map((c) => {
+                  const kind = c.kind === 'stop' ? (c.limitPrice ? 'Stop-limit' : 'Stop') : c.kind === 'trailing' ? 'Trail' : 'TWAP';
+                  const when = c.kind === 'stop'
+                    ? `${c.isBuy ? '≥' : '≤'} ${c.triggerPrice}${c.limitPrice ? ` → ${c.limitPrice}` : ''}`
+                    : c.kind === 'trailing'
+                      ? `${c.trailPct}% from ${c.extreme ?? '—'}`
+                      : `${c.executed || 0}/${c.slices} slices`;
+                  return (
+                    <tr key={c.id} className="border-b border-border/30 bg-yellow/[0.04]" title="Armed in this browser: fires while a Mersennet Trade tab is open (silently with one-click, otherwise with a wallet popup).">
+                      <td className={cn('px-3 py-2.5 font-semibold', c.isBuy ? 'text-green' : 'text-red')}>
+                        {c.isBuy ? 'Buy' : 'Sell'} <span className="text-[10px] text-dim font-normal">{kind}{c.marketSymbol && c.marketId !== market.id ? ` · ${c.marketSymbol}` : ''}</span>
+                      </td>
+                      <td className="px-2 py-2.5 text-right text-foreground/70 font-mono tabular-nums text-[11px]">{when}</td>
+                      <td className="px-2 py-2.5 text-right text-foreground/70 font-mono tabular-nums">{c.size}</td>
+                      <td className="px-2 py-2.5 text-right text-dim text-[10px]">armed</td>
+                      <td className="px-2 py-2.5 text-right">
+                        <button onClick={() => removeConditional(c.id)} className="px-2 py-1 text-[10px] font-medium text-dim hover:text-red border border-border hover:border-red/40 rounded-md transition-colors">Cancel</button>
+                      </td>
+                    </tr>
+                  );
+                })}
                 {visiblePending.map((p) => (
                   <tr key={p.tempId} className="border-b border-border/30 bg-primary/[0.04]">
                     <td className={cn('px-3 py-2.5 font-semibold', p.side === 'buy' ? 'text-green' : 'text-red')}>

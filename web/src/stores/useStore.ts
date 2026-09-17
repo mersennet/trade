@@ -60,6 +60,40 @@ export interface PriceAlert {
   created: number;
 }
 
+/**
+ * A conditional order armed in this browser (stop, trailing stop, TWAP).
+ * Like brackets, it is watched and executed CLIENT-SIDE: the app follows the
+ * mark price (or the clock for TWAP) and submits a signed order when the
+ * condition is met — silently with the one-click session key, otherwise with
+ * a wallet confirmation. Persisted per wallet so a reload keeps it armed; it
+ * cannot fire while no tab is open, and the UI says so.
+ */
+export interface ConditionalOrder {
+  id: string;
+  owner: string;
+  marketId: number;
+  marketSymbol: string;
+  isBuy: boolean;
+  /** Human size (base units). For TWAP: the total. */
+  size: string;
+  kind: 'stop' | 'trailing' | 'twap';
+  /** stop: fires when mark crosses this (buy: mark >= trigger, sell: mark <= trigger). */
+  triggerPrice?: number;
+  /** stop: rest a GTC limit at this price when triggered instead of taking (stop-limit). */
+  limitPrice?: number | null;
+  /** trailing: distance in percent from the tracked extreme. */
+  trailPct?: number;
+  /** trailing: highest mark seen (sell) or lowest mark seen (buy) since armed. */
+  extreme?: number;
+  /** twap: number of slices, interval between them, how many have gone out, next due time. */
+  slices?: number;
+  intervalMs?: number;
+  executed?: number;
+  nextAt?: number;
+  reduceOnly?: boolean;
+  createdAt: number;
+}
+
 /** A TP/SL bracket on an open position. Brackets are watched and executed
  * CLIENT-SIDE (the chain has no server-side auto-execution since the auth
  * hardening): while the user's session is open, the app watches the mark
@@ -108,6 +142,8 @@ interface AppState {
   connectRequestTs: number;
   /** Client-side TP/SL brackets (persisted per wallet). */
   brackets: Bracket[];
+  /** Client-side conditional orders: stop, trailing stop, TWAP (persisted per wallet). */
+  conditionals: ConditionalOrder[];
   /** Notification center feed (persisted, capped at 50). */
   notifications: AppNotification[];
   /** Client-side price alerts (persisted). */
@@ -141,6 +177,9 @@ interface AppState {
   requestConnect: () => void;
   setBracket: (b: Bracket) => void;
   removeBracket: (id: string) => void;
+  addConditional: (c: ConditionalOrder) => void;
+  updateConditional: (id: string, patch: Partial<ConditionalOrder>) => void;
+  removeConditional: (id: string) => void;
   addNotification: (type: AppNotification['type'], title: string, message: string) => void;
   markAllRead: () => void;
   clearAllNotifications: () => void;
@@ -184,6 +223,7 @@ export const useStore = create<AppState>()(
       depositRequestTs: 0,
       connectRequestTs: 0,
       brackets: [],
+      conditionals: [],
       notifications: [],
       priceAlerts: [],
       wrongChain: false,
@@ -232,6 +272,11 @@ export const useStore = create<AppState>()(
         ],
       })),
       removeBracket: (id) => set((s) => ({ brackets: s.brackets.filter((x) => x.id !== id) })),
+      addConditional: (c) => set((s) => ({ conditionals: [...s.conditionals, c] })),
+      updateConditional: (id, patch) => set((s) => ({
+        conditionals: s.conditionals.map((x) => (x.id === id ? { ...x, ...patch } : x)),
+      })),
+      removeConditional: (id) => set((s) => ({ conditionals: s.conditionals.filter((x) => x.id !== id) })),
       addNotification: (type, title, message) => set((s) => ({
         notifications: [
           { id: `${Date.now()}-${Math.random()}`, type, title, message, timestamp: Date.now(), read: false },
@@ -258,6 +303,7 @@ export const useStore = create<AppState>()(
         slippage: state.slippage,
         paperMode: state.paperMode,
         brackets: state.brackets,
+        conditionals: state.conditionals,
         notifications: state.notifications,
         priceAlerts: state.priceAlerts,
       }),

@@ -9,10 +9,11 @@ import { getReferralCode } from '@/lib/referral';
 import { playSound } from '@/lib/sounds';
 import { useTranslation } from '@/i18n';
 import { loadViewingKey, submitShieldedOrder, toChainUnits } from '@/lib/shielded';
-// Stop / Trail / TWAP / Scale are intentionally NOT offered: their server-side
-// execution engines require signed orders and would silently never fire.
-// They return when client-side signed execution ships. TP/SL brackets and
-// Chase (both client-side signed) cover the protective use cases today.
+// Stop / Trailing / TWAP are client-side conditional orders (see
+// hooks/useConditionalOrders): armed here, watched in the browser, executed as
+// signed orders when they trigger — silently with one-click, otherwise with a
+// wallet popup at trigger time. Scale places its ladder immediately. Spot
+// keeps Limit / Market only.
 
 const LEVERAGE_PRESETS = [1, 2, 5, 10, 25, 50];
 const SIZE_PRESETS = [25, 50, 75, 100];
@@ -21,6 +22,20 @@ const SPOT_ORDER_TYPES = [
   { value: 'limit', tKey: 'trade.limit', fallback: 'Limit' },
   { value: 'market', tKey: 'trade.market', fallback: 'Market' },
 ] as const;
+const PERP_ORDER_TYPES = [
+  ...SPOT_ORDER_TYPES,
+  { value: 'stop', tKey: 'trade.stop', fallback: 'Stop' },
+  { value: 'trailing', tKey: 'trade.trailing', fallback: 'Trail' },
+  { value: 'scale', tKey: 'trade.scale', fallback: 'Scale' },
+  { value: 'twap', tKey: 'trade.twap', fallback: 'TWAP' },
+] as const;
+const TWAP_DURATIONS: Array<{ value: string; label: string; ms: number }> = [
+  { value: '5m', label: '5 min', ms: 5 * 60_000 },
+  { value: '15m', label: '15 min', ms: 15 * 60_000 },
+  { value: '1h', label: '1 hour', ms: 60 * 60_000 },
+  { value: '4h', label: '4 hours', ms: 4 * 60 * 60_000 },
+];
+const CONDITIONAL_TYPES = new Set(['stop', 'trailing', 'twap']);
 
 export default function TradeForm() {
   const { market, trade, setTrade, skipConfirm, marginMode, setMarginMode, tickers, positions, oneClickEnabled, sessionKey } = useStore();
@@ -48,6 +63,15 @@ export default function TradeForm() {
   const [chase, setChase] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [chaseId, setChaseId] = useState<string | null>(null);
+  // Conditional / ladder inputs (kept out of the persisted trade slice).
+  const [triggerPrice, setTriggerPrice] = useState('');
+  const [stopLimit, setStopLimit] = useState(false);
+  const [trailPct, setTrailPct] = useState('2');
+  const [scaleFrom, setScaleFrom] = useState('');
+  const [scaleTo, setScaleTo] = useState('');
+  const [scaleCount, setScaleCount] = useState('5');
+  const [twapDuration, setTwapDuration] = useState('15m');
+  const [twapSlices, setTwapSlices] = useState('10');
   const [chaseReprices, setChaseReprices] = useState(0);
   const currentPosition = useMemo(() => {
     return positions.find((p) => p.marketId === market.id);
@@ -74,9 +98,16 @@ export default function TradeForm() {
 
   const orderSummary = useMemo(() => {
     const ticker = tickers[market.id];
-    const price = trade.orderType === 'market'
-      ? (ticker?.markPrice || 0)
-      : parseFloat(trade.price) || 0;
+    // Reference price for the ticket: limit → entered price; stop → trigger
+    // (or its limit); scale → midpoint of the ladder; market/trailing/TWAP →
+    // current mark.
+    const price = trade.orderType === 'limit'
+      ? parseFloat(trade.price) || 0
+      : trade.orderType === 'stop'
+        ? (stopLimit ? parseFloat(trade.price) : parseFloat(triggerPrice)) || 0
+        : trade.orderType === 'scale'
+          ? ((parseFloat(scaleFrom) || 0) + (parseFloat(scaleTo) || 0)) / 2
+          : (ticker?.markPrice || 0);
     const size = parseFloat(trade.size) || 0;
     if (!price || !size) return null;
 
@@ -89,10 +120,11 @@ export default function TradeForm() {
     const liquidationPrice = trade.side === 'buy'
       ? Math.max(0, price - liqDistance)
       : price + liqDistance;
-    const fee = feesCharged ? notional * (trade.orderType === 'market' ? feeRates.taker : feeRates.maker) : 0;
+    const takes = trade.orderType === 'market' || trade.orderType === 'trailing' || trade.orderType === 'twap' || (trade.orderType === 'stop' && !stopLimit);
+    const fee = feesCharged ? notional * (takes ? feeRates.taker : feeRates.maker) : 0;
 
     return { notional, marginRequired, liquidationPrice, fee };
-  }, [tickers, market.id, trade, feeRates, feesCharged]);
+  }, [tickers, market.id, trade, feeRates, feesCharged, stopLimit, triggerPrice, scaleFrom, scaleTo]);
 
   const calcSize = () => {
     const r = parseFloat(riskPct) / 100;
@@ -115,6 +147,27 @@ export default function TradeForm() {
     }
     if (!trade.size) {
       toast('Enter a size', 'error');
+      return;
+    }
+    if (trade.orderType === 'stop' && !(Number(triggerPrice) > 0)) {
+      toast('Enter a trigger price', 'error');
+      return;
+    }
+    if (trade.orderType === 'stop' && stopLimit && !(Number(trade.price) > 0)) {
+      toast('Enter the limit price to rest at once triggered', 'error');
+      return;
+    }
+    if (trade.orderType === 'trailing' && !(Number(trailPct) > 0 && Number(trailPct) < 50)) {
+      toast('Trail distance must be between 0 and 50%', 'error');
+      return;
+    }
+    if (trade.orderType === 'scale') {
+      const a = Number(scaleFrom), b = Number(scaleTo), n = Number(scaleCount);
+      if (!(a > 0 && b > 0) || a === b) { toast('Enter a price range for the ladder', 'error'); return; }
+      if (!(n >= 2 && n <= 20)) { toast('Ladder size must be between 2 and 20 orders', 'error'); return; }
+    }
+    if (trade.orderType === 'twap' && !(Number(twapSlices) >= 2 && Number(twapSlices) <= 100)) {
+      toast('TWAP needs between 2 and 100 slices', 'error');
       return;
     }
 
@@ -248,14 +301,70 @@ export default function TradeForm() {
       // referrer is credited — this is the only signal the API records.
       const builderCode = getReferralCode() || undefined;
 
-      if (trade.orderType !== 'limit' && trade.orderType !== 'market') {
-        // Defensive: a stale persisted orderType (stop/trail/twap/scale from an
-        // older session) must never reach the server-side engines, which cannot
-        // execute unsigned orders. Reset to limit and tell the user plainly.
-        setTrade({ orderType: 'limit' as never });
-        throw new Error(
-          `${trade.orderType.toUpperCase()} orders are disabled until signed execution ships — use TP/SL brackets or Chase instead.`,
-        );
+      if (CONDITIONAL_TYPES.has(trade.orderType)) {
+        // Arm a client-side conditional order. Nothing touches the chain until
+        // the condition is met; the watcher (useConditionalOrders) then signs
+        // the order — silently with one-click, otherwise with a wallet popup.
+        const id = `${trade.orderType}-${market.id}-${Date.now()}`;
+        const isBuy = trade.side === 'buy';
+        const base = { id, owner: walletAddress, marketId: market.id, marketSymbol: market.symbol, isBuy, size: trade.size, createdAt: Date.now() };
+        if (trade.orderType === 'stop') {
+          const trig = Number(triggerPrice);
+          const mark = tickers[market.id]?.markPrice || 0;
+          if (mark && (isBuy ? trig <= mark : trig >= mark)) {
+            throw new Error(`A ${isBuy ? 'buy' : 'sell'} stop must be ${isBuy ? 'above' : 'below'} the current mark (${mark}) — use a limit order for the other direction.`);
+          }
+          useStore.getState().addConditional({ ...base, kind: 'stop', triggerPrice: trig, limitPrice: stopLimit ? Number(trade.price) : null });
+          toast(`${stopLimit ? 'Stop-limit' : 'Stop'} armed on ${market.symbol}: ${isBuy ? 'buy' : 'sell'} ${trade.size} when mark ${isBuy ? '≥' : '≤'} ${trig}`, 'success');
+        } else if (trade.orderType === 'trailing') {
+          useStore.getState().addConditional({ ...base, kind: 'trailing', trailPct: Number(trailPct) });
+          toast(`Trailing stop armed on ${market.symbol}: ${isBuy ? 'buy' : 'sell'} ${trade.size} after a ${trailPct}% retrace`, 'success');
+        } else {
+          const d = TWAP_DURATIONS.find((x) => x.value === twapDuration) || TWAP_DURATIONS[1];
+          const slices = Math.floor(Number(twapSlices));
+          useStore.getState().addConditional({ ...base, kind: 'twap', slices, intervalMs: Math.floor(d.ms / slices), executed: 0, nextAt: Date.now() });
+          toast(`TWAP started on ${market.symbol}: ${trade.size} in ${slices} slices over ${d.label}${useOneClick ? '' : ' — each slice asks for a wallet signature; enable one-click to run silently'}`, 'success');
+        }
+        if (!useOneClick) {
+          useStore.getState().addNotification('info', 'Conditional order armed', 'Orders arm in this browser and fire while a Mersennet Trade tab is open. Enable one-click trading in Settings so they fire without a wallet popup.');
+        }
+        setTrade({ size: '' });
+        setTriggerPrice('');
+        return;
+      }
+      if (trade.orderType === 'scale') {
+        // Ladder: N limit orders spread evenly across [from, to], placed now.
+        const { placeOrderOnChain } = await import('@/lib/orderSigning');
+        const a = Number(scaleFrom), b = Number(scaleTo), n = Math.floor(Number(scaleCount));
+        const lo = Math.min(a, b), hi = Math.max(a, b);
+        const step = (hi - lo) / (n - 1);
+        const total = Number(trade.size);
+        const per = Number((total / n).toFixed(8));
+        if (!useOneClick) toast(`Placing ${n} orders — your wallet will ask ${n} times (enable one-click to skip)`, 'info');
+        let placed = 0;
+        for (let i = 0; i < n; i++) {
+          const px = Math.round(lo + step * i); // integer ticks on the CLOB
+          try {
+            await placeOrderOnChain(provider, {
+              marketId: market.id,
+              isBuy: trade.side === 'buy',
+              priceUsd: String(px),
+              sizeBase: String(i === n - 1 ? Number((total - per * (n - 1)).toFixed(8)) : per),
+              tif: 'Gtc',
+              maker: postOnly ? { postOnly: true } : undefined,
+              sessionKey: useOneClick ? sessionKey || undefined : undefined,
+            });
+            placed++;
+          } catch (e) {
+            const msg = (e as Error).message || '';
+            if (/user (rejected|denied)/i.test(msg)) break;
+            toast(`Ladder level ${px} failed: ${msg}`, 'error');
+          }
+        }
+        toast(`Scale order: ${placed}/${n} limit orders resting between ${lo} and ${hi}`, placed === n ? 'success' : 'info');
+        if (placed > 0 && useStore.getState().soundEnabled) playSound('fill');
+        setTrade({ size: '' });
+        return;
       }
       {
         // Limit / market orders are signed by the wallet and sent straight to
@@ -405,11 +514,20 @@ export default function TradeForm() {
               </div>
               <div className="flex justify-between">
                 <span className="text-dim">Type</span>
-                <span className="text-foreground capitalize">{trade.orderType}{trade.orderType !== 'market' ? ` · ${trade.tif.toUpperCase()}` : ' · IOC'}</span>
+                <span className="text-foreground capitalize">
+                  {trade.orderType === 'stop' ? (stopLimit ? 'Stop-limit' : 'Stop') : trade.orderType === 'trailing' ? 'Trailing stop' : trade.orderType}
+                  {trade.orderType === 'limit' ? ` · ${trade.tif.toUpperCase()}` : trade.orderType === 'market' ? ' · IOC' : trade.orderType === 'scale' ? ` · ${scaleCount} × GTC` : trade.orderType === 'twap' ? ` · ${twapSlices} slices / ${TWAP_DURATIONS.find((d) => d.value === twapDuration)?.label}` : ' · client-side trigger'}
+                </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-dim">Price</span>
-                <span className="text-foreground">{trade.orderType === 'market' ? 'Market' : trade.price}</span>
+                <span className="text-dim">{trade.orderType === 'stop' ? 'Trigger' : trade.orderType === 'trailing' ? 'Trail' : trade.orderType === 'scale' ? 'Range' : 'Price'}</span>
+                <span className="text-foreground">
+                  {trade.orderType === 'market' || trade.orderType === 'twap' ? 'Market'
+                    : trade.orderType === 'stop' ? `${triggerPrice}${stopLimit ? ` → limit ${trade.price}` : ' → market'}`
+                    : trade.orderType === 'trailing' ? `${trailPct}% from extreme`
+                    : trade.orderType === 'scale' ? `${scaleFrom} – ${scaleTo}`
+                    : trade.price}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-dim">Size</span>
@@ -495,12 +613,11 @@ export default function TradeForm() {
         </div>
       )}
 
-      {/* Order type — Limit and Market. Advanced server-triggered types
-          (Stop / Trail / TWAP / Scale) are withheld until they execute with
-          signed orders; use TP/SL brackets and Chase for protection today. */}
+      {/* Order type. Stop / Trail / TWAP arm client-side and fire as signed
+          orders; Scale places its ladder now. Spot keeps Limit / Market. */}
       <div className="relative">
         <div className="flex gap-px bg-background rounded-md border border-border overflow-hidden">
-          {SPOT_ORDER_TYPES.map((ot) => (
+          {(isSpot ? SPOT_ORDER_TYPES : PERP_ORDER_TYPES).map((ot) => (
             <button
               key={ot.value}
               onClick={() => setTrade({ orderType: ot.value as never })}
@@ -542,6 +659,86 @@ export default function TradeForm() {
         <div className="flex items-center px-3 py-2.5 bg-surface-2 border border-border rounded-lg">
           <span className="text-[11px] text-dim">{t('trade.price', 'Price')}</span>
           <span className="ml-auto text-sm font-mono text-foreground/60">{t('trade.market', 'Market')}</span>
+        </div>
+      )}
+      {trade.orderType === 'stop' && (
+        <div className="space-y-2">
+          <div>
+            <label className="label-caps mb-1.5 flex justify-between"><span>Trigger price</span><span>{market.quote}</span></label>
+            <input type="number" value={triggerPrice} aria-label={`Trigger price (${market.quote})`} onChange={(e) => setTriggerPrice(e.target.value)}
+              placeholder={tickers[market.id]?.markPrice ? String(tickers[market.id].markPrice) : '0.00'}
+              className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-dim font-mono outline-none focus:border-primary/60 transition-all" />
+          </div>
+          <label className="flex items-center gap-2 text-[11px] text-muted cursor-pointer">
+            <input type="checkbox" checked={stopLimit} onChange={(e) => setStopLimit(e.target.checked)} className="accent-primary" />
+            Stop-limit: rest a limit order at a price once triggered (default takes the market)
+          </label>
+          {stopLimit && (
+            <input type="number" value={trade.price} aria-label={`Limit price (${market.quote})`} onChange={(e) => setTrade({ price: e.target.value })} placeholder={`Limit price (${market.quote})`}
+              className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-dim font-mono outline-none focus:border-primary/60 transition-all" />
+          )}
+          <p className="text-[10px] text-dim leading-relaxed">
+            {trade.side === 'buy' ? 'Fires when the mark rises to the trigger' : 'Fires when the mark falls to the trigger'} — watched in this browser, signed by {oneClickEnabled && sessionKey ? 'your one-click key' : 'your wallet (a popup at trigger time; enable one-click to skip it)'}.
+          </p>
+        </div>
+      )}
+      {trade.orderType === 'trailing' && (
+        <div className="space-y-2">
+          <div>
+            <label className="label-caps mb-1.5 flex justify-between"><span>Trail distance</span><span>%</span></label>
+            <div className="flex gap-1">
+              <input type="number" value={trailPct} aria-label="Trail distance (%)" onChange={(e) => setTrailPct(e.target.value)} step="0.5" min="0.1" max="49"
+                className="flex-1 bg-surface-3 border border-border rounded-lg px-3 py-2.5 text-sm text-foreground font-mono outline-none focus:border-primary/60 transition-all" />
+              {['1', '2', '5'].map((v) => (
+                <button key={v} onClick={() => setTrailPct(v)} className={cn('px-2.5 text-[11px] font-mono rounded-lg border transition-colors', trailPct === v ? 'border-primary/60 text-foreground' : 'border-border text-dim hover:text-foreground')}>{v}%</button>
+              ))}
+            </div>
+          </div>
+          <p className="text-[10px] text-dim leading-relaxed">
+            {trade.side === 'buy'
+              ? `Tracks the lowest mark since armed and buys when the mark bounces ${trailPct || '…'}% above it`
+              : `Tracks the highest mark since armed and sells when the mark drops ${trailPct || '…'}% below it`} — watched in this browser while a tab is open.
+          </p>
+        </div>
+      )}
+      {trade.orderType === 'scale' && (
+        <div className="space-y-2">
+          <div className="grid grid-cols-3 gap-1.5">
+            <div>
+              <label className="label-caps mb-1.5 block">From</label>
+              <input type="number" value={scaleFrom} aria-label="Ladder start price" onChange={(e) => setScaleFrom(e.target.value)} placeholder="0" className="w-full bg-surface-3 border border-border rounded-lg px-2.5 py-2.5 text-sm text-foreground placeholder:text-dim font-mono outline-none focus:border-primary/60" />
+            </div>
+            <div>
+              <label className="label-caps mb-1.5 block">To</label>
+              <input type="number" value={scaleTo} aria-label="Ladder end price" onChange={(e) => setScaleTo(e.target.value)} placeholder="0" className="w-full bg-surface-3 border border-border rounded-lg px-2.5 py-2.5 text-sm text-foreground placeholder:text-dim font-mono outline-none focus:border-primary/60" />
+            </div>
+            <div>
+              <label className="label-caps mb-1.5 block">Orders</label>
+              <input type="number" value={scaleCount} aria-label="Number of ladder orders" onChange={(e) => setScaleCount(e.target.value)} min="2" max="20" className="w-full bg-surface-3 border border-border rounded-lg px-2.5 py-2.5 text-sm text-foreground font-mono outline-none focus:border-primary/60" />
+            </div>
+          </div>
+          <p className="text-[10px] text-dim leading-relaxed">
+            Places {scaleCount || 'N'} resting limit orders spread evenly across the range, the total size split equally. Placed now, on-chain{oneClickEnabled && sessionKey ? '' : ' — one wallet confirmation per order without one-click'}.
+          </p>
+        </div>
+      )}
+      {trade.orderType === 'twap' && (
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-1.5">
+            <div>
+              <label className="label-caps mb-1.5 block">Duration</label>
+              <select value={twapDuration} onChange={(e) => setTwapDuration(e.target.value)} aria-label="TWAP duration" className="w-full bg-surface-3 border border-border rounded-lg px-2.5 py-2.5 text-sm text-foreground font-mono outline-none focus:border-primary/60">
+                {TWAP_DURATIONS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label-caps mb-1.5 block">Slices</label>
+              <input type="number" value={twapSlices} aria-label="TWAP slices" onChange={(e) => setTwapSlices(e.target.value)} min="2" max="100" className="w-full bg-surface-3 border border-border rounded-lg px-2.5 py-2.5 text-sm text-foreground font-mono outline-none focus:border-primary/60" />
+            </div>
+          </div>
+          <p className="text-[10px] text-dim leading-relaxed">
+            Splits the size into {twapSlices || 'N'} market orders, one every {(() => { const d = TWAP_DURATIONS.find((x) => x.value === twapDuration); const n = Number(twapSlices) || 1; return d ? `${Math.max(1, Math.round(d.ms / n / 1000))} s` : '…'; })()} while this tab is open{oneClickEnabled && sessionKey ? '' : ' — each slice asks for a wallet signature without one-click'}.
+          </p>
         </div>
       )}
 
