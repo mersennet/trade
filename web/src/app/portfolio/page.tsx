@@ -3,7 +3,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { cn, formatNumber, formatPrice } from '@/lib/utils';
 import { useToast } from '@/components/shared/Toast';
 import { useWallet } from '@/hooks/useWallet';
-import { api, type PortfolioMarginData, type TraderProfile } from '@/lib/api';
+import { api, type PortfolioMarginData, type TraderProfile, type Market, type Ticker } from '@/lib/api';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useStore } from '@/stores/useStore';
 import TokenLogo from '@/components/TokenLogo';
 import EmptyState, { SkeletonRows } from '@/components/shared/EmptyState';
@@ -97,26 +99,27 @@ export default function PortfolioPage() {
 
   if (!isConnected) {
     return (
-      <div className="page-shell">
-        <header className="mb-6">
+      <div className="page-shell space-y-4">
+        <header className="mb-2">
           <h1 className="page-title">Portfolio</h1>
           <p className="page-sub">Unified view of positions, collateral, and margin</p>
         </header>
-        <div className="bg-surface border border-border rounded-xl p-10 text-center">
-          <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-surface-2 flex items-center justify-center">
-            <svg className="w-6 h-6 text-dim" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v3" />
-            </svg>
+        <div className="bg-surface border border-border rounded-xl p-6 md:p-8 flex flex-col md:flex-row items-start md:items-center gap-5">
+          <div className="flex-1">
+            <p className="text-sm text-foreground font-semibold">Connect a wallet to see your portfolio</p>
+            <p className="text-xs text-dim mt-1 leading-relaxed">
+              Equity, unrealized PnL, margin usage, open positions and orders, collateral by asset and your equity curve — all read from the chain.
+              New here? <Link href="/faucet" className="text-primary hover:underline">Claim testnet MRSN</Link>, deposit it as collateral from the account panel, and place a first order on <Link href="/trade" className="text-primary hover:underline">Trade</Link>.
+            </p>
           </div>
-          <p className="text-sm text-foreground mb-0.5">Connect your wallet</p>
-          <p className="text-xs text-dim">Your positions, collateral, and margin will appear here</p>
           <button
             onClick={() => { connect().catch(() => {}); }}
-            className="mt-4 px-5 h-8 premium-gradient text-black rounded-lg text-[11.5px] font-semibold transition-all hover:brightness-110"
+            className="px-5 h-9 premium-gradient text-black rounded-lg text-[11.5px] font-semibold transition-all hover:brightness-110 shrink-0"
           >
             Connect Wallet
           </button>
         </div>
+        <PortfolioPreview />
       </div>
     );
   }
@@ -333,6 +336,69 @@ function Row({ label, labelClass, value, valueClass }: { label: string; labelCla
     <div className="flex items-center justify-between text-xs">
       <span className={cn('text-muted', labelClass)}>{label}</span>
       <span className={cn('font-mono tabular-nums text-foreground', valueClass)}>{value}</span>
+    </div>
+  );
+}
+
+
+/**
+ * What the page shows before a wallet is connected: the live markets a
+ * portfolio would hold (real mark prices, funding, open interest), so the
+ * page is never a blank prompt. Nothing here pretends to be the visitor's.
+ */
+function PortfolioPreview() {
+  const router = useRouter();
+  const setMarket = useStore((s) => s.setMarket);
+  const [markets, setMarkets] = useState<Market[]>([]);
+  const [tickers, setTickers] = useState<Record<number, Ticker>>({});
+  useEffect(() => {
+    api.getMarkets().then((r) => setMarkets(r.markets || [])).catch(() => {});
+  }, []);
+  useEffect(() => {
+    if (markets.length === 0) return;
+    const load = () => Promise.all(markets.map((m) => api.getTicker(m.id).then((t) => [m.id, t] as const).catch(() => null)))
+      .then((rows) => setTickers(Object.fromEntries(rows.filter((x): x is readonly [number, Ticker] => !!x))));
+    load();
+    return startPoll(load, 10_000);
+  }, [markets]);
+  if (markets.length === 0) return null;
+  const totalOi = Object.values(tickers).reduce((a, t) => a + (t.openInterest || 0), 0);
+  return (
+    <div className="bg-surface border border-border rounded-xl overflow-hidden" data-testid="portfolio-preview">
+      <div className="px-4 py-2.5 border-b border-border flex items-center justify-between">
+        <h3 className="text-[11px] font-semibold text-foreground uppercase tracking-wider">Live markets</h3>
+        <span className="text-[10px] text-dim font-mono">{markets.length} perps · open interest {formatNumber(totalOi, 0)} · live</span>
+      </div>
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-dim text-[10px] uppercase tracking-wider border-b border-border">
+            <th className="text-left px-4 py-2 font-medium">Market</th>
+            <th className="text-right px-4 py-2 font-medium">Mark</th>
+            <th className="text-right px-4 py-2 font-medium hidden md:table-cell">24h</th>
+            <th className="text-right px-4 py-2 font-medium hidden md:table-cell">Funding / 8h</th>
+            <th className="text-right px-4 py-2 font-medium">Max lev.</th>
+            <th className="text-right px-4 py-2 font-medium"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {markets.map((m) => {
+            const t = tickers[m.id];
+            const chg = t?.change24h ?? 0;
+            return (
+              <tr key={m.id} className="border-b border-border/40 last:border-0 hover:bg-surface-2/40">
+                <td className="px-4 py-2.5 font-mono text-foreground">{m.symbol}</td>
+                <td className="px-4 py-2.5 text-right font-mono tabular-nums text-foreground">{t ? formatPrice(t.markPrice) : '—'}</td>
+                <td className={cn('px-4 py-2.5 text-right font-mono tabular-nums hidden md:table-cell', chg >= 0 ? 'text-green' : 'text-red')}>{t ? `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%` : '—'}</td>
+                <td className="px-4 py-2.5 text-right font-mono tabular-nums text-foreground/70 hidden md:table-cell">{(m.fundingRate * 100).toFixed(4)}%</td>
+                <td className="px-4 py-2.5 text-right font-mono text-foreground/70">{m.maxLeverage}×</td>
+                <td className="px-4 py-2.5 text-right">
+                  <button onClick={() => { setMarket(m); router.push('/trade'); }} className="text-[10px] uppercase tracking-wider text-primary hover:underline">Trade</button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }

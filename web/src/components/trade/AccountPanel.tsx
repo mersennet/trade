@@ -13,7 +13,6 @@ import {
   depositTokenToVault, withdrawTokenFromVault,
   type CollateralAsset,
 } from '@/lib/vault';
-import EmptyState from '@/components/shared/EmptyState';
 import { startPoll } from '@/lib/poll';
 
 export default function AccountPanel() {
@@ -120,14 +119,23 @@ export default function AccountPanel() {
   }, [positions, collateral, balance]);
 
   if (!isConnected) {
+    // A preview of what the panel holds, and the three steps to get there,
+    // instead of a blank prompt.
     return (
       <div className="bg-surface border border-border rounded-xl md:border-0 md:rounded-none p-3 shrink-0">
-        <h3 className="text-[11px] text-dim font-medium uppercase tracking-wider mb-1">Account</h3>
-        <EmptyState
-          label="Wallet not connected"
-          hint="Connect to view equity, margin and balances"
-          compact
-        />
+        <h3 className="text-[11px] text-dim font-medium uppercase tracking-wider mb-2">Account</h3>
+        <div className="space-y-1.5 opacity-60 select-none" aria-hidden>
+          {[['Equity', '— MRSN'], ['Unrealized PnL', '—'], ['Margin used', '—'], ['Available', '—']].map(([k, v]) => (
+            <div key={k} className="flex items-center justify-between"><span className="text-[11px] text-dim">{k}</span><span className="text-xs font-mono text-foreground/60">{v}</span></div>
+          ))}
+        </div>
+        <div className="mt-3 pt-3 border-t border-border/60 space-y-1.5">
+          <p className="text-[11px] text-muted leading-relaxed">Testnet MRSN is free. Connect, claim from the faucet, deposit as collateral, trade.</p>
+          <div className="flex gap-1.5">
+            <button onClick={() => useStore.getState().requestConnect()} className="flex-1 py-1.5 text-[10px] font-semibold uppercase tracking-wider bg-primary text-[#02120a] rounded-md">Connect</button>
+            <a href="/faucet" className="flex-1 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-center border border-border rounded-md text-foreground hover:border-primary/40">Faucet</a>
+          </div>
+        </div>
       </div>
     );
   }
