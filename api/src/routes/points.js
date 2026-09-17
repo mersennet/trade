@@ -3,6 +3,41 @@ const pool = require('../db/pool');
 
 const router = Router();
 
+/**
+ * GET /api/v1/points/sprint — the weekly sprint: current standings (this
+ * week's taker volume, Monday 00:00 UTC to now, real traders only), prizes,
+ * time to the next award, and the last week's winners.
+ */
+router.get('/sprint', async (req, res) => {
+  try {
+    const now = new Date();
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    start.setUTCDate(start.getUTCDate() - ((start.getUTCDay() + 6) % 7)); // this week's Monday 00:00 UTC
+    const end = new Date(start.getTime() + 7 * 86_400_000);
+    const [standings, last] = await Promise.all([
+      pool.query(
+        `SELECT LOWER(taker) AS address, SUM(price * size)::float8 AS volume, COUNT(*)::int AS trades
+           FROM trades
+          WHERE taker IS NOT NULL AND block_timestamp >= $1
+            AND LOWER(taker) NOT LIKE '0x00000000000000000000000000000000000000%'
+            AND LOWER(taker) NOT IN (SELECT address FROM excluded_addresses)
+          GROUP BY LOWER(taker) ORDER BY volume DESC LIMIT 10`,
+        [start.toISOString()]
+      ).catch(() => ({ rows: [] })),
+      pool.query(`SELECT week_start, address, rank, volume::float8 AS volume, points::float8 AS points FROM weekly_sprint_awards WHERE address <> 'none' ORDER BY week_start DESC, rank ASC LIMIT 3`).catch(() => ({ rows: [] })),
+    ]);
+    res.json({
+      weekStart: start.toISOString(),
+      awardAt: end.toISOString(),
+      prizes: [3000, 2000, 1000],
+      standings: standings.rows.map((r, i) => ({ rank: i + 1, address: r.address, volume: Number(r.volume), trades: r.trades })),
+      lastWinners: last.rows,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.get('/:address', async (req, res) => {
   try {
     const addr = req.params.address.toLowerCase();
@@ -77,41 +112,6 @@ router.get('/leaderboard/season/:season', async (req, res) => {
         bonusPoints: Number(r.bonus_points),
         tier: r.tier,
       })),
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-/**
- * GET /api/v1/points/sprint — the weekly sprint: current standings (this
- * week's taker volume, Monday 00:00 UTC to now, real traders only), prizes,
- * time to the next award, and the last week's winners.
- */
-router.get('/sprint', async (req, res) => {
-  try {
-    const now = new Date();
-    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-    start.setUTCDate(start.getUTCDate() - ((start.getUTCDay() + 6) % 7)); // this week's Monday 00:00 UTC
-    const end = new Date(start.getTime() + 7 * 86_400_000);
-    const [standings, last] = await Promise.all([
-      pool.query(
-        `SELECT LOWER(taker) AS address, SUM(price * size)::float8 AS volume, COUNT(*)::int AS trades
-           FROM trades
-          WHERE taker IS NOT NULL AND block_timestamp >= $1
-            AND LOWER(taker) NOT LIKE '0x00000000000000000000000000000000000000%'
-            AND LOWER(taker) NOT IN (SELECT address FROM excluded_addresses)
-          GROUP BY LOWER(taker) ORDER BY volume DESC LIMIT 10`,
-        [start.toISOString()]
-      ).catch(() => ({ rows: [] })),
-      pool.query(`SELECT week_start, address, rank, volume::float8 AS volume, points::float8 AS points FROM weekly_sprint_awards WHERE address <> 'none' ORDER BY week_start DESC, rank ASC LIMIT 3`).catch(() => ({ rows: [] })),
-    ]);
-    res.json({
-      weekStart: start.toISOString(),
-      awardAt: end.toISOString(),
-      prizes: [3000, 2000, 1000],
-      standings: standings.rows.map((r, i) => ({ rank: i + 1, address: r.address, volume: Number(r.volume), trades: r.trades })),
-      lastWinners: last.rows,
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
