@@ -13,6 +13,11 @@ export interface Announcement {
 // never rotates (motion on a trading screen costs attention). Newest first.
 export const ANNOUNCEMENTS: Announcement[] = [
   {
+    id: 'vault-oneclick-2026-09-17',
+    text: 'New: the maker vault is live — pool MRSN behind the market maker and earn LP points. On 19 Sep (block 1,569,600) one-click trading moves to agent keys and MRSN, SOL and ARB switch to $0.01 ticks.',
+    link: { href: '/vault', label: 'Open the vault' },
+  },
+  {
     id: 'validators-open-2026-09',
     text: 'The validator set is open — run a node in one command, bond 1,000 MRSN and produce blocks from the next epoch. Node runners earn 500 points a day.',
     link: { href: '/staking', label: 'Become a validator' },
