@@ -58,8 +58,13 @@ const dataCache = {
 };
 
 function setupWebSocket(server) {
-  const wss = new WebSocket.Server({ server, path: '/ws' });
+  // Frames are tiny control messages; 16 KiB is generous. Without a cap the
+  // library accepts 100 MiB frames, i.e. one client could take the heap.
+  const wss = new WebSocket.Server({ server, path: '/ws', maxPayload: 16 * 1024 });
   const subscriptions = new Map();
+  const MAX_CONNECTIONS = Number(process.env.WS_MAX_CONNECTIONS || 5000);
+  const MAX_CHANNELS_PER_CLIENT = 64;
+  wss.on('error', (e) => console.error('[ws] server error:', e.message));
   let chainWs = null;
   let reconnectTimer = null;
   let heartbeatTimer = null;
@@ -298,6 +303,12 @@ function setupWebSocket(server) {
   }
 
   wss.on('connection', (ws) => {
+    // A socket error with no listener would throw and take the API down.
+    ws.on('error', (e) => { if (e && e.code !== 'ECONNRESET') console.error('[ws] client error:', e.message); });
+    if (wss.clients.size > MAX_CONNECTIONS) {
+      try { ws.close(1013, 'Try again later'); } catch (_) {}
+      return;
+    }
     ws._isAlive = true;
     subscriptions.set(ws, new Set());
 
@@ -310,8 +321,12 @@ function setupWebSocket(server) {
         if (!channels) return;
 
         if (msg.action === 'subscribe' && msg.channel) {
-          if (!VALID_CHANNELS.test(msg.channel)) {
+          if (typeof msg.channel !== 'string' || !VALID_CHANNELS.test(msg.channel)) {
             ws.send(JSON.stringify({ type: 'error', message: 'Invalid channel' }));
+            return;
+          }
+          if (channels.size >= MAX_CHANNELS_PER_CLIENT && !channels.has(msg.channel)) {
+            ws.send(JSON.stringify({ type: 'error', message: `At most ${MAX_CHANNELS_PER_CLIENT} channels per connection` }));
             return;
           }
           channels.add(msg.channel);

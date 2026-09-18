@@ -16,6 +16,7 @@ const { createHash } = require('node:crypto');
 const { ethers } = require('ethers');
 const pool = require('../db/pool');
 const { whoami } = require('../services/nodeProbe');
+const { sendError } = require('../middleware/httpError');
 
 const router = express.Router();
 const SEASON = 1;
@@ -212,7 +213,7 @@ router.get('/verified', async (_req, res) => {
       latest_sha: latest,
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'nodes');
   }
 });
 
@@ -237,7 +238,7 @@ router.get('/mine/:wallet', async (req, res) => {
       message: verificationMessage('<host>', req.params.wallet),
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'nodes');
   }
 });
 

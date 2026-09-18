@@ -2,6 +2,7 @@ const { Router } = require('express');
 const pool = require('../db/pool');
 const chain = require('../services/chain');
 const { FEE_TIERS, FEES_CHARGED } = require('../services/feeTiers');
+const { sendError } = require('../middleware/httpError');
 
 const router = Router();
 
@@ -89,7 +90,7 @@ async function handleStats(req, res) {
       timestamp: Date.now(),
     });
   } catch (e) {
-    return res.status(500).json({ error: e.message });
+    return sendError(res, e, 'stats');
   }
 }
 
@@ -101,7 +102,7 @@ router.get('/balance/:address', async (req, res) => {
     const balance = await chain.getBalance(req.params.address);
     res.json({ balance, timestamp: Date.now() });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'stats');
   }
 });
 
@@ -110,7 +111,7 @@ router.get('/block', async (req, res) => {
     const block = await chain.getBlockNumber();
     res.json({ blockNumber: block, timestamp: Date.now() });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'stats');
   }
 });
 

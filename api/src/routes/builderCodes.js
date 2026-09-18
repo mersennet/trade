@@ -2,6 +2,7 @@ const { Router } = require('express');
 const pool = require('../db/pool');
 const { strictLimiter } = require('../middleware/rateLimit');
 const crypto = require('crypto');
+const { sendError } = require('../middleware/httpError');
 
 const router = Router();
 
@@ -13,7 +14,7 @@ router.get('/', async (req, res) => {
     );
     res.json({ codes: result.rows });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'builderCodes');
   }
 });
 
@@ -23,7 +24,7 @@ router.get('/:code', async (req, res) => {
     if (!result.rows[0]) return res.status(404).json({ error: 'Builder code not found' });
     res.json(result.rows[0]);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'builderCodes');
   }
 });
 
@@ -34,7 +35,7 @@ router.get('/owner/:address', async (req, res) => {
     );
     res.json({ codes: result.rows });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'builderCodes');
   }
 });
 
@@ -55,7 +56,7 @@ router.post('/', strictLimiter, async (req, res) => {
 
     res.json({ code: builderCode, owner: owner.toLowerCase(), timestamp: Date.now() });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'builderCodes');
   }
 });
 

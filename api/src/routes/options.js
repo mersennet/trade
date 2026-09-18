@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
 const { strictLimiter } = require('../middleware/rateLimit');
+const { sendError } = require('../middleware/httpError');
 
 const router = Router();
 
@@ -122,7 +123,7 @@ router.get('/chain/:underlying', async (req, res) => {
     const result = await pool.query(query, params);
     res.json({ underlying: underlying.toUpperCase(), contracts: result.rows });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'options');
   }
 });
 
@@ -150,7 +151,7 @@ router.post('/order', strictLimiter, async (req, res) => {
     );
     res.json({ order: result.rows[0] });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'options');
   }
 });
 
@@ -238,7 +239,7 @@ router.post('/exercise/:id', strictLimiter, async (req, res) => {
     res.json({ exercised: true, pnl, spotPrice, strike: strike, type: position.option_type });
   } catch (e) {
     await client.query('ROLLBACK');
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'options');
   } finally {
     client.release();
   }
@@ -287,7 +288,7 @@ router.get('/greeks', async (req, res) => {
     });
     res.json({ underlying, greeks: out, timestamp: Date.now() });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'options');
   }
 });
 
@@ -337,7 +338,7 @@ router.get('/greeks/:contractId', async (req, res) => {
 
     res.json(greeks);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'options');
   }
 });
 

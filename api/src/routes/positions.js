@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const chain = require('../services/chain');
+const { sendError } = require('../middleware/httpError');
 
 const router = Router();
 const ETH_ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
@@ -129,7 +130,7 @@ router.get('/:address', async (req, res) => {
     res.json({ positions, collateral: totalCollateral, timestamp: Date.now() });
   } catch (e) {
     console.error('[positions] error:', e.message);
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'positions');
   }
 });
 

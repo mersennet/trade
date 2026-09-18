@@ -2,6 +2,7 @@ const { Router } = require('express');
 const crypto = require('crypto');
 const pool = require('../db/pool');
 const { strictLimiter } = require('../middleware/rateLimit');
+const { sendError } = require('../middleware/httpError');
 
 const router = Router();
 
@@ -37,7 +38,7 @@ router.post('/magic-link', strictLimiter, async (req, res) => {
       ...(process.env.NODE_ENV === 'development' ? { token, magicLink } : {}),
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'auth');
   }
 });
 
@@ -86,7 +87,7 @@ router.post('/verify', strictLimiter, async (req, res) => {
     });
   } catch (e) {
     await client.query('ROLLBACK');
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'auth');
   } finally {
     client.release();
   }
@@ -112,7 +113,7 @@ router.get('/session/:token', async (req, res) => {
       createdAt: session.created_at,
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'auth');
   }
 });
 

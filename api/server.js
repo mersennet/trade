@@ -389,6 +389,13 @@ async function initAllTables() {
 }
 initAllTables().catch(err => console.error('[api] Init error:', err.message));
 
+// Unknown /api/v1 route → JSON 404 (not the HTML default); anything thrown
+// outside a route's own try/catch → sendError (400 for bad input, 500 sans
+// driver text). Registered last so every router above is covered.
+const { errorMiddleware } = require('./src/middleware/httpError');
+app.use('/api/v1', (req, res) => res.status(404).json({ error: 'Not found' }));
+app.use(errorMiddleware);
+
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`[api] Mersennet Trade API running on port ${PORT}`);
   console.log(`[api] REST: http://0.0.0.0:${PORT}/api/v1/`);

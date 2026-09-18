@@ -2,6 +2,7 @@ const { Router } = require('express');
 const pool = require('../db/pool');
 const chain = require('../services/chain');
 const { strictLimiter } = require('../middleware/rateLimit');
+const { sendError } = require('../middleware/httpError');
 
 const router = Router();
 
@@ -42,7 +43,7 @@ router.post('/init/:address', strictLimiter, async (req, res) => {
     );
     res.json({ account: result.rows[0], balance: Number(result.rows[0].balance) });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'paper');
   }
 });
 
@@ -75,7 +76,7 @@ router.get('/balance/:address', async (req, res) => {
       totalPnl: balance - initialBalance + unrealized,
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'paper');
   }
 });
 
@@ -146,7 +147,7 @@ router.post('/order', strictLimiter, async (req, res) => {
     res.json({ position: position.rows[0], trade: trade.rows[0], executionPrice: execPrice });
   } catch (e) {
     await client.query('ROLLBACK');
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'paper');
   } finally {
     client.release();
   }

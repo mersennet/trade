@@ -2,6 +2,7 @@ const { Router } = require('express');
 const pool = require('../db/pool');
 const chain = require('../services/chain');
 const { strictLimiter } = require('../middleware/rateLimit');
+const { sendError } = require('../middleware/httpError');
 
 const router = Router();
 
@@ -36,7 +37,7 @@ router.get('/activity', async (req, res) => {
       threshold: minValue,
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'whales');
   }
 });
 
@@ -74,7 +75,7 @@ router.get('/wallets', async (req, res) => {
       period,
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'whales');
   }
 });
 
@@ -108,7 +109,7 @@ router.post('/alerts', strictLimiter, async (req, res) => {
     );
     res.json({ alert: result.rows[0] });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'whales');
   }
 });
 

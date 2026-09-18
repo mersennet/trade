@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
 const { strictLimiter } = require('../middleware/rateLimit');
+const { sendError } = require('../middleware/httpError');
 
 const router = Router();
 const UNBOND_DAYS = 7;
@@ -23,7 +24,7 @@ router.get('/state', async (req, res) => {
     });
   } catch (e) {
     console.error('[staking] GET /state error:', e.message);
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'staking');
   }
 });
 
@@ -49,7 +50,7 @@ router.get('/user/:address', async (req, res) => {
     });
   } catch (e) {
     console.error('[staking] GET /user error:', e.message);
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'staking');
   }
 });
 
@@ -84,7 +85,7 @@ router.post('/stake', strictLimiter, async (req, res) => {
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     console.error('[staking] POST /stake error:', e.message);
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'staking');
   } finally {
     client.release();
   }
@@ -124,7 +125,7 @@ router.post('/unstake', strictLimiter, async (req, res) => {
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     console.error('[staking] POST /unstake error:', e.message);
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'staking');
   } finally {
     client.release();
   }
@@ -151,7 +152,7 @@ router.post('/claim', strictLimiter, async (req, res) => {
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     console.error('[staking] POST /claim error:', e.message);
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'staking');
   } finally {
     client.release();
   }

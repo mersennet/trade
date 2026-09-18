@@ -3,6 +3,7 @@ const chain = require('../services/chain');
 const pool = require('../db/pool');
 const { dataCache } = require('../ws');
 const oi = require('../services/openInterest');
+const { sendError } = require('../middleware/httpError');
 
 const router = Router();
 
@@ -47,7 +48,7 @@ router.get('/:marketId/orderbook', async (req, res) => {
       timestamp: Date.now(),
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'markets');
   }
 });
 
@@ -156,7 +157,7 @@ router.get('/:marketId/ticker', async (req, res) => {
       timestamp: Date.now(),
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'markets');
   }
 });
 
@@ -185,7 +186,7 @@ router.get('/:marketId/funding-history', async (req, res) => {
     // at a made-up rate; the UIs now show "No funding on testnet".
     res.json({ rates: [], synthetic: false, funding: 'none', timestamp: Date.now() });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'markets');
   }
 });
 
