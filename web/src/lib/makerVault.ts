@@ -75,7 +75,7 @@ export async function readVault(account?: string | null): Promise<VaultOnChain> 
 export async function depositToMakerVault(provider: unknown, humanMrsn: string): Promise<string> {
   const { ethers, c } = await contract(false, provider);
   const value = ethers.parseEther(String(humanMrsn).trim());
-  const tx = await c.deposit({ value, gasLimit: 300_000 });
+  const tx = await c.deposit({ value, gasLimit: 450_000 });
   await tx.wait(1);
   return tx.hash as string;
 }

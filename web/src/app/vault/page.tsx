@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useWallet } from '@/hooks/useWallet';
 import { useToast } from '@/components/shared/Toast';
-import { api, type VaultState, type VaultUserState } from '@/lib/api';
+import { api, type VaultState, type VaultUserState, type VaultInfo } from '@/lib/api';
 import { formatNumber, formatPct, cn } from '@/lib/utils';
 import TokenLogo from '@/components/TokenLogo';
 import { MAKER_VAULT_ADDRESS, readVault, depositToMakerVault, withdrawFromMakerVault, vaultErrorMessage, type VaultOnChain } from '@/lib/makerVault';
@@ -32,6 +32,7 @@ export default function VaultPage() {
   const { toast } = useToast();
   const [chain, setChain] = useState<VaultOnChain | null>(null);
   const [indexed, setIndexed] = useState<VaultState | null>(null);
+  const [info, setInfo] = useState<VaultInfo | null>(null);
   const [user, setUser] = useState<VaultUserState | null>(null);
   const [amount, setAmount] = useState('');
   const [withdrawPct, setWithdrawPct] = useState(100);
@@ -41,6 +42,7 @@ export default function VaultPage() {
   const refresh = useCallback(async () => {
     readVault(address).then(setChain).catch(() => {});
     api.getVaultState().then(setIndexed).catch(() => {});
+    api.getVaultInfo().then(setInfo).catch(() => {});
     if (address) api.getVaultUser(address).then(setUser).catch(() => {});
   }, [address]);
 
@@ -76,6 +78,10 @@ export default function VaultPage() {
   };
 
   const agentLive = chain && chain.agent && chain.agent !== '0x0000000000000000000000000000000000000000';
+  // Deposits need the CLOB to treat the vault contract as its own account
+  // (frame-caller switch); before that the contract cannot hold collateral.
+  const depositsOpen = !info || info.active;
+  const blocksToOpen = info && !info.active && info.activeFromBlock && info.height ? Math.max(0, info.activeFromBlock - info.height) : 0;
   const capLeft = chain && chain.depositCap > 0 ? Math.max(0, chain.depositCap - chain.nav) : null;
   const deployed = chain ? chain.collateral : 0;
   const deployedPct = chain && chain.nav > 0 ? (deployed / chain.nav) * 100 : 0;
@@ -110,7 +116,7 @@ export default function VaultPage() {
           <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
             <h3 className="text-[11px] font-semibold text-foreground uppercase tracking-wider">Where the MRSN is</h3>
             <span className={cn('px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider', agentLive ? 'bg-green/10 text-green' : 'bg-yellow/10 text-yellow')}>
-              {agentLive ? 'maker quoting' : 'awaiting agent grant'}
+              {agentLive ? 'maker quoting' : depositsOpen ? 'awaiting agent grant' : 'opens at the switch'}
             </span>
           </div>
           <div className="h-2 rounded bg-surface-2 overflow-hidden flex">
@@ -179,7 +185,7 @@ export default function VaultPage() {
             </div>
             <button
               onClick={handleDeposit}
-              disabled={!!loading || !isConnected || !amount || !!chain?.paused}
+              disabled={!!loading || !isConnected || !amount || !!chain?.paused || !depositsOpen}
               className="px-5 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-md text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {loading === 'deposit' ? 'Confirm in wallet…' : 'Deposit'}
@@ -187,6 +193,11 @@ export default function VaultPage() {
           </div>
           {amount && chain && Number(amount) > 0 && (
             <p className="text-[11px] text-dim mt-2 font-mono">≈ {formatNumber(Number(amount) / chain.sharePrice, 4)} mvMRSN at today&apos;s share price</p>
+          )}
+          {!depositsOpen && info?.activeFromBlock && (
+            <p className="text-[11px] text-yellow mt-2">
+              Deposits open at block {info.activeFromBlock.toLocaleString()} (~{Math.round(blocksToOpen * 2.1 / 3600)} h) — the protocol switch that lets contracts hold their own order-book accounts. Until then the vault cannot take collateral.
+            </p>
           )}
           {!isConnected && <p className="text-[11px] text-dim mt-2">Connect a wallet to deposit. Need MRSN? <a href="https://faucet.mersennet.com" className="text-primary hover:underline">Faucet</a>.</p>}
           {chain?.paused && <p className="text-[11px] text-yellow mt-2">Deposits are paused by the manager; withdrawals still work.</p>}
