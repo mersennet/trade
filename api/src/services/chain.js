@@ -101,7 +101,8 @@ async function refreshMarkets() {
 // Deferred a tick: rpcCall's `let _rpcId` is declared below and would be in
 // its temporal dead zone if called synchronously at module load.
 setImmediate(refreshMarkets);
-const _marketsTimer = setInterval(refreshMarkets, 30_000);
+// 10 s: a price-scale switch must reach every consumer quickly.
+const _marketsTimer = setInterval(refreshMarkets, 10_000);
 if (_marketsTimer.unref) _marketsTimer.unref();
 
 // ---------------------------------------------------------------------

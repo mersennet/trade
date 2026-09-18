@@ -16,9 +16,9 @@ async function load(): Promise<void> {
   loadedAt = Date.now();
 }
 
-/** Scale for `marketId` (refreshes at most once a minute; 1 when unknown). */
+/** Scale for `marketId` (refreshes at most every 15 s; 1 when unknown). */
 export async function getPriceScale(marketId: number): Promise<number> {
-  if (!loaded || Date.now() - loadedAt > 60_000) {
+  if (!loaded || Date.now() - loadedAt > 15_000) {
     loaded = load().catch(() => { /* keep previous scales */ });
   }
   await loaded;

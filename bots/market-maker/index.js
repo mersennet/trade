@@ -496,7 +496,9 @@ async function main() {
   await ensureCollateral();
 
   await refreshScales(rpcCall);
-  setInterval(() => refreshScales(rpcCall), 60_000);
+  // One getMarkets per cycle: the price-scale switch must be seen before the
+  // next ladder is built (a stale scale would quote at 1/100 of the price).
+  setInterval(() => refreshScales(rpcCall), Math.min(CONFIG.refreshInterval, 5_000));
   console.log(`[mm] price scales: ${CONFIG.markets.map((id) => `${MARKETS[id].symbol}=${scaleOf(id)}`).join(' ')}`);
   await refreshReferencePrices().catch(() => {});
   setInterval(() => refreshReferencePrices().catch(() => {}), 30_000);
