@@ -67,7 +67,7 @@
   --muted: #9db3a0;
   /* 4.9:1 on the page background (was #5c6f60 at 3.8:1 — below WCAG AA for the
      10–12 px labels this token is used on everywhere). */
-  --dim: #6a8270;
+  --dim: #86a08b; /* was #6a8270 (≈3.6:1 on the dark surface); ≈5.4:1 now for secondary text */
   color-scheme: dark;
 }
 

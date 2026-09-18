@@ -10,6 +10,7 @@ import StatusLine from '@/components/layout/StatusLine';
 import WrongNetworkModal from '@/components/shared/WrongNetworkModal';
 import WelcomeModal from '@/components/beta/WelcomeModal';
 import Footer from '@/components/beta/Footer';
+import PreviewBanner from '@/components/shared/PreviewBanner';
 
 const SITE_URL = 'https://trade.mersennet.com';
 const OG_IMAGE = `${SITE_URL}/og-image.png`;
@@ -81,14 +82,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="antialiased overscroll-none">
         <Providers>
-          <div className="flex min-h-[100dvh]">
+          {/* The column is exactly one viewport tall on desktop so the terminal
+              (a flex-1 child) fills it whatever strips are shown above it —
+              announcement bar included — and other pages scroll inside main. */}
+          <div className="flex min-h-[100dvh] md:h-[100dvh]">
             <Sidebar />
-            <div className="flex-1 min-w-0 flex flex-col md:ml-[52px] xl:ml-[180px]">
+            <div className="flex-1 min-w-0 flex flex-col md:ml-[52px] xl:ml-[180px] md:min-h-0">
               {/* One header, one optional dismissible strip. The old beta
                   banner is now a compact TESTNET pill inside the header. */}
               <Header />
               <AnnouncementBar />
-              <main className="page-glow flex-1 flex flex-col pb-[52px] md:pb-6">
+              <main className="page-glow flex-1 flex flex-col pb-[52px] md:pb-6 md:min-h-0 md:overflow-y-auto">
+                <PreviewBanner />
                 <ErrorBoundary>{children}</ErrorBoundary>
                 <Footer />
               </main>

@@ -28,19 +28,24 @@ const USDC_UNIT  = 10n ** BigInt(USDC_DECIMALS);
 const SIZE_UNIT  = 10n ** BigInt(SIZE_DECIMALS);
 const PRICE_UNIT = 10n ** BigInt(PRICE_DECIMALS);
 
-// Per-market risk/funding parameters the chain doesn't expose. Known listings
-// keep their tuned values; permissionlessly created markets get the defaults.
-// fundingRate is the per-8h rate as a fraction (0.0001 = 0.01% per interval,
-// ~11% APR) — in line with typical perp venues. The old 0.01 (1% per 8h)
-// annualized to a nonsensical +1095%.
-const MARKET_PARAMS = {
-  MRSN: { maxLeverage: 50,  fundingRate: 0.0001 },
-  BTC:  { maxLeverage: 100, fundingRate: 0.00008 },
-  ETH:  { maxLeverage: 50,  fundingRate: 0.00012 },
-  SOL:  { maxLeverage: 20,  fundingRate: 0.0001 },
-  ARB:  { maxLeverage: 20,  fundingRate: 0.00015 },
-};
-const DEFAULT_PARAMS = { maxLeverage: 10, fundingRate: 0.0001 };
+// Risk parameters come from the chain, not from a table. There is NO funding
+// on the testnet CLOB (no funding interval, no payments), so `fundingRate` is
+// null everywhere and the UIs hide the column. Max leverage is the inverse of
+// the initial margin the protocol enforces from the settlement switch (10% →
+// 10×); before that height the chain enforces no margin at all, which the
+// UI states rather than inventing per-market caps (the old 100×/50×/20×
+// numbers were never enforced anywhere).
+const FALLBACK_INITIAL_MARGIN_BPS = 1000;
+function maxLeverageFromProtocol() {
+  const p = protocolCache.value;
+  const bps = Number(p && (p.settlementInitialMarginBps || p.initialMarginBps)) || FALLBACK_INITIAL_MARGIN_BPS;
+  return Math.max(1, Math.floor(10000 / bps));
+}
+/** True once the chain enforces initial margin (settlement switch passed). */
+function marginEnforced() {
+  const p = protocolCache.value;
+  return !!(p && p.settlementActive);
+}
 
 // USD-quoted perps, MRSN-collateralized. There is no USDC on the perp side —
 // the quote is the oracle's USD price (spot pairs against MockUSDC live in
@@ -49,11 +54,11 @@ const DEFAULT_PARAMS = { maxLeverage: 10, fundingRate: 0.0001 };
 // permissionlessly via createMarket, so new listings must appear without a
 // redeploy — every consumer iterates chain.MARKETS at call time).
 const MARKETS = [
-  { id: 1, symbol: 'MRSN/USD', base: 'MRSN', quote: 'USD', maxLeverage: 50,  fundingRate: 0.0001 },
-  { id: 2, symbol: 'BTC/USD',  base: 'BTC',  quote: 'USD', maxLeverage: 100, fundingRate: 0.00008 },
-  { id: 3, symbol: 'ETH/USD',  base: 'ETH',  quote: 'USD', maxLeverage: 50,  fundingRate: 0.00012 },
-  { id: 4, symbol: 'SOL/USD',  base: 'SOL',  quote: 'USD', maxLeverage: 20,  fundingRate: 0.0001 },
-  { id: 5, symbol: 'ARB/USD',  base: 'ARB',  quote: 'USD', maxLeverage: 20,  fundingRate: 0.00015 },
+  { id: 1, symbol: 'MRSN/USD', base: 'MRSN', quote: 'USD', maxLeverage: 10, fundingRate: null },
+  { id: 2, symbol: 'BTC/USD',  base: 'BTC',  quote: 'USD', maxLeverage: 10, fundingRate: null },
+  { id: 3, symbol: 'ETH/USD',  base: 'ETH',  quote: 'USD', maxLeverage: 10, fundingRate: null },
+  { id: 4, symbol: 'SOL/USD',  base: 'SOL',  quote: 'USD', maxLeverage: 10, fundingRate: null },
+  { id: 5, symbol: 'ARB/USD',  base: 'ARB',  quote: 'USD', maxLeverage: 10, fundingRate: null },
 ];
 
 /**
@@ -63,6 +68,9 @@ const MARKETS = [
  */
 async function refreshMarkets() {
   try {
+    // Leverage/margin flags derive from the protocol; refresh it first so the
+    // market list never carries a stale era.
+    await getProtocol().catch(() => null);
     const live = await rpcCall('mersennet_orders_getMarkets', []);
     if (!Array.isArray(live) || live.length === 0) return;
     const toInt = (v) => {
@@ -76,14 +84,14 @@ async function refreshMarkets() {
       .filter((m) => !hidden.test(String(m.symbol || '')))
       .map((m) => {
         const base = String(m.symbol || `MKT${m.id}`).toUpperCase();
-        const params = MARKET_PARAMS[base] || DEFAULT_PARAMS;
         return {
           id: Number(m.id),
           symbol: `${base}/USD`,
           base,
           quote: 'USD',
-          maxLeverage: params.maxLeverage,
-          fundingRate: params.fundingRate,
+          maxLeverage: maxLeverageFromProtocol(),
+          marginEnforced: marginEnforced(),
+          fundingRate: null,
           tickSize: toInt(m.tickSize),
           lotSize: toInt(m.lotSize),
           // On-chain price = human price × priceScale (1 until a market is
@@ -574,6 +582,7 @@ module.exports = {
   // Decimal helpers (exposed so routes can convert raw -> human consistently)
   USDC_DECIMALS, SIZE_DECIMALS, PRICE_DECIMALS,
   weiPerCollateralUnit, unitsPerMrsn, collateralDecimals, unitsToMrsn, mrsnToUnits,
+  maxLeverageFromProtocol, marginEnforced,
   observedBlockTime, upcomingSwitches,
   USDC_UNIT, SIZE_UNIT, PRICE_UNIT,
   rawToUnits,

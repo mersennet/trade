@@ -72,6 +72,31 @@ export default function TradePage() {
   useEffect(() => {
     if (depositRequestTs) setMobileTab('trade');
   }, [depositRequestTs]);
+  // First visit on a phone: open on the Trade tab, where the connect / faucet /
+  // deposit checklist lives, instead of a chart with nothing to do. Returning
+  // visitors (a wallet session or a finished checklist) keep the chart.
+  useEffect(() => {
+    if (typeof window === 'undefined' || window.matchMedia('(min-width: 768px)').matches) return;
+    if (sessionStorage.getItem('mersennet-trade_mobile_landed')) return;
+    const t = setTimeout(() => {
+      const st = useStore.getState();
+      const hasWallet = !!st.wallet.address;
+      const done = hasWallet && localStorage.getItem(`mersennet-trade_onboarding_done_${st.wallet.address!.toLowerCase()}`) === '1';
+      if (!hasWallet || !done) setMobileTab('trade');
+      sessionStorage.setItem('mersennet-trade_mobile_landed', '1');
+    }, 700);
+    return () => clearTimeout(t);
+  }, []);
+  // The faucet's "Place your first trade" CTA links to /trade?deposit=1:
+  // open the account panel in deposit mode so claim → deposit is one motion.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const q = new URLSearchParams(window.location.search);
+    if (q.get('deposit') === '1') {
+      useStore.getState().requestDeposit();
+      window.history.replaceState(null, '', '/trade');
+    }
+  }, []);
   const { market, tickers } = useStore();
   // Watch TP/SL brackets and fire signed closing orders when triggers cross.
   useBrackets();
@@ -92,7 +117,7 @@ export default function TradePage() {
 
   return (
     // Desktop height subtracts header (3rem) + status line (1.5rem).
-    <div className="relative flex flex-col h-[calc(100dvh-2.75rem-3.25rem)] md:h-[calc(100vh-4.5rem)] overflow-hidden">
+    <div className="relative flex flex-col h-[calc(100dvh-2.75rem-3.25rem)] md:h-auto md:flex-1 md:min-h-0 md:-mb-6 overflow-hidden">
       <MarketLoader />
       <OnboardingTour />
       <div data-tour="market-bar">
@@ -144,8 +169,6 @@ export default function TradePage() {
       {/* Desktop layout - seamless grid with 1px shared borders, no rounded corners on inner panels */}
       <div className="hidden md:grid flex-1 min-h-0 border-t border-border gap-px bg-border" style={{ gridTemplateColumns: 'minmax(0, 1fr) 240px 280px' }}>
         <div className="flex flex-col gap-px min-h-0 min-w-0">
-          {/* Funding history moved out of the prime chart column — it lives in
-              the Funding tab of the positions panel below. */}
           <div className="flex-1 min-h-[200px] bg-surface">
             <Chart />
           </div>

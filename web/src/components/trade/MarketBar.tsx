@@ -1,6 +1,5 @@
 'use client';
 import { useEffect, useState, useRef, useMemo } from 'react';
-import Link from 'next/link';
 import { useStore } from '@/stores/useStore';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { api, type Market } from '@/lib/api';
@@ -15,30 +14,6 @@ function formatCompact(n: number): string {
   return `$${n.toFixed(0)}`;
 }
 
-function FundingCountdown() {
-  const [timeLeft, setTimeLeft] = useState('');
-
-  useEffect(() => {
-    const tick = () => {
-      const now = new Date();
-      const next = new Date(now);
-      const hours = now.getUTCHours();
-      const nextFunding = hours < 8 ? 8 : hours < 16 ? 16 : 24;
-      next.setUTCHours(nextFunding >= 24 ? 0 : nextFunding, 0, 0, 0);
-      if (nextFunding >= 24) next.setUTCDate(next.getUTCDate() + 1);
-      const diff = next.getTime() - now.getTime();
-      const h = Math.floor(diff / 3600000);
-      const m = Math.floor((diff % 3600000) / 60000);
-      const s = Math.floor((diff % 60000) / 1000);
-      setTimeLeft(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`);
-    };
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  return <span className="font-mono tabular-nums">{timeLeft}</span>;
-}
 
 export default function MarketBar() {
   const { market, tickers, setMarket, updateTicker, favorites, toggleFavorite, recentMarkets } = useStore();
@@ -113,11 +88,11 @@ export default function MarketBar() {
       bestAsk: currentTicker.bestAsk,
       volume24h: currentTicker.volume24h || 0,
       trades24h: currentTicker.trades24h || 0,
-      openInterest: currentTicker.openInterest || 0,
+      // null until the chain-position snapshot exists (API); never a made-up number
+      openInterest: currentTicker.openInterest == null ? null : Number(currentTicker.openInterest),
       longPct: longs + shorts > 0 ? Math.round((longs / (longs + shorts)) * 100) : null,
-      fundingRate: market.fundingRate || 0,
     };
-  }, [currentTicker, market.fundingRate]);
+  }, [currentTicker]);
 
   return (
     <div className="shrink-0">
@@ -153,13 +128,6 @@ export default function MarketBar() {
 
         {showSelector && (
           <div className="absolute top-full left-0 right-0 z-50 bg-surface border-b border-border shadow-xl max-h-[70vh] overflow-hidden flex flex-col">
-            {/* Terminal is perps-only; spot has a dedicated page. */}
-            <div className="flex items-center gap-1 px-3 py-2 border-b border-border shrink-0">
-              <span className="flex-1 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-center bg-[var(--primary-dim)] text-primary-bright">Perps</span>
-              <Link href="/spot" className="flex-1 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-center text-dim bg-surface-2">
-                Spot
-              </Link>
-            </div>
             {/* Search input */}
             <div className="px-3 py-2 border-b border-border shrink-0">
               <div className="relative">
@@ -246,12 +214,11 @@ export default function MarketBar() {
 
       {/* Desktop: scrollable tab bar */}
       <div className="hidden md:flex items-center gap-0 px-1 h-10 bg-surface border-b border-border overflow-x-auto scrollbar-none">
-        {/* The terminal trades perps on the on-chain CLOB only; spot lives on
-            its own page rather than a mode toggle, so the order form can never
-            send a perp-encoded transaction for a spot market. */}
+        {/* The terminal trades perps on the on-chain CLOB only. Spot is a
+            preview surface (not on chain) and is no longer advertised here —
+            a "Spot" control on the live terminal read as a second product. */}
         <div className="flex items-center gap-0.5 mr-2 ml-1 shrink-0">
           <span className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] bg-[var(--primary-dim)] text-primary-bright">Perps</span>
-          <Link href="/spot" className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-dim hover:text-muted transition-all">Spot</Link>
         </div>
         <div className="w-px h-5 bg-border shrink-0 mr-1" />
         {activeMarkets.map((m) => {
@@ -339,15 +306,18 @@ export default function MarketBar() {
 
           {tradeMode === 'perps' && (
             <>
+              {/* No funding mechanism exists on the testnet CLOB, so there is no
+                  funding rate or countdown to show. Leverage is the inverse of
+                  the initial margin the chain enforces (10% → 10×). */}
               <Stat
-                label="Funding"
-                value={`${stats.fundingRate >= 0 ? '+' : ''}${(stats.fundingRate * 100).toFixed(4)}%`}
-                valueClass={stats.fundingRate >= 0 ? 'text-green' : 'text-red'}
+                label="Max leverage"
+                value={`${market.maxLeverage}×`}
+                title={market.marginEnforced
+                  ? 'Initial margin 10% of notional, maintenance 5%'
+                  : 'From block 1,605,600 (Sun 20 Sep): 10% initial margin. Until then the chain enforces no margin — keep positions inside this limit anyway.'}
+                className="hidden lg:flex"
               />
-              <Stat label="Next funding" value={<FundingCountdown />} valueClass="text-yellow" className="hidden xl:flex" />
-              {stats.openInterest > 0 && (
-                <Stat label="Open Interest" value={formatCompact(stats.openInterest)} className="hidden lg:flex" />
-              )}
+              <Stat label="Open Interest" value={stats.openInterest == null ? '—' : formatCompact(stats.openInterest)} className="hidden lg:flex" title="Sum of long positions at the mark, read from chain accounts every minute" />
               {stats.longPct !== null && (
                 <Stat
                   label="L/S Accounts"
@@ -375,9 +345,9 @@ export default function MarketBar() {
   );
 }
 
-function Stat({ label, value, valueClass, className }: { label: string; value: React.ReactNode; valueClass?: string; className?: string }) {
+function Stat({ label, value, valueClass, className, title }: { label: string; value: React.ReactNode; valueClass?: string; className?: string; title?: string }) {
   return (
-    <div className={cn('flex flex-col justify-center gap-0.5 shrink-0 min-w-0', className)}>
+    <div className={cn('flex flex-col justify-center gap-0.5 shrink-0 min-w-0', className)} title={title}>
       <span className="text-[9.5px] uppercase tracking-wider text-dim leading-none whitespace-nowrap">{label}</span>
       <span className={cn('font-mono font-medium tabular-nums text-[12px] text-foreground leading-none whitespace-nowrap', valueClass)}>
         {value}

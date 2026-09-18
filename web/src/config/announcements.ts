@@ -19,8 +19,8 @@ export const ANNOUNCEMENTS: Announcement[] = [
   },
   {
     id: 'vault-oneclick-2026-09-17',
-    text: 'New: the maker vault is live — pool MRSN behind the market maker and earn LP points.',
-    link: { href: '/vault', label: 'Open the vault' },
+    text: 'The Maker Vault opens Sun 20 Sep (block 1,605,600): pool MRSN behind the market maker, shares track its PnL, deposits earn LP points.',
+    link: { href: '/vault', label: 'See the vault' },
   },
   {
     id: 'validators-open-2026-09',

@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { faucetUrl } from '@/lib/links';
 import { useStore } from '@/stores/useStore';
 import { useWallet } from '@/hooks/useWallet';
 import { cn } from '@/lib/utils';
@@ -33,7 +34,7 @@ export default function GettingStarted() {
     return (
       <div className="bg-surface border border-primary/20 rounded-xl md:rounded-none md:border-0 md:border-b p-3 shrink-0" data-testid="getting-started">
         <p className="text-[11px] font-semibold text-foreground mb-2">
-          Getting started <span className="text-dim font-normal">· 0/5</span>
+          Getting started <span className="text-dim font-normal">· step 1 of 5</span>
         </p>
         <div className="flex items-center gap-2">
           <span className="w-3.5 h-3.5 rounded-full border border-primary/60 shrink-0" />
@@ -55,7 +56,7 @@ export default function GettingStarted() {
       // step 2 done while step 1 is pending just because gas was spent.
       done: balance > 0 || collateral > 0,
       action: (
-        <a href={`https://faucet.mersennet.com/?address=${address}`} target="_blank" rel="noopener" className="text-[10px] text-primary hover:underline font-medium">Faucet ↗</a>
+        <a href={faucetUrl(address)} target="_blank" rel="noopener" className="text-[10px] text-primary hover:underline font-medium">Faucet ↗</a>
       ),
     },
     {
@@ -104,7 +105,7 @@ export default function GettingStarted() {
     <div className="bg-surface border border-primary/20 rounded-xl md:rounded-none md:border-0 md:border-b p-3 shrink-0">
       <div className="flex items-center justify-between mb-2">
         <p className="text-[11px] font-semibold text-foreground">
-          Getting started <span className="text-dim font-normal">· {doneCount + 1}/{steps.length + 1}</span>
+          Getting started <span className="text-dim font-normal">· {doneCount + 1} of {steps.length + 1} done</span>
         </p>
         <button
           onClick={dismiss}

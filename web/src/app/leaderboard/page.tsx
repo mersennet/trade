@@ -46,11 +46,12 @@ export default function LeaderboardPage() {
   const [points, setPoints] = useState<PointsEntry[]>([]);
   const [sprint, setSprint] = useState<SprintStatus | null>(null);
 
+  const [loadError, setLoadError] = useState<string | null>(null);
   useEffect(() => {
     setLoading(true);
     api.getLeaderboard(period, sort, 100)
-      .then((r) => setTraders(r.traders))
-      .catch(() => {})
+      .then((r) => { setTraders(r.traders); setLoadError(null); })
+      .catch((e: Error) => setLoadError(e?.message || 'request failed'))
       .finally(() => setLoading(false));
   }, [period, sort]);
   useEffect(() => {
@@ -205,7 +206,7 @@ export default function LeaderboardPage() {
                 </div>
               </div>
               <span className={cn('text-[13px] font-mono font-semibold tabular-nums', t.pnl >= 0 ? 'text-green' : 'text-red')}>
-                {t.pnl >= 0 ? '+' : ''}{formatUsd(t.pnl)}
+                {t.pnl >= 0 ? '+' : ''}{formatNumber(t.pnl, 2)} <span className="text-[10px] font-normal text-dim">MRSN</span>
               </span>
             </Link>
           );
@@ -224,8 +225,8 @@ export default function LeaderboardPage() {
             <tr className="text-dim text-[10px] uppercase tracking-wider font-medium border-b border-border bg-surface-2/30">
               <th className="text-left px-4 py-2.5 w-16">Rank</th>
               <th className="text-left px-4 py-2.5">Trader</th>
-              <th className="text-right px-4 py-2.5">PnL</th>
-              <th className="text-right px-4 py-2.5">Volume</th>
+              <th className="text-right px-4 py-2.5" title="Realized profit and loss, settled in MRSN collateral">PnL (MRSN)</th>
+              <th className="text-right px-4 py-2.5" title="Notional traded at USD-quoted prices">Volume ($)</th>
               <th className="text-right px-4 py-2.5">Trades</th>
               <th className="text-right px-4 py-2.5">Win Rate</th>
             </tr>
@@ -252,7 +253,7 @@ export default function LeaderboardPage() {
                     </Link>
                   </td>
                   <td className={cn('px-4 py-2.5 text-right font-mono font-semibold tabular-nums', t.pnl >= 0 ? 'text-green' : 'text-red')}>
-                    {t.pnl >= 0 ? '+' : ''}{formatUsd(t.pnl)}
+                    {t.pnl >= 0 ? '+' : ''}{formatNumber(t.pnl, 2)} <span className="text-[10px] font-normal text-dim">MRSN</span>
                   </td>
                   <td className="px-4 py-2.5 text-right text-foreground/80 font-mono tabular-nums">{formatUsd(t.volume)}</td>
                   <td className="px-4 py-2.5 text-right text-foreground/70 font-mono tabular-nums">{formatNumber(t.trades, 0)}</td>
@@ -261,8 +262,15 @@ export default function LeaderboardPage() {
               );
             }            ) : (
               <tr><td colSpan={6} className="text-center py-14">
+                {loadError ? (
+                  <>
+                    <p className="text-[13px] font-semibold text-foreground">Leaderboard unavailable</p>
+                    <p className="text-xs text-dim mt-1">The trade API did not answer ({loadError}). Try again in a moment.</p>
+                  </>
+                ) : (<>
                 <p className="text-[13px] font-semibold text-foreground">Be the first to make the board</p>
                 <p className="text-xs text-dim mt-1">Place a trade and you&apos;ll show up here ranked by PnL, volume, and win rate.</p>
+                </>)}
               </td></tr>
             )}
           </tbody>

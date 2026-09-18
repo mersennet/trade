@@ -3,11 +3,10 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 
-const STORAGE_KEY = 'mersennet-trade_welcome_acknowledged_v1';
+const STORAGE_KEY = 'mersennet-trade_welcome_acknowledged_v2';
 
 export default function WelcomeModal() {
   const [open, setOpen] = useState(false);
-  const [acknowledged, setAcknowledged] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -55,7 +54,6 @@ export default function WelcomeModal() {
   }, [open]);
 
   const accept = () => {
-    if (!acknowledged) return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ at: Date.now() }));
     setOpen(false);
   };
@@ -71,7 +69,7 @@ export default function WelcomeModal() {
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
     >
       <div className="w-full max-w-lg border border-border bg-surface shadow-[0_0_60px_rgba(0,0,0,0.7),0_0_30px_rgba(43,217,106,0.07)]">
-        <div className="sect">System notice · Public beta</div>
+        <div className="sect">Welcome · Public testnet</div>
         <div className="p-6 sm:p-7">
           {/* Brand header */}
           <div className="flex items-center gap-3 mb-4">
@@ -82,7 +80,7 @@ export default function WelcomeModal() {
               </h2>
               <p className="text-[11px] text-dim mt-1 flex items-center gap-1.5">
                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-yellow/20 bg-yellow/10 text-yellow text-[9px] font-mono font-semibold uppercase tracking-widest">
-                  Public Beta
+                  Public testnet
                 </span>
                 <span className="font-mono uppercase tracking-wider text-[10px]">Mersennet · Chain 131071</span>
               </p>
@@ -91,62 +89,42 @@ export default function WelcomeModal() {
 
           {/* Intro */}
           <p className="text-[13px] text-foreground/85 mb-4 leading-relaxed">
-            Mersennet Trade is an on-chain perpetuals exchange in <strong className="text-yellow">public beta</strong> on the Mersennet testnet, powered by the chain&apos;s native order-book engine.
+            Mersennet Trade is an on-chain perpetuals exchange on the Mersennet <strong className="text-yellow">public testnet</strong>: every order is a transaction matched by the chain&apos;s native order book. Tokens here have no value.
           </p>
 
           {/* Bullet list */}
           <ul className="space-y-2.5 mb-5 text-[13px] text-foreground/80">
             <Bullet tone="green">
-              Trade with native <strong className="text-foreground">MRSN</strong> collateral.{' '}
-              <Link href="/faucet" className="underline text-primary hover:text-primary-hover">Claim free testnet MRSN</Link>{' '}
-              from the Mersennet Faucet to get started.
+              Connect a wallet,{' '}
+              <Link href="/faucet" className="underline text-primary hover:text-primary-hover">claim 1,001 free MRSN</Link>, deposit it as collateral and place a first order — the checklist on the trade page walks you through it.
             </Bullet>
             <Bullet tone="green">
-              Matching and settlement happen atomically on-chain in the Mersennet order-book engine, with no off-chain sequencer.
+              Prices are quoted in USD; balances, margin and PnL are in MRSN. On the testnet one MRSN of collateral counts as one dollar of margin.
             </Bullet>
             <Bullet tone="green">
-              Earn <Link href="/points" className="underline text-primary hover:text-primary-hover">points</Link> by trading or by running a node — and with 1,000 MRSN you can{' '}
+              Earn <Link href="/points" className="underline text-primary hover:text-primary-hover">points</Link> by trading, running a node or pooling MRSN in the maker vault — and with 1,000 MRSN you can{' '}
               <Link href="/staking" className="underline text-primary hover:text-primary-hover">register as a validator</Link>.
             </Bullet>
             <Bullet tone="yellow">
-              Use only what you can afford to lose. Markets are sparse, so expect wide spreads.
+              Two protocol switches land this weekend (Sat 19 and Sun 20 Sep); the announcement bar and the staking page show the live schedule.
             </Bullet>
             <Bullet tone="yellow">
-              Report bugs through the <Link href="/feedback" className="underline text-primary hover:text-primary-hover">feedback form</Link>.
+              Something off? Use the <Link href="/feedback" className="underline text-primary hover:text-primary-hover">feedback form</Link> or the Telegram chat.
             </Bullet>
           </ul>
 
-          {/* Acknowledgement */}
-          <label
-            className={`flex items-start gap-2.5 mb-4 p-2.5 -mx-2.5 rounded-lg select-none cursor-pointer border transition-colors ${
-              acknowledged ? 'border-primary/25 bg-primary/[0.04]' : 'border-border hover:border-primary/20'
-            }`}
-          >
-            <input
-              type="checkbox"
-              checked={acknowledged}
-              onChange={(e) => setAcknowledged(e.target.checked)}
-              className="mt-0.5 h-4 w-4 accent-primary cursor-pointer shrink-0"
-            />
-            <span className="text-[12.5px] text-foreground/85 leading-relaxed">
-              I understand this is a beta release and I have read the{' '}
-              <Link href="/risk" className="underline text-primary hover:text-primary-hover" target="_blank">Risk Disclosure</Link>{' '}
-              and{' '}
-              <Link href="/terms" className="underline text-primary hover:text-primary-hover" target="_blank">Terms of Use</Link>.
-            </span>
-          </label>
-
           <button
             onClick={accept}
-            disabled={!acknowledged}
-            className={`w-full py-2.5 text-[11px] font-extrabold uppercase tracking-[0.18em] transition ${
-              acknowledged
-                ? 'premium-gradient shadow-[0_0_20px_rgba(43,217,106,0.25)]'
-                : 'bg-surface-2 text-dim border border-border cursor-not-allowed'
-            }`}
+            className="w-full py-2.5 text-[11px] font-extrabold uppercase tracking-[0.18em] transition premium-gradient shadow-[0_0_20px_rgba(43,217,106,0.25)]"
           >
-            {acknowledged ? 'Enter terminal' : 'Acknowledge the terms to continue'}
+            Enter the terminal
           </button>
+          <p className="mt-3 text-[11px] text-dim leading-relaxed text-center">
+            By continuing you accept the{' '}
+            <Link href="/risk" className="underline hover:text-foreground" target="_blank">risk disclosure</Link>{' '}
+            and{' '}
+            <Link href="/terms" className="underline hover:text-foreground" target="_blank">terms of use</Link>.
+          </p>
         </div>
       </div>
     </div>

@@ -1,5 +1,6 @@
 'use client';
 import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
+import { faucetUrl } from '@/lib/links';
 import Link from 'next/link';
 import { useStore } from '@/stores/useStore';
 import { useWallet } from '@/hooks/useWallet';
@@ -8,11 +9,11 @@ import { api } from '@/lib/api';
 import { formatNumber, cn } from '@/lib/utils';
 import { explorerTx, MERSENNET_TESTNET } from '@/lib/chain';
 import {
-  depositToVault, withdrawFromVault,
+  depositCollateral, withdrawCollateral,
   getCollateralAssets, getTokenWalletBalance, getTokenCollateralBalance,
-  depositTokenToVault, withdrawTokenFromVault,
+  depositTokenCollateral, withdrawTokenCollateral,
   type CollateralAsset,
-} from '@/lib/vault';
+} from '@/lib/collateral';
 import { startPoll } from '@/lib/poll';
 
 export default function AccountPanel() {
@@ -144,7 +145,7 @@ export default function AccountPanel() {
           <p className="text-[11px] text-muted leading-relaxed">Testnet MRSN is free. Connect, claim from the faucet, deposit as collateral, trade.</p>
           <div className="flex gap-1.5">
             <button onClick={() => useStore.getState().requestConnect()} className="flex-1 py-1.5 text-[10px] font-semibold uppercase tracking-wider bg-primary text-[#02120a] rounded-md">Connect</button>
-            <a href="/faucet" className="flex-1 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-center border border-border rounded-md text-foreground hover:border-primary/40">Faucet</a>
+            <a href={faucetUrl(address)} target="_blank" rel="noopener noreferrer" className="flex-1 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-center border border-border rounded-md text-foreground hover:border-primary/40">Faucet ↗</a>
           </div>
         </div>
       </div>
@@ -153,7 +154,12 @@ export default function AccountPanel() {
 
   return (
     <div ref={panelRef} className={cn('bg-surface border border-border rounded-xl md:border-0 md:rounded-none p-3 flex flex-col gap-2 shrink-0 transition-shadow duration-500', flash && 'ring-2 ring-primary/70 ring-inset')}>
-      <h3 className="text-[11px] text-dim font-medium uppercase tracking-wider">Account</h3>
+      <h3 className="text-[11px] text-dim font-medium uppercase tracking-wider flex items-center justify-between">
+        <span>Account</span>
+        <span className="normal-case tracking-normal font-normal text-[10px] text-dim/80" title="Prices are quoted in USD. Balances, margin and PnL are MRSN; on the testnet one MRSN of collateral counts as one dollar of margin (no MRSN/USD conversion).">
+          prices in USD · balances in MRSN
+        </span>
+      </h3>
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
           <span className="text-[11px] text-dim">Equity</span>
@@ -325,14 +331,14 @@ export default function AccountPanel() {
                 const tokenAsset = tokenAssets.find((a) => a.symbol === transferAsset);
                 if (transferMode === 'deposit') {
                   res = tokenAsset
-                    ? await depositTokenToVault(provider, tokenAsset, transferAmount)
-                    : await depositToVault(provider, address, transferAmount);
+                    ? await depositTokenCollateral(provider, tokenAsset, transferAmount)
+                    : await depositCollateral(provider, address, transferAmount);
                   toast(`Deposited ${transferAmount} ${transferAsset}`, 'success');
                   useStore.getState().addNotification('info', 'Deposit confirmed', `${transferAmount} ${transferAsset} added to trading collateral`);
                 } else {
                   res = tokenAsset
-                    ? await withdrawTokenFromVault(provider, tokenAsset, transferAmount)
-                    : await withdrawFromVault(provider, address, transferAmount);
+                    ? await withdrawTokenCollateral(provider, tokenAsset, transferAmount)
+                    : await withdrawCollateral(provider, address, transferAmount);
                   toast(`Withdrew ${transferAmount} ${transferAsset}`, 'success');
                   useStore.getState().addNotification('info', 'Withdrawal confirmed', `${transferAmount} ${transferAsset} returned to your wallet`);
                 }

@@ -347,6 +347,8 @@ async function syncMarketsTable() {
 }
 
 async function initAllTables() {
+  // Open interest from chain positions (every minute; the ticker reads the snapshot).
+  try { require('./src/services/openInterest').start(); console.log('[api] Open-interest snapshot started'); } catch (e) { console.log('[api] OI start:', e.message); }
   await Promise.all([
     syncMarketsTable().then(() => console.log('[api] Markets table synced from chain.MARKETS')).catch(e => console.log('[api] Markets sync:', e.message)),
     initConditionalOrdersTable().then(() => { startPriceMonitor(); console.log('[api] Conditional orders monitor started'); }),

@@ -1,5 +1,6 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
+import { startPoll } from '@/lib/poll';
 import { useWallet } from '@/hooks/useWallet';
 import { useToast } from '@/components/shared/Toast';
 import { api, type VaultState, type VaultUserState, type VaultInfo } from '@/lib/api';
@@ -48,8 +49,7 @@ export default function VaultPage() {
 
   useEffect(() => {
     refresh();
-    const t = setInterval(refresh, 30_000);
-    return () => clearInterval(t);
+    return startPoll(refresh, 30_000); // pauses while the tab is hidden
   }, [refresh]);
 
   const handleDeposit = async () => {

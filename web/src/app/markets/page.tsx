@@ -9,7 +9,7 @@ import EmptyState from '@/components/shared/EmptyState';
 import MiniChart from '@/components/shared/MiniChart';
 import { startPoll } from '@/lib/poll';
 
-type SortKey = 'market' | 'price' | 'change' | 'volume' | 'trades' | 'funding' | 'oi';
+type SortKey = 'market' | 'price' | 'change' | 'volume' | 'trades' | 'oi';
 
 export default function MarketsPage() {
   const router = useRouter();
@@ -22,10 +22,18 @@ export default function MarketsPage() {
   const [sortKey, setSortKey] = useState<SortKey>('volume');
   const [sortDir, setSortDir] = useState<1 | -1>(-1);
 
+  // A failed fetch is an error state, not an empty market list.
+  const [loadError, setLoadError] = useState<string | null>(null);
   useEffect(() => {
-    api.getMarkets()
-      .then((data) => { setMarkets(data.markets || []); setLoaded(true); })
-      .catch(() => setLoaded(true));
+    let alive = true;
+    const load = () => api.getMarkets()
+      .then((data) => { if (!alive) return; setMarkets(data.markets || []); setLoadError(null); setLoaded(true); })
+      .catch((e: Error) => { if (!alive) return; setLoadError(e?.message || 'request failed'); setLoaded(true); });
+    load();
+    // Retry every 15 s while the list is unavailable.
+    const t = setInterval(() => { if (loadError) load(); }, 15_000);
+    return () => { alive = false; clearInterval(t); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -75,7 +83,6 @@ export default function MarketsPage() {
         case 'change': return t?.change24h ?? 0;
         case 'volume': return t?.volume24h ?? 0;
         case 'trades': return t?.trades24h ?? 0;
-        case 'funding': return m.fundingRate ?? 0;
         case 'oi': return t?.openInterest ?? 0;
       }
     };
@@ -117,7 +124,7 @@ export default function MarketsPage() {
           <h1 className="page-title">Markets</h1>
           <p className="page-sub">
             {loaded
-              ? `${markets.length} perpetual market${markets.length === 1 ? '' : 's'} live on Mersennet`
+              ? (loadError && markets.length === 0 ? 'Market list unavailable' : `${markets.length} perpetual market${markets.length === 1 ? '' : 's'} live on Mersennet`)
               : 'Loading live markets…'}
           </p>
         </div>
@@ -181,7 +188,15 @@ export default function MarketsPage() {
         </div>
       </div>
 
-      {filtered.length === 0 && (
+      {loadError && markets.length === 0 && (
+        <div className="bg-surface border border-red/30 rounded-xl" role="alert">
+          <EmptyState
+            label="Markets are unavailable right now"
+            hint={`The trade API did not answer (${loadError}). Retrying automatically — the chain itself is unaffected; check status.mersennet.com if this persists.`}
+          />
+        </div>
+      )}
+      {filtered.length === 0 && !loadError && (
         markets.length === 0 && filter === 'all' ? (
           /* Loading skeleton — shimmer cards while markets fetch */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5" role="status" aria-label="Loading markets">
@@ -283,7 +298,6 @@ export default function MarketsPage() {
                   ['change', '24h %'],
                   ['volume', '24h Volume'],
                   ['trades', '24h Trades'],
-                  ['funding', 'Funding'],
                   ['oi', 'Open Interest'],
                 ] as [SortKey, string][]).map(([k, label]) => (
                   <th key={k} className={cn('py-2.5 font-medium', k === 'market' ? 'text-left px-2' : 'text-right px-3')}>
@@ -339,11 +353,8 @@ export default function MarketsPage() {
                         </td>
                         <td className="px-3 py-3 text-right font-mono tabular-nums text-foreground/70">{t ? `$${formatNumber(t.volume24h ?? 0)}` : '—'}</td>
                         <td className="px-3 py-3 text-right font-mono tabular-nums text-foreground/70">{t ? formatNumber(t.trades24h ?? 0, 0) : '—'}</td>
-                        <td className={cn('px-3 py-3 text-right font-mono tabular-nums', (m.fundingRate ?? 0) >= 0 ? 'text-green' : 'text-red')}>
-                          {((m.fundingRate ?? 0) * 100).toFixed(4)}%
-                        </td>
                         <td className="px-3 py-3 text-right font-mono tabular-nums text-foreground/70">
-                          {t?.openInterest ? `$${formatNumber(t.openInterest)}` : '—'}
+                          {t?.openInterest != null ? `$${formatNumber(t.openInterest)}` : '—'}
                         </td>
                       </>
                     )}
@@ -447,15 +458,11 @@ export default function MarketsPage() {
                 </span>
               </div>
 
-              {/* Stats row: Volume / Trades / Funding */}
+              {/* Stats row: Volume / Trades / Open interest (no funding exists on the testnet CLOB) */}
               <div className="grid grid-cols-3 gap-3">
                 <Stat label="24h Volume" value={t ? `$${formatNumber(t.volume24h)}` : '—'} />
                 <Stat label="24h Trades" value={t ? formatNumber(t.trades24h ?? 0, 0) : '—'} />
-                <Stat
-                  label="Funding"
-                  value={`${((m.fundingRate ?? 0) * 100).toFixed(4)}%`}
-                  valueClass={(m.fundingRate ?? 0) >= 0 ? 'text-green' : 'text-red'}
-                />
+                <Stat label="Open interest" value={t?.openInterest != null ? `$${formatNumber(t.openInterest)}` : '—'} />
               </div>
             </div>
           );

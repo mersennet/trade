@@ -9,6 +9,13 @@ import NotificationCenter from '../shared/NotificationCenter';
 import { useStore } from '@/stores/useStore';
 import { useLocale, useTranslation, type Locale } from '@/i18n';
 import { useDismissable } from '@/hooks/useDismissable';
+import { isPreviewRoute } from '@/config/previewRoutes';
+
+// The switcher is hidden until a locale is fully translated: with ~20 of
+// ~900 strings covered, switching produced a mixed-language UI. The i18n
+// plumbing stays; flip this when a language is complete.
+const SHOW_LANGUAGE_SWITCHER = false;
+
 
 const LANGS: { code: Locale; label: string }[] = [
   { code: 'en', label: 'EN' },
@@ -55,9 +62,10 @@ export default function Header() {
   const marketSymbol = useStore((s) => s.market.symbol);
   // On the terminal itself the path segment is the active market
   // ("TRADE / MRSN-USD"), not the redundant "TRADE / TRADE".
-  const title = pathname === '/trade'
+  const baseTitle = pathname === '/trade'
     ? marketSymbol.replace('/', '-')
     : entry ? t(entry.key, entry.fallback) : 'Mersennet Trade';
+  const title = isPreviewRoute(pathname) ? `${baseTitle} · Preview` : baseTitle;
   const setShowSettings = useStore((s) => s.setShowSettings);
   const paperMode = useStore((s) => s.paperMode);
   const isConnected = useStore((s) => !!s.wallet.address);
@@ -111,7 +119,7 @@ export default function Header() {
             className="px-3 h-8 bg-primary/10 text-primary border border-primary/40 text-[10px] font-bold uppercase tracking-[0.12em] hover:bg-primary/20 transition-colors"
           >Deposit</button>
         )}
-        <div className="relative" ref={langRef}>
+        {SHOW_LANGUAGE_SWITCHER && <div className="relative" ref={langRef}>
           <button
             onClick={() => setShowLang(!showLang)}
             aria-label="Change language"
@@ -130,7 +138,7 @@ export default function Header() {
               ))}
             </div>
           )}
-        </div>
+        </div>}
         <NotificationCenter />
         {/* Theme also lives in Settings; the standalone toggle hides on mobile
             so the wallet button never wraps in the 390px header. */}

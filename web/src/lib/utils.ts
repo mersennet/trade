@@ -5,7 +5,9 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatNumber(n: number, decimals = 2): string {
-  if (isNaN(n) || n === 0) return '0';
+  // A missing or broken value is shown as "—", never as a fake zero.
+  if (n == null || !Number.isFinite(n)) return '—';
+  if (n === 0) return '0';
   if (Math.abs(n) >= 1e9) return (n / 1e9).toFixed(decimals) + 'B';
   if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(decimals) + 'M';
   if (Math.abs(n) >= 1e3) return (n / 1e3).toFixed(decimals) + 'K';
