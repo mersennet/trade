@@ -117,7 +117,7 @@ export default function TradePage() {
 
   return (
     // Desktop height subtracts header (3rem) + status line (1.5rem).
-    <div className="relative flex flex-col h-[calc(100dvh-2.75rem-3.25rem)] md:h-[calc(100vh-4.5rem)] overflow-hidden">
+    <div className="relative flex flex-col h-[calc(100dvh-2.75rem-3.25rem)] md:h-auto md:flex-1 md:min-h-0 md:-mb-6 overflow-hidden">
       <MarketLoader />
       <OnboardingTour />
       <div data-tour="market-bar">

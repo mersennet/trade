@@ -69,7 +69,7 @@ export default function WelcomeModal() {
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
     >
       <div className="w-full max-w-lg border border-border bg-surface shadow-[0_0_60px_rgba(0,0,0,0.7),0_0_30px_rgba(43,217,106,0.07)]">
-        <div className="sect">System notice · Public beta</div>
+        <div className="sect">Welcome · Public testnet</div>
         <div className="p-6 sm:p-7">
           {/* Brand header */}
           <div className="flex items-center gap-3 mb-4">
