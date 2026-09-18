@@ -163,22 +163,40 @@ app.get('/api/v1/health', async (req, res) => {
 // round per slot (8 s from block 1,440,000, 19 s before), so a flapping
 // validator shows up here as a slow chain long before anything else fails.
 // Kuma keys on `"ok":true`.
-app.get('/api/v1/health/chain', async (req, res) => {
+// Every open terminal tab polls this every 5 s, so the answer is computed at
+// most once per 2 s (one in-flight probe shared by all callers) — a thousand
+// tabs cost the RPC node the same as one.
+const CHAIN_HEALTH_TTL_MS = 2000;
+let chainHealthCache = { at: 0, body: null, status: 200, inflight: null };
+async function probeChainHealth() {
   const { rpcCall } = require('./src/services/chain');
+  const head = await rpcCall('eth_getBlockByNumber', ['latest', false]);
+  const headNum = parseInt(head.number, 16);
+  const span = 150;
+  const older = await rpcCall('eth_getBlockByNumber', ['0x' + Math.max(0, headNum - span).toString(16), false]);
+  const headTs = parseInt(head.timestamp, 16);
+  const olderTs = older ? parseInt(older.timestamp, 16) : headTs;
+  const blocks = headNum - (older ? parseInt(older.number, 16) : headNum);
+  const avgBlockMs = blocks > 0 ? Math.round(((headTs - olderTs) * 1000) / blocks) : null;
+  const headAgeSec = Math.max(0, Math.floor(Date.now() / 1000) - headTs);
+  const ok = avgBlockMs !== null && avgBlockMs <= 3000 && headAgeSec <= 30;
+  return { status: ok ? 200 : 503, body: { ok, head: headNum, headAgeSec, avgBlockMs, window: blocks, timestamp: Date.now() } };
+}
+app.get('/api/v1/health/chain', async (req, res) => {
+  const now = Date.now();
+  if (chainHealthCache.body && now - chainHealthCache.at < CHAIN_HEALTH_TTL_MS) {
+    return res.status(chainHealthCache.status).json(chainHealthCache.body);
+  }
+  if (!chainHealthCache.inflight) {
+    chainHealthCache.inflight = probeChainHealth()
+      .then((r) => { chainHealthCache = { at: Date.now(), body: r.body, status: r.status, inflight: null }; return r; })
+      .catch((e) => { chainHealthCache.inflight = null; throw e; });
+  }
   try {
-    const head = await rpcCall('eth_getBlockByNumber', ['latest', false]);
-    const headNum = parseInt(head.number, 16);
-    const span = 150;
-    const older = await rpcCall('eth_getBlockByNumber', ['0x' + Math.max(0, headNum - span).toString(16), false]);
-    const headTs = parseInt(head.timestamp, 16);
-    const olderTs = older ? parseInt(older.timestamp, 16) : headTs;
-    const blocks = headNum - (older ? parseInt(older.number, 16) : headNum);
-    const avgBlockMs = blocks > 0 ? Math.round(((headTs - olderTs) * 1000) / blocks) : null;
-    const headAgeSec = Math.max(0, Math.floor(Date.now() / 1000) - headTs);
-    const ok = avgBlockMs !== null && avgBlockMs <= 3000 && headAgeSec <= 30;
-    res.status(ok ? 200 : 503).json({ ok, head: headNum, headAgeSec, avgBlockMs, window: blocks, timestamp: Date.now() });
+    const r = await chainHealthCache.inflight;
+    res.status(r.status).json(r.body);
   } catch (e) {
-    res.status(503).json({ ok: false, error: e.message });
+    res.status(503).json({ ok: false, error: 'chain RPC unreachable' });
   }
 });
 
