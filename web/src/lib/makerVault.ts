@@ -10,7 +10,7 @@
  */
 import { getDefaultChain } from './chain';
 
-export const MAKER_VAULT_ADDRESS = (process.env.NEXT_PUBLIC_VAULT_ADDRESS || '0x2ccc6FB9a1853Ad4C217047CC74Bd0D032325284') as `0x${string}`;
+export const MAKER_VAULT_ADDRESS = (process.env.NEXT_PUBLIC_VAULT_ADDRESS || '0xe77F94c4Bf7D6d2E2371aFdE440a0b9b8a567725') as `0x${string}`;
 
 const ABI = [
   'function deposit() payable returns (uint256 shares)',

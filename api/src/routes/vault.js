@@ -13,7 +13,7 @@ function validateAddress(addr) {
 // The vault is an on-chain contract now (MakerVault). Deposits and
 // withdrawals are wallet-signed transactions to it; the indexer tails its
 // events into vault_deposits / vault_state. These endpoints tell old clients.
-const VAULT_ADDRESS = process.env.VAULT_ADDRESS || '0x2ccc6FB9a1853Ad4C217047CC74Bd0D032325284';
+const VAULT_ADDRESS = process.env.VAULT_ADDRESS || '0xe77F94c4Bf7D6d2E2371aFdE440a0b9b8a567725';
 const gone = (_req, res) => res.status(410).json({
   error: 'The strategy vault is on-chain: send deposit()/withdraw(shares) to the MakerVault contract from your wallet.',
   vault: VAULT_ADDRESS,

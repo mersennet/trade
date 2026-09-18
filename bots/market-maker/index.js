@@ -34,6 +34,9 @@ const maker = new BotWallet(RPC_URL, 'maker', process.env.MM_PRIVATE_KEY);
 // with the market's live priceScale (a $0.05 tick is 1 unit at scale 1 and
 // 5 units once the market trades on $0.01 ticks).
 const { refreshScales, scaleOf, toChain, chainTick } = require('./scale');
+const { settlementActive, ensureUnits } = require('./settlement');
+const { deriveKey } = require('./signer');
+const { ethers: ethersLib } = require('ethers');
 const MARKETS = {
   1: { symbol: 'MRSN', seed: 115,   tick: 0.05, baseSize: 150, levels: 3 }, // top level absorbs a whole taker wave (5 × 10) between refreshes
   2: { symbol: 'BTC',  seed: 77000, tick: 10,   baseSize: 3,   levels: 5 }, // busiest market: deeper ask side so takers don't empty it between cycles
@@ -337,10 +340,37 @@ async function ensureCollateral() {
   }
 }
 
+// From the settlement switch the maker holds MM_TARGET_COLLATERAL MRSN of
+// collateral (10x margin → ~2M notional of quotes) and keeps every taker
+// wallet funded with native MRSN so they can hold theirs (they were seeded
+// with 2 MRSN each at genesis — enough for gas, not for margin).
+const TARGET_COLLATERAL = BigInt(process.env.MM_TARGET_COLLATERAL || 200_000);
+const TAKER_FUND_MRSN = BigInt(process.env.MM_TAKER_FUND_MRSN || 6_000);
+const NUM_TAKERS = Number(process.env.NUM_TAKERS || 20);
+let lastSettlementCheck = 0;
+async function ensureSettlementCollateral() {
+  if (Date.now() - lastSettlementCheck < 60_000) return;
+  lastSettlementCheck = Date.now();
+  if (!(await settlementActive(rpcCall))) return;
+  try { await ensureUnits(maker, TARGET_COLLATERAL, 'mm'); } catch (e) { console.warn('[mm] collateral top-up failed:', e.message); }
+  // Fund takers (once each: only when their balance is below half the target).
+  for (let i = 0; i < NUM_TAKERS; i++) {
+    try {
+      const addr = new ethersLib.Wallet(deriveKey(`taker-${i}`)).address;
+      const bal = BigInt(await rpcCall('eth_getBalance', [addr, 'latest']) || '0x0');
+      if (bal < (TAKER_FUND_MRSN * 10n ** 18n) / 2n) {
+        const tx = await maker.sendValue(addr, TAKER_FUND_MRSN * 10n ** 18n);
+        console.log(`[mm] funded taker-${i} ${addr} with ${TAKER_FUND_MRSN} MRSN (tx ${tx})`);
+      }
+    } catch (e) { console.warn(`[mm] taker-${i} funding failed:`, e.message); }
+  }
+}
+
 async function refreshQuotes() {
   if (isRefreshing) return;
   isRefreshing = true;
   await resolveOwner();
+  await ensureSettlementCollateral();
   cycleCount++;
   submitErrLogged = false;
   marketMissing = false;

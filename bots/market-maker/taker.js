@@ -15,6 +15,7 @@ const RPC_URL = process.env.RPC_URL || 'https://rpc.mersennet.com';
 // `seed` and `tick` are HUMAN prices, converted to chain units with the
 // market's live priceScale (see scale.js).
 const { refreshScales, toChain, chainTick } = require('./scale');
+const { settlementActive, ensureUnits } = require('./settlement');
 const MARKETS = {
   1:  { symbol: 'MRSN',  weight: 3.0, seed: 115,   tick: 0.05, sizeRange: [1, 10]  },
   2:  { symbol: 'BTC',   weight: 5.0, seed: 77000, tick: 10,   sizeRange: [1, 2]   },
@@ -277,6 +278,18 @@ async function main() {
     w.depositCollateral(10n ** 12n)
       .catch(e => console.error(`[taker] deposit ${w.address} failed: ${e.message}`))
   ));
+
+  // From the settlement switch each taker holds TAKER_TARGET_COLLATERAL MRSN
+  // (the maker funds the wallets with native MRSN); re-checked every minute.
+  const TAKER_TARGET = BigInt(process.env.TAKER_TARGET_COLLATERAL || 5_000);
+  const topUp = async () => {
+    if (!(await settlementActive(rpcCall))) return;
+    for (const w of TAKER_WALLETS) {
+      try { await ensureUnits(w, TAKER_TARGET, w.label); } catch (e) { console.warn(`[taker] ${w.address} top-up failed:`, e.message); }
+    }
+  };
+  await topUp();
+  setInterval(() => topUp().catch(() => {}), 60_000);
 
   console.log('[taker] Waiting 15s for maker to seed orderbooks...');
   await sleep(15_000);

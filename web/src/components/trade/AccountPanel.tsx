@@ -312,6 +312,13 @@ export default function AccountPanel() {
                 toast('Connect wallet first', 'error');
                 return;
               }
+              // Native deposits move whole MRSN from the wallet: refuse before the
+              // chain does when the wallet cannot cover the amount plus gas.
+              if (transferMode === 'deposit' && transferAsset === 'MRSN') {
+                const want = Number(transferAmount);
+                if (!Number.isFinite(want) || want < 1) { toast('Deposit at least 1 MRSN (whole MRSN)', 'error'); return; }
+                if (want + 0.01 > walletMrsn) { toast(`You have ${walletMrsn.toLocaleString(undefined, { maximumFractionDigits: 2 })} MRSN in this wallet — keep a little for gas (the faucet gives 1,001 an hour)`, 'error'); return; }
+              }
               setTransferring(true);
               try {
                 let res;
