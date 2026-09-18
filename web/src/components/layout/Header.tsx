@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
@@ -66,11 +66,6 @@ export default function Header() {
     ? marketSymbol.replace('/', '-')
     : entry ? t(entry.key, entry.fallback) : 'Mersennet Trade';
   const title = isPreviewRoute(pathname) ? `${baseTitle} · Preview` : baseTitle;
-  // Every page gets a distinct tab title; the terminal sets its own (price · market).
-  useEffect(() => {
-    if (pathname === '/trade') return;
-    document.title = `${title} | Mersennet Trade`;
-  }, [pathname, title]);
   const setShowSettings = useStore((s) => s.setShowSettings);
   const paperMode = useStore((s) => s.paperMode);
   const isConnected = useStore((s) => !!s.wallet.address);
