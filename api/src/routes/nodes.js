@@ -355,6 +355,53 @@ async function awardDailyPoints() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Node build registry. Every peer the public node hears (fleet validators
+// included — they have no operator, so they never enter verified_nodes) is
+// asked `whoami` over TCP 30303; the answer gives identity + build. This is
+// what lets the explorer and the staking page show a build for EVERY
+// validator, not only the verified community ones. In memory, refreshed with
+// discovery; unreachable nodes keep their last answer for up to 6 h.
+// ---------------------------------------------------------------------------
+const knownBuilds = new Map(); // identity(lower) -> { host, version, height, operator, seenAt }
+async function refreshKnownBuilds() {
+  let peers = [];
+  try {
+    const res = await fetch(RPC_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'mersennet_peers', params: [] }), signal: AbortSignal.timeout(8000) });
+    peers = (await res.json()).result || [];
+  } catch { /* keep what we have */ }
+  const hosts = new Set(peers.filter((p) => p.heard).map((p) => String(p.addr).replace(/:\d+$/, '')).filter(validHost));
+  // The public RPC node itself is not in its own peer list.
+  for (const h of FLEET_IPS) hosts.add(h);
+  try { for (const r of (await pool.query('SELECT host FROM verified_nodes')).rows) hosts.add(r.host); } catch { /* ignore */ }
+  for (const host of hosts) {
+    try {
+      const att = await whoami(host);
+      if (!att.identity) continue;
+      knownBuilds.set(String(att.identity).toLowerCase(), { host, version: att.version || null, height: att.height ?? null, operator: att.operator || null, seenAt: Date.now() });
+    } catch { /* unreachable now: keep the previous answer */ }
+  }
+  for (const [id, b] of knownBuilds) if (Date.now() - b.seenAt > 6 * 3600_000) knownBuilds.delete(id);
+}
+/** identity -> { version, build, host, seenAt } for every node that answered whoami recently. */
+function knownBuildOf(identity) {
+  const b = knownBuilds.get(String(identity || '').toLowerCase());
+  return b ? { ...b, build: buildShaOf(b.version) } : null;
+}
+
+/** GET /api/v1/nodes/builds — build of every node that answers whoami (fleet + community), by identity. */
+router.get('/builds', async (_req, res) => {
+  const latest = await latestReleaseSha();
+  const out = [...knownBuilds.entries()].map(([identity, b]) => {
+    const build = buildShaOf(b.version);
+    return { identity, host: maskHost(b.host), version: b.version, build, outdated: !!latest && !!build && build !== latest, height: b.height, seen_at: new Date(b.seenAt).toISOString() };
+  });
+  res.json({ latest, nodes: out, checked_at: new Date().toISOString() });
+});
+
+setTimeout(() => refreshKnownBuilds().catch(() => {}), 20 * 1000);
+setInterval(() => refreshKnownBuilds().catch(() => {}), 5 * 60 * 1000);
+
 setTimeout(() => recheckAll().catch(() => {}), 60 * 1000);
 setInterval(() => recheckAll().catch(() => {}), RECHECK_MS);
 const DISCOVER_MS = Number(process.env.NODE_DISCOVERY_MS || 10 * 60 * 1000);
@@ -365,3 +412,4 @@ module.exports = router;
 // Shared with the health endpoints in server.js.
 module.exports.latestReleaseSha = latestReleaseSha;
 module.exports.buildShaOf = buildShaOf;
+module.exports.knownBuildOf = knownBuildOf;

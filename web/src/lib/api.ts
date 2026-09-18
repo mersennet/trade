@@ -111,6 +111,8 @@ export const api = {
   getMyNodes: (addr: string) => apiFetch<{ nodes: VerifiedNode[]; pointsPerDay: number; latest_sha?: string | null }>(`/nodes/mine/${addr}`),
   probeNode: (host: string) => apiFetch<{ reachable: boolean; identity?: string | null; height?: number | null; version?: string | null; error?: string }>(`/nodes/probe?host=${encodeURIComponent(host)}`),
   getVerifiedNodes: () => apiFetch<{ nodes: VerifiedNode[]; total: number; active: number; pointsPerDay: number }>('/nodes/verified'),
+  /** Build of every node that answers whoami (fleet validators included), by identity. */
+  getNodeBuilds: () => memo('nodes-builds', 30_000, () => apiFetch<{ latest: string | null; nodes: NodeBuild[] }>('/nodes/builds')),
   verifyNode: (body: { host: string; wallet: string; signature: string }) =>
     apiFetch<{ ok: boolean; identity: string; height: number; version: string; pointsPerDay: number }>('/nodes/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
   getPointsLeaderboard: (season = 1) => apiFetch<{ leaderboard: PointsEntry[] }>(`/points/leaderboard/season/${season}?limit=100`),
@@ -351,6 +353,7 @@ export interface PointsResponse { address: string; totalPoints: number; tradingP
 export interface PointsEntry { rank: number; address: string; totalPoints: number; tier: string; tradingPoints?: number; nodePoints?: number; referralPoints?: number; bonusPoints?: number; }
 export interface SprintStatus { weekStart: string; awardAt: string; prizes: number[]; standings: { rank: number; address: string; volume: number; trades: number }[]; lastWinners: { week_start: string; address: string; rank: number; volume: number; points: number }[]; }
 export interface ReferralStatus { referredBy: { referrer: string; code: string; at: string } | null; referees: number; referralPoints: number; share: number; }
+export interface NodeBuild { identity: string; host: string; version: string | null; build: string | null; outdated: boolean; height: number | null; seen_at: string; }
 export interface VerifiedNode { identity: string; operator?: string; host: string; version: string; height: number; first_verified_at: string; last_seen_at: string; active: boolean; registration_proof?: string | null; build_sha?: string | null; outdated?: boolean; }
 export interface VaultState { totalShares: number; totalTvl: number; totalPnl: number; apy7d: number; apy30d: number; depositors: number; }
 export interface VaultUserState { address: string; shares: number; value: number; shareOfVault: string; lpPoints?: number; history: unknown[]; }

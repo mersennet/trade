@@ -210,10 +210,16 @@ app.get('/api/v1/health/validators-current', async (req, res) => {
   const nodes = require('./src/routes/nodes');
   const SWITCH_WARN_HOURS = Number(process.env.SWITCH_WARN_HOURS || 48);
   try {
-    const [v, latest] = await Promise.all([rpcCall('mersennet_validatorSet', []), nodes.latestReleaseSha()]);
+    const [v, latest, agents] = await Promise.all([
+      rpcCall('mersennet_validatorSet', []),
+      nodes.latestReleaseSha(),
+      rpcCall('mersennet_orders_getAgents', ['0x0000000000000000000000000000000000000000']).catch(() => null),
+    ]);
     const height = Number(v?.height || 0);
     const p = v?.params || {};
-    const switches = [p.rewardsToOperatorHeight, p.jailEscalationHeight, p.benchHeight]
+    // Every consensus switch the node exposes; the CLOB switches share the
+    // agent-delegation height (see networks/testnet/config.json).
+    const switches = [p.rewardsToOperatorHeight, p.jailEscalationHeight, p.benchHeight, agents?.agentDelegationHeight]
       .map(Number).filter((h) => h > height);
     const nextSwitch = switches.length ? Math.min(...switches) : null;
     const hoursToSwitch = nextSwitch ? ((nextSwitch - height) * 2.1) / 3600 : null;
@@ -221,7 +227,9 @@ app.get('/api/v1/health/validators-current', async (req, res) => {
     const r = await require('./src/db/pool').query('SELECT identity, version FROM verified_nodes');
     const byId = new Map(r.rows.map((n) => [String(n.identity).toLowerCase(), n.version]));
     const report = activeIds.map((a) => {
-      const version = byId.get(a.identity) || null;
+      // Verified community nodes first, then anything that answered whoami
+      // (fleet validators have no operator and live only in the build registry).
+      const version = byId.get(a.identity) || nodes.knownBuildOf(a.identity)?.version || null;
       const build = nodes.buildShaOf(version);
       return { identity: a.identity, operator: a.operator, version, build, outdated: !!latest && !!build && build !== latest, unknown: !version };
     });

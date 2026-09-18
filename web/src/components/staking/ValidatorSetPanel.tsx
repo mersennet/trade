@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useWallet } from '@/hooks/useWallet';
 import { useToast } from '@/components/shared/Toast';
-import { api, type VerifiedNode } from '@/lib/api';
+import { api, type VerifiedNode, type NodeBuild } from '@/lib/api';
 import { cn, shortenAddress } from '@/lib/utils';
 import { getDefaultChain } from '@/lib/chain';
 import { startPoll } from '@/lib/poll';
@@ -45,9 +45,11 @@ export default function ValidatorSetPanel() {
   // height from the periodic recheck can be half an hour old, which made a
   // healthy validator look "670 blocks behind" (first outside validator).
   const [live, setLive] = useState<Record<string, { height: number; head: number; at: number }>>({});
+  const [builds, setBuilds] = useState<{ latest: string | null; byId: Record<string, NodeBuild> }>({ latest: null, byId: {} });
 
   const refresh = useCallback(async () => {
     try { setView(await getValidatorSet()); } catch { /* rpc hiccup */ }
+    api.getNodeBuilds().then((r) => setBuilds({ latest: r.latest, byId: Object.fromEntries((r.nodes || []).map((n) => [n.identity.toLowerCase(), n])) })).catch(() => {});
     if (address) api.getMyNodes(address).then((r) => { setMine(r.nodes); setLatestSha(r.latest_sha || null); }).catch(() => {});
     if (address) {
       // Native balance straight from the Mersennet RPC (the wallet provider
@@ -105,7 +107,7 @@ export default function ValidatorSetPanel() {
         {view && (
           <span className="text-[10px] text-dim font-mono text-right">
             {view.active
-              ? `epoch ${view.epoch} · ${view.activeSet.length}/${view.params.maxValidators} active · next epoch in ${blocksToEpoch.toLocaleString()} blocks (~${Math.round(blocksToEpoch * 2 / 60)} min)`
+              ? `epoch ${view.epoch} · ${view.validators.length} registered · ${view.activeSet.length}/${view.params.maxValidators} active · next epoch in ${blocksToEpoch.toLocaleString()} blocks (~${Math.round(blocksToEpoch * 2 / 60)} min)`
               : `opens at block ${view.params.activationHeight.toLocaleString()} · ${Math.max(0, view.params.activationHeight - view.height).toLocaleString()} blocks to go`}
           </span>
         )}
@@ -197,27 +199,38 @@ export default function ValidatorSetPanel() {
           <table className="w-full text-[12px]">
             <thead>
               <tr className="text-dim text-[10px] uppercase tracking-wider border-b border-border">
+                <th className="text-left py-1.5 pr-3" title="By self + delegated stake; the top N produce blocks">#</th>
                 <th className="text-left py-1.5 pr-3">Validator</th>
                 <th className="text-left py-1.5 pr-3">Operator</th>
                 <th className="text-right py-1.5 pr-3">Self-stake</th>
                 <th className="text-right py-1.5 pr-3">Delegated</th>
                 <th className="text-right py-1.5 pr-3">Proposed / missed (this epoch)</th>
+                <th className="text-left py-1.5 pr-3" title="Node build reported by the node itself (whoami); the current release is on mersennet.com/downloads">Build</th>
                 <th className="text-right py-1.5">Status</th>
               </tr>
             </thead>
             <tbody>
               {sorted.length === 0 && (
-                <tr><td colSpan={6} className="py-3 text-dim">{view?.active ? 'No registrations yet.' : 'The set opens at activation; the four genesis validators are seeded then.'}</td></tr>
+                <tr><td colSpan={8} className="py-3 text-dim">{view?.active ? 'No registrations yet.' : 'The set opens at activation; the four genesis validators are seeded then.'}</td></tr>
               )}
-              {sorted.map((v: ValidatorSetEntry) => {
+              {sorted.map((v: ValidatorSetEntry, i: number) => {
                 const own = !!address && v.operator.toLowerCase() === address.toLowerCase();
+                // In the active set this epoch? Registrations join at the boundary; below
+                // the top-N line they wait for stake to rank them in. Both shown dimmed.
+                const inSet = !!view?.activeSet.some((a) => a.toLowerCase() === v.identity.toLowerCase());
+                const b = builds.byId[v.identity.toLowerCase()];
                 return (
-                  <tr key={v.identity} className={cn('border-b border-border last:border-0', own && 'bg-primary/5')}>
+                  <tr key={v.identity} className={cn('border-b border-border last:border-0', own && 'bg-primary/5', !inSet && 'opacity-50')}>
+                    <td className="py-1.5 pr-3 font-mono text-dim" title={inSet ? 'In the active set: proposes and votes this epoch' : 'Not in the active set this epoch'}>{i < (view?.params.maxValidators ?? 12) ? `#${i + 1}` : '—'}</td>
                     <td className="py-1.5 pr-3 font-mono text-foreground">{shortenAddress(v.identity)}{v.genesis && <span className="text-dim"> · genesis</span>}</td>
                     <td className="py-1.5 pr-3 font-mono text-dim">{shortenAddress(v.operator)}{own && <span className="text-primary"> · you</span>}</td>
                     <td className="py-1.5 pr-3 text-right font-mono">{fmtMrsn(v.selfStake)}</td>
                     <td className="py-1.5 pr-3 text-right font-mono">{fmtMrsn(v.delegated)}</td>
                     <td className={cn('py-1.5 pr-3 text-right font-mono', v.missedSlots > 0 && v.proposedSlots === 0 ? 'text-down' : '')} title="Leader slots this epoch: blocks your node proposed vs. slots it missed. Missing more than 20% of at least 5 slots jails the node for the next epoch.">{v.proposedSlots} proposed<span className="text-dim"> · {v.missedSlots} missed</span></td>
+                    <td className="py-1.5 pr-3 font-mono" title={b?.version || 'The node has not answered a build query yet'}>
+                      {b?.build ? <span className={b.outdated ? 'text-yellow-400' : 'text-dim'}>{b.build}</span> : <span className="text-dim">—</span>}
+                      {b?.outdated && <span className="ml-1 font-mono text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded text-yellow-400 bg-yellow-400/10" title={`Behind the current release ${builds.latest || ''} — must upgrade before the next protocol switch`}>upgrade</span>}
+                    </td>
                     <td className="py-1.5 text-right"><span className={cn('font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded', STATUS_TONE[v.status] || 'text-dim')}>{v.status}</span>{v.benched && <span title="Missed 3 leader slots this epoch: out of the leader rotation until the epoch boundary (still voting)" className="ml-1 font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded text-yellow-400 bg-yellow-400/10">benched</span>}</td>
                   </tr>
                 );

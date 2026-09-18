@@ -238,13 +238,18 @@ export default function StakingPage() {
                           m === 'delegate' ? 'premium-gradient text-black hover:brightness-110' : 'bg-red/15 text-red hover:bg-red/25',
                         )}
                       >{busy === `stake-${r.address}` ? '…' : m === 'delegate' ? 'Delegate' : 'Undelegate'}</button>
-                      {BigInt(r.myPending) > 0n && (
-                        <button
-                          onClick={() => act(`claim-${r.address}`, () => claimRewards(provider, r.address), 'Rewards claimed')}
-                          disabled={busy !== null}
-                          className="px-2.5 py-1 bg-green/15 text-green rounded-lg text-[11px] font-semibold hover:bg-green/25 transition-all disabled:opacity-40"
-                        >{busy === `claim-${r.address}` ? '…' : 'Claim'}</button>
-                      )}
+                      {/* Always occupies its slot so the Delegate buttons line up across
+                          rows; only clickable (and visible) when there is something to claim. */}
+                      <button
+                        onClick={() => act(`claim-${r.address}`, () => claimRewards(provider, r.address), 'Rewards claimed')}
+                        disabled={busy !== null || BigInt(r.myPending) === 0n}
+                        aria-hidden={BigInt(r.myPending) === 0n}
+                        tabIndex={BigInt(r.myPending) === 0n ? -1 : 0}
+                        className={cn(
+                          'w-[54px] px-2.5 py-1 bg-green/15 text-green rounded-lg text-[11px] font-semibold hover:bg-green/25 transition-all disabled:opacity-40',
+                          BigInt(r.myPending) === 0n && 'invisible',
+                        )}
+                      >{busy === `claim-${r.address}` ? '…' : 'Claim'}</button>
                     </div>
                   </td>
                 </tr>
