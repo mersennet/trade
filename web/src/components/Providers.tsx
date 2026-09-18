@@ -9,6 +9,7 @@ import DeadManSwitch from '@/components/shared/DeadManSwitch';
 import { useStore } from '@/stores/useStore';
 import { captureRefFromUrl } from '@/lib/referral';
 import { useAgentSession } from '@/hooks/useAgentSession';
+import { installErrorReporter } from '@/lib/errorReporter';
 
 // Load this browser's one-click agent key whenever the connected wallet's
 // grant is live — on every page, so closing a position from Portfolio or
@@ -31,6 +32,7 @@ function ThemeInit() {
 function ReferralCapture() {
   useEffect(() => {
     captureRefFromUrl();
+    installErrorReporter();
   }, []);
   return null;
 }

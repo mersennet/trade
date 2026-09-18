@@ -8,6 +8,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
+# Short git sha of the deployed commit (client error reports carry it).
+ARG BUILD_SHA=dev
+ENV NEXT_PUBLIC_BUILD_SHA=$BUILD_SHA
 RUN npm run build
 
 FROM node:20-alpine AS runner

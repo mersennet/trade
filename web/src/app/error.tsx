@@ -1,9 +1,11 @@
 'use client';
 import { useEffect } from 'react';
+import { reportClientError } from '@/lib/errorReporter';
 
 export default function Error({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
     console.error('[app-error]', error);
+    reportClientError(error, 'boundary');
   }, [error]);
 
   return (
