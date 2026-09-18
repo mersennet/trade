@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
 const chain = require('../services/chain');
+const { sendError } = require('../middleware/httpError');
 
 const router = Router();
 
@@ -25,9 +26,20 @@ router.get('/:marketId', async (req, res) => {
     }
     // `interval` is accepted as an alias for `resolution`.
     const resolution = req.query.resolution || req.query.interval || '1h';
-    const from = req.query.from ? new Date(Number(req.query.from)) : new Date(Date.now() - 24 * 3600 * 1000);
-    const to = req.query.to ? new Date(Number(req.query.to)) : new Date();
-    const limit = Math.min(Number(req.query.limit) || 500, 2000);
+    // from/to are Unix milliseconds (seconds are accepted and scaled).
+    const parseTime = (v, fallback) => {
+      if (v == null || v === '') return fallback;
+      let n = Number(v);
+      if (!Number.isFinite(n)) return null;
+      if (n < 1e12) n *= 1000;
+      return new Date(n);
+    };
+    const from = parseTime(req.query.from, new Date(Date.now() - 24 * 3600 * 1000));
+    const to = parseTime(req.query.to, new Date());
+    if (!from || !to) {
+      return res.status(400).json({ error: 'Invalid parameter', detail: 'from/to must be Unix timestamps (ms or s)' });
+    }
+    const limit = Math.min(Math.max(1, Number(req.query.limit) || 500), 2000);
 
     if (!VALID_RESOLUTIONS.includes(resolution)) {
       return res.status(400).json({ error: `Invalid resolution. Valid: ${VALID_RESOLUTIONS.join(', ')}` });
@@ -62,8 +74,7 @@ router.get('/:marketId', async (req, res) => {
       count: result.rows.length,
     });
   } catch (e) {
-    console.error('[candles]', e.message);
-    res.status(500).json({ error: 'Internal error' });
+    sendError(res, e, 'candles');
   }
 });
 
