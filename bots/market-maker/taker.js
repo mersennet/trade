@@ -14,8 +14,8 @@ const RPC_URL = process.env.RPC_URL || 'https://rpc.mersennet.com';
 // same price regime (ARB in particular quotes around 100, not 1).
 // `seed` and `tick` are HUMAN prices, converted to chain units with the
 // market's live priceScale (see scale.js).
-const { refreshScales, toChain, chainTick } = require('./scale');
-const { settlementActive, ensureUnits } = require('./settlement');
+const { refreshScales, toChain, chainTick, scaleOf, quietForSwitch, quietReason } = require('./scale');
+const { refreshProtocol, ensureUnits } = require('./settlement');
 const MARKETS = {
   1:  { symbol: 'MRSN',  weight: 3.0, seed: 115,   tick: 0.05, sizeRange: [1, 10]  },
   2:  { symbol: 'BTC',   weight: 5.0, seed: 77000, tick: 10,   sizeRange: [1, 2]   },
@@ -33,6 +33,8 @@ const { BotWallet } = require('./signer');
 // so genesis funds them and the indexer excludes them from human leaderboards
 // via the configured BOT_ADDRESSES list.
 const NUM_TAKERS = Number(process.env.NUM_TAKERS || 20);
+// Collateral each taker keeps on the CLOB (MRSN); the maker funds the wallets.
+const TAKER_TARGET = BigInt(process.env.TAKER_TARGET_COLLATERAL || 50_000);
 const TAKER_WALLETS = Array.from({ length: NUM_TAKERS }, (_, i) =>
   new BotWallet(process.env.RPC_URL || 'https://rpc.mersennet.com', `taker-${i}`)
 );
@@ -194,9 +196,15 @@ function generateTrade() {
   const tick = chainTick(m.tick, marketId);
 
   // Side bias against on-chain inventory: flat -> 50/50; heavily long ->
-  // mostly sells; heavily short -> mostly buys. Full bias at 20x base size.
+  // mostly sells; heavily short -> mostly buys. Full bias at 20x base size,
+  // or earlier when that much inventory would use more than 40% of the
+  // taker's margin capacity (collateral × 10 at 10% initial margin): from the
+  // settlement switch a fill past capacity is refused, so the bias must turn
+  // the taker around first (BTC: ~2.5 contracts at 50k MRSN collateral).
   const inv = inventory[`${taker}:${marketId}`] || 0;
-  const cap = 20 * m.sizeRange[1];
+  const midHuman = mid / (scaleOf(marketId) || 1);
+  const marginCap = midHuman > 0 ? Math.floor((Number(TAKER_TARGET) * 10 * 0.4) / midHuman) : Infinity;
+  const cap = Math.max(1, Math.min(20 * m.sizeRange[1], marginCap));
   const skew = Math.max(-1, Math.min(1, inv / cap)); // -1..1
   const buyProb = 0.5 - 0.45 * skew;
   const side = Math.random() < buyProb ? 'buy' : 'sell';
@@ -247,7 +255,13 @@ async function submitTrade(trade) {
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+let quietLogged = false;
 async function runWave() {
+  if (quietForSwitch()) {
+    if (!quietLogged) { console.log(`[taker] quiet: ${quietReason()}`); quietLogged = true; }
+    return;
+  }
+  if (quietLogged) { console.log('[taker] switch passed, trading with the new scales'); quietLogged = false; }
   submitErrLogged = false;
   const waveSize = randInt(CONFIG.waveSizeMin, CONFIG.waveSizeMax);
   const trades = Array.from({ length: waveSize }, () => generateTrade());
@@ -271,19 +285,10 @@ async function main() {
   console.log(`[taker] RPC: ${RPC_URL}`);
   console.log(`[taker] ${TAKERS.length} addresses | waves: ${CONFIG.waveSizeMin}-${CONFIG.waveSizeMax} orders`);
 
-  // Each taker signs a depositCollateral tx (requires genesis native-MRSN
-  // funding). Margin is enforced on-chain before crossing orders can fill.
-  console.log(`[taker] Depositing collateral for ${TAKER_WALLETS.length} taker wallets...`);
-  await Promise.all(TAKER_WALLETS.map(w =>
-    w.depositCollateral(10n ** 12n)
-      .catch(e => console.error(`[taker] deposit ${w.address} failed: ${e.message}`))
-  ));
-
-  // From the settlement switch each taker holds TAKER_TARGET_COLLATERAL MRSN
+  // Each taker holds TAKER_TARGET_COLLATERAL MRSN of collateral in every era
   // (the maker funds the wallets with native MRSN); re-checked every minute.
-  const TAKER_TARGET = BigInt(process.env.TAKER_TARGET_COLLATERAL || 5_000);
   const topUp = async () => {
-    if (!(await settlementActive(rpcCall))) return;
+    await refreshProtocol(rpcCall);
     for (const w of TAKER_WALLETS) {
       try { await ensureUnits(w, TAKER_TARGET, w.label); } catch (e) { console.warn(`[taker] ${w.address} top-up failed:`, e.message); }
     }

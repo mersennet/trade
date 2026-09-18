@@ -151,8 +151,17 @@ export default function TradeForm() {
     const takes = trade.orderType === 'market' || trade.orderType === 'trailing' || trade.orderType === 'twap' || (trade.orderType === 'stop' && !stopLimit);
     const fee = feesCharged ? notional * (takes ? feeRates.taker : feeRates.maker) : 0;
 
-    return { notional, marginRequired, liquidationPrice, fee };
-  }, [tickers, market.id, trade, feeRates, feesCharged, stopLimit, triggerPrice, scaleFrom, scaleTo, protocol]);
+    // Before the settlement switch the chain enforces no margin, so a ticket
+    // can open a position the post-switch rules (10% initial / 5%
+    // maintenance) would never allow — and the keeper closes it in the switch
+    // block. Flag it here rather than let a tester find out on Sunday.
+    const imBps = protocol?.settlementInitialMarginBps || 1000;
+    const preSwitchOversized = !!protocol && !protocol.settlementActive && collateral > 0
+      ? notional > collateral * (10000 / imBps)
+      : !!protocol && !protocol.settlementActive && collateral === 0 && notional > 0;
+
+    return { notional, marginRequired, liquidationPrice, fee, preSwitchOversized };
+  }, [tickers, market.id, trade, feeRates, feesCharged, stopLimit, triggerPrice, scaleFrom, scaleTo, protocol, collateral]);
 
   const calcSize = () => {
     const r = parseFloat(riskPct) / 100;
@@ -1084,6 +1093,13 @@ export default function TradeForm() {
               <span className="text-dim">Liquidation Price</span>
               <span className="font-mono text-yellow">{formatPrice(orderSummary.liquidationPrice)}</span>
             </div>
+          )}
+          {!isSpot && orderSummary.preSwitchOversized && (
+            <p className="text-[10px] leading-snug text-yellow" data-testid="pre-switch-margin-warning">
+              Larger than the margin that applies from block {protocol?.switches?.settlementHeight?.toLocaleString() || '1,605,600'} (Sun 20 Sep): positions above
+              {' '}{Math.round(10000 / (protocol?.settlementInitialMarginBps || 1000))}× collateral cannot be opened after the switch, and a position whose equity is under 5% of its
+              notional at that block is closed by the liquidation keeper. Deposit more collateral or reduce the size.
+            </p>
           )}
           <div className="flex items-center justify-between text-[10px]" title={feesCharged ? 'Maker/taker fee at your 30-day volume tier' : 'The testnet charges no trading fee; the planned schedule starts at 0% maker / 0.035% taker'}>
             <span className="text-dim">{feesCharged ? 'Est. Fee' : 'Fee'}</span>

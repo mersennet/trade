@@ -19,7 +19,7 @@
  */
 
 import { MERSENNET_ORDERS_PRECOMPILE, getDefaultChain } from './chain';
-import { getPriceScale } from './priceScale';
+import { getPriceScale, waitOutScaleSwitch } from './priceScale';
 
 export type Tif = 'Gtc' | 'Ioc' | 'Fok';
 
@@ -150,6 +150,7 @@ export async function placeOrderOnChain(
   }
 
   const tif: Tif = params.tif ?? 'Gtc';
+  await waitOutScaleSwitch();
   const price = toChainUnits(params.priceUsd, await getPriceScale(params.marketId));
   const size = toChainUnits(params.sizeBase);
   if (BigInt(size) <= BigInt(0)) throw new Error('Size must be > 0');
