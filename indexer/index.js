@@ -301,6 +301,10 @@ async function syncPriceScales() {
   let live;
   try { live = await rpc('mersennet_orders_getMarkets', []); } catch (e) { return; }
   if (!Array.isArray(live)) return;
+  // Rows written after the switch block already carry the new scale (the WS
+  // feed keeps inserting while we run); only rows from before it are rescaled.
+  let switchHeight = 0;
+  try { switchHeight = Number((await rpc('mersennet_orders_getProtocol', []))?.switches?.priceScaleHeight || 0); } catch { /* fall back to all rows */ }
   for (const m of live) {
     const id = Number(m.id);
     let chainScale = 1;
@@ -317,8 +321,14 @@ async function syncPriceScales() {
       await client.query('BEGIN');
       // Serialize against concurrent inserts for this market while rows are rescaled.
       await client.query('LOCK TABLE trades, orders_history, candles IN SHARE ROW EXCLUSIVE MODE');
-      const t = await client.query('UPDATE trades SET price = price * $2 WHERE market_id = $1', [id, k]);
-      const o = await client.query('UPDATE orders_history SET price = price * $2 WHERE market_id = $1', [id, k]);
+      const t = switchHeight > 0
+        ? await client.query('UPDATE trades SET price = price * $2 WHERE market_id = $1 AND block_number < $3', [id, k, switchHeight])
+        : await client.query('UPDATE trades SET price = price * $2 WHERE market_id = $1', [id, k]);
+      const o = switchHeight > 0
+        ? await client.query('UPDATE orders_history SET price = price * $2 WHERE market_id = $1 AND block_number < $3', [id, k, switchHeight])
+        : await client.query('UPDATE orders_history SET price = price * $2 WHERE market_id = $1', [id, k]);
+      // Candles: multiply everything; the last day is re-aggregated from
+      // trades within a minute (authoritative), older buckets keep the factor.
       const c = await client.query('UPDATE candles SET open = open * $2, high = high * $2, low = low * $2, close = close * $2 WHERE market_id = $1', [id, k]);
       await client.query(`INSERT INTO market_price_scales (market_id, scale, updated_at) VALUES ($1, $2, NOW())
         ON CONFLICT (market_id) DO UPDATE SET scale = EXCLUDED.scale, updated_at = NOW()`, [id, chainScale]);

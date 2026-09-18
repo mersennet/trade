@@ -69,7 +69,7 @@ router.get('/:address', async (req, res) => {
       [season, addr]
     );
 
-    const bal = balance.rows[0] || { total_points: 0, trading_points: 0, lp_points: 0, referral_points: 0, tier: 'bronze' };
+    const bal = balance.rows[0] || { total_points: 0, trading_points: 0, lp_points: 0, referral_points: 0, tier: 'Bronze' };
     res.json({
       address: addr,
       season,

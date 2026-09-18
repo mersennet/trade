@@ -120,7 +120,7 @@ function referenceFor(id) {
 setInterval(() => refreshReferencePrices().catch(() => {}), 30_000);
 refreshReferencePrices().catch(() => {});
 refreshScales(rpcCall).catch(() => {});
-setInterval(() => refreshScales(rpcCall).catch(() => {}), 60_000);
+setInterval(() => refreshScales(rpcCall).catch(() => {}), 5_000);
 
 async function fetchMidPrices() {
   for (const [id, m] of Object.entries(MARKETS)) {
