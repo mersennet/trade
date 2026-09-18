@@ -8,6 +8,15 @@ import SettingsModal from '@/components/shared/SettingsModal';
 import DeadManSwitch from '@/components/shared/DeadManSwitch';
 import { useStore } from '@/stores/useStore';
 import { captureRefFromUrl } from '@/lib/referral';
+import { useAgentSession } from '@/hooks/useAgentSession';
+
+// Load this browser's one-click agent key whenever the connected wallet's
+// grant is live — on every page, so closing a position from Portfolio or
+// arming a bracket after a hard reload signs silently too.
+function AgentSession() {
+  useAgentSession();
+  return null;
+}
 
 function ThemeInit() {
   const theme = useStore((s) => s.theme);
@@ -38,6 +47,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
       <ToastProvider>
         <ThemeInit />
         <ReferralCapture />
+        <AgentSession />
         <CommandPalette />
         <ShortcutHelp />
         <SettingsModal />
