@@ -178,7 +178,12 @@ export default function TestnetPage() {
         <Link href="/points" className="bg-surface border border-border rounded-xl p-5 hover:border-primary/20 transition-colors duration-200">
           <p className="text-[10px] font-mono text-primary mb-2">500 points / day</p>
           <h3 className="text-sm font-semibold text-foreground mb-1">Earn points</h3>
-          <p className="text-xs text-dim leading-relaxed">Trading volume and verified node runners earn points; verification is automatic.</p>
+          <p className="text-xs text-dim leading-relaxed">Trading volume, verified node runners, vault deposits, referrals and the weekly sprint all earn points; verification is automatic.</p>
+        </Link>
+        <Link href="/vault" className="bg-surface border border-border rounded-xl p-5 hover:border-primary/20 transition-colors duration-200">
+          <p className="text-[10px] font-mono text-primary mb-2">0.1 LP point / MRSN / day</p>
+          <h3 className="text-sm font-semibold text-foreground mb-1">Maker vault</h3>
+          <p className="text-xs text-dim leading-relaxed">Pool MRSN behind the market maker; shares track its PnL, withdraw any time at NAV.</p>
         </Link>
         <a href="https://status.mersennet.com/status/mersennet" target="_blank" rel="noopener noreferrer" className="bg-surface border border-border rounded-xl p-5 hover:border-primary/20 transition-colors duration-200">
           <p className="text-[10px] font-mono text-primary mb-2">two public RPC nodes · failover</p>

@@ -126,6 +126,7 @@ app.use('/api/v1/paper', paperRouter);
 app.use('/api/v1/funding-arb', fundingArbRouter);
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/feedback', require('./src/routes/feedback'));
+app.use('/api/v1/client-errors', require('./src/routes/clientErrors'));
 app.use('/api/v1/nodes', require('./src/routes/nodes'));
 
 app.get('/api/v1/health', async (req, res) => {
@@ -219,7 +220,7 @@ app.get('/api/v1/health/validators-current', async (req, res) => {
     const p = v?.params || {};
     // Every consensus switch the node exposes; the CLOB switches share the
     // agent-delegation height (see networks/testnet/config.json).
-    const switches = [p.rewardsToOperatorHeight, p.jailEscalationHeight, p.benchHeight, agents?.agentDelegationHeight]
+    const switches = [p.rewardsToOperatorHeight, p.jailEscalationHeight, p.benchHeight, agents?.agentDelegationHeight, agents?.frameCallerHeight]
       .map(Number).filter((h) => h > height);
     const nextSwitch = switches.length ? Math.min(...switches) : null;
     const hoursToSwitch = nextSwitch ? ((nextSwitch - height) * 2.1) / 3600 : null;

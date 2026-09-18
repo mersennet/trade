@@ -52,6 +52,23 @@ async function rpc(method, params = []) {
 }
 
 let lastAgentLog = 0;
+let lastFrameLog = 0;
+/**
+ * Until the frame-caller switch, a contract calling the CLOB acts as the
+ * transaction ORIGIN — so pushCollateral/setAgent sent by the manager would
+ * move the manager's own MRSN and grant on the manager's account. Refuse to
+ * touch the chain before that height.
+ */
+async function contractsActAsThemselves(head) {
+  const view = await rpc('mersennet_orders_getAgents', [VAULT]).catch(() => null);
+  const h = Number(view?.frameCallerHeight || 0);
+  const ok = !!view?.frameCallerActive;
+  if (!ok && Date.now() - lastFrameLog > 3_600_000) {
+    console.log(`[vault] contracts act as themselves from block ${h || '?'} (head ${head}); no collateral or agent transactions until then`);
+    lastFrameLog = Date.now();
+  }
+  return ok;
+}
 async function ensureAgent(head) {
   const view = await rpc('mersennet_orders_getAgents', [VAULT]).catch(() => null);
   if (!view || !view.active) {
@@ -104,6 +121,7 @@ async function cycle() {
       console.error(`[vault] ${manager.address} is not the manager (${mgr}); idle`);
       return;
     }
+    if (!(await contractsActAsThemselves(head))) return;
     await ensureAgent(head);
     await pushDeposits();
     await syncScales();

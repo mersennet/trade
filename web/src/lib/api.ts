@@ -118,6 +118,7 @@ export const api = {
   getPointsLeaderboard: (season = 1) => apiFetch<{ leaderboard: PointsEntry[] }>(`/points/leaderboard/season/${season}?limit=100`),
   getSprint: () => memo('sprint', 15_000, () => apiFetch<SprintStatus>('/points/sprint')),
   getVaultState: () => apiFetch<VaultState>('/vault/state'),
+  getVaultInfo: () => memo('vault-info', 30_000, () => apiFetch<VaultInfo>('/vault/info')),
   getVaultUser: (addr: string) => apiFetch<VaultUserState>(`/vault/user/${addr}`),
   getStakingState: () => apiFetch<StakingState>('/staking/state'),
   getStakingUser: (addr: string) => apiFetch<StakingUserState>(`/staking/user/${addr}`),
@@ -355,6 +356,7 @@ export interface SprintStatus { weekStart: string; awardAt: string; prizes: numb
 export interface ReferralStatus { referredBy: { referrer: string; code: string; at: string } | null; referees: number; referralPoints: number; share: number; }
 export interface NodeBuild { identity: string; host: string; version: string | null; build: string | null; outdated: boolean; height: number | null; seen_at: string; }
 export interface VerifiedNode { identity: string; operator?: string; host: string; version: string; height: number; first_verified_at: string; last_seen_at: string; active: boolean; registration_proof?: string | null; build_sha?: string | null; outdated?: boolean; }
+export interface VaultInfo { address: string; activeFromBlock: number | null; active: boolean; height: number | null; symbol: string; asset: string; minDepositMrsn: number; reserveBps: number; lpPointsPerMrsnDay: number; }
 export interface VaultState { totalShares: number; totalTvl: number; totalPnl: number; apy7d: number; apy30d: number; depositors: number; }
 export interface VaultUserState { address: string; shares: number; value: number; shareOfVault: string; lpPoints?: number; history: unknown[]; }
 export interface StakingState { totalStaked: number; totalRewardsDistributed: number; rewardRate: number; stakersCount: number; }

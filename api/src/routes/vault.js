@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
+const chain = require('../services/chain');
 const { strictLimiter } = require('../middleware/rateLimit');
 
 const router = Router();
@@ -20,14 +21,23 @@ const gone = (_req, res) => res.status(410).json({
 router.post('/deposit', strictLimiter, gone);
 router.post('/withdraw', strictLimiter, gone);
 
-router.get('/info', (_req, res) => res.json({
+router.get('/info', async (_req, res) => {
+  // Deposits work once contracts act as themselves on the CLOB (frame-caller switch).
+  let activeFromBlock = null; let active = false; let height = null;
+  try {
+    const v = await chain.rpcCall('mersennet_orders_getAgents', [VAULT_ADDRESS]);
+    activeFromBlock = Number(v?.frameCallerHeight || 0) || null; active = !!v?.frameCallerActive; height = Number(v?.height || 0) || null;
+  } catch { /* leave unknown */ }
+  res.json({
   address: VAULT_ADDRESS,
+  activeFromBlock, active, height,
   symbol: 'mvMRSN',
   asset: 'MRSN',
   minDepositMrsn: 1,
   reserveBps: Number(process.env.VAULT_RESERVE_BPS || 1000),
   lpPointsPerMrsnDay: Number(process.env.LP_POINTS_PER_MRSN_DAY || 0.1),
-}));
+  });
+});
 
 router.get('/state', async (req, res) => {
   try {
