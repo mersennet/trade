@@ -14,7 +14,7 @@ export interface Announcement {
 export const ANNOUNCEMENTS: Announcement[] = [
   {
     id: 'switch-weekend-2026-09-18',
-    text: 'Two protocol switches this weekend — Sat 19 Sep ~19:00 UTC (block 1,569,600): agent keys for one-click trading and $0.01 ticks on MRSN, SOL, ARB. Sun 20 Sep ~16:00 UTC (block 1,605,600): collateral becomes real MRSN, realized PnL settles at every fill, 10% initial / 5% maintenance margin with liquidations. Deposits you make now carry over. Live countdown on the staking page.',
+    text: 'Two protocol switches this weekend — Sat 19 Sep ~19:00 UTC (block 1,569,600): agent keys for one-click trading and $0.01 ticks on MRSN, SOL, ARB. Sun 20 Sep ~16:00 UTC (block 1,605,600): collateral becomes real MRSN, realized PnL settles at every fill, 10% initial / 5% maintenance margin with liquidations. Deposits you make now carry over; a position larger than 20× your collateral at that block is closed by the keeper. Live countdown on the staking page.',
     link: { href: '/staking', label: 'See the schedule' },
   },
   {

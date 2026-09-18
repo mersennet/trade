@@ -25,6 +25,34 @@ export async function getPriceScale(marketId: number): Promise<number> {
   return scales.get(Number(marketId)) ?? 1;
 }
 
+/** Drop the cache so the next `getPriceScale` reads the chain again. */
+export function invalidatePriceScales(): void {
+  loaded = null;
+  loadedAt = 0;
+}
+
+/**
+ * Around an armed price-scale switch, wait until it is safe to sign an order:
+ * an order built with the old scale that lands after the switch is priced
+ * 100× off. Blocks from 8 blocks before the switch until 8 after (≈35 s), and
+ * forces a fresh scale read once the switch has passed. No-op otherwise.
+ */
+export async function waitOutScaleSwitch(): Promise<void> {
+  let switchHeight = 0;
+  try { switchHeight = Number((await api.getProtocol()).switches?.priceScaleHeight || 0); } catch { return; }
+  if (!switchHeight) return;
+  const started = Date.now();
+  while (Date.now() - started < 70_000) {
+    let head = 0;
+    try { head = Number((await api.getChainHealth()).head || 0); } catch { return; }
+    if (!head) return;
+    if (head >= switchHeight && head < switchHeight + 300) invalidatePriceScales();
+    if (head < switchHeight - 8 || head >= switchHeight + 8) return;
+    console.info(`[orders] tick-size switch at block ${switchHeight} in progress (head ${head}); waiting`);
+    await new Promise((r) => setTimeout(r, 3000));
+  }
+}
+
 /** Synchronous best-effort scale (1 until the first load completes). */
 export function priceScaleSync(marketId: number): number {
   return scales.get(Number(marketId)) ?? 1;

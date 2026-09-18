@@ -33,8 +33,8 @@ const maker = new BotWallet(RPC_URL, 'maker', process.env.MM_PRIVATE_KEY);
 // `seed` and `tick` are HUMAN prices; scale.js converts them to chain units
 // with the market's live priceScale (a $0.05 tick is 1 unit at scale 1 and
 // 5 units once the market trades on $0.01 ticks).
-const { refreshScales, scaleOf, toChain, chainTick } = require('./scale');
-const { settlementActive, ensureUnits } = require('./settlement');
+const { refreshScales, scaleOf, toChain, chainTick, quietForSwitch, quietReason } = require('./scale');
+const { refreshProtocol, ensureUnits } = require('./settlement');
 const { deriveKey } = require('./signer');
 const { ethers: ethersLib } = require('ethers');
 const MARKETS = {
@@ -63,9 +63,6 @@ const CONFIG = {
   // Off-ladder orders (mid moved, or leftovers) are retired at most this many
   // per cycle so a cancel sweep can never flood the mempool again.
   cancelPerCycle: Number(process.env.MM_CANCEL_PER_CYCLE || 25),
-  // Collateral deposited for the maker wallet on startup (integer units — the
-  // precompile uses unscaled collateral/price/size and notional = price*size).
-  seedCollateral: process.env.MM_COLLATERAL || '1000000000000',
 };
 
 let rpcId = 1;
@@ -193,11 +190,43 @@ async function submitOrder(marketId, side, price, size) {
   }
 }
 
+// ---- Inventory cap ---------------------------------------------------------
+// The maker's position per market, read from the chain every 30 s. Above
+// MM_MAX_NOTIONAL (collateral units ≈ USD) of |position| × mid the maker
+// quotes only the side that reduces it. Without a cap the random walk of
+// taker fills grew the inventory to 400 BTC / 33k SOL short over three days
+// (≈$64M notional) — far past what its collateral can margin from the
+// settlement switch, so every increasing fill would have been refused.
+const MAX_NOTIONAL = Number(process.env.MM_MAX_NOTIONAL || 4_000_000);
+const GET_POSITION_SELECTOR = '0x0f85fc5a'; // keccak("getPosition(uint64)")[:4]
+const positions = {}; // marketId -> signed size (Number)
+let positionsAt = 0;
+async function refreshPositions() {
+  if (Date.now() - positionsAt < 30_000) return;
+  positionsAt = Date.now();
+  for (const mId of CONFIG.markets) {
+    try {
+      const data = GET_POSITION_SELECTOR + BigInt(mId).toString(16).padStart(64, '0');
+      const out = await rpcCall('eth_call', [{ from: CONFIG.owner, to: '0x0000000000000000000000000000000000000100', data, gas: '0x30000' }, 'latest']);
+      if (!out || out === '0x' || out.length < 66) { positions[mId] = 0; continue; }
+      let size = BigInt('0x' + out.slice(2, 66));
+      if (size >= (1n << 255n)) size -= (1n << 256n);
+      positions[mId] = Number(size);
+    } catch { /* keep the last reading */ }
+  }
+}
+
 function buildOrders(marketId, mid) {
   const m = MARKETS[marketId];
   const tick = chainTick(m.tick, marketId);
   const levels = m.levels;
   const orders = [];
+  // Inventory cap: past MAX_NOTIONAL quote only the reducing side.
+  const pos = positions[marketId] || 0;
+  const notional = Math.abs(pos) * (mid / scaleOf(marketId));
+  const capLong = notional >= MAX_NOTIONAL && pos > 0;   // long: stop bidding
+  const capShort = notional >= MAX_NOTIONAL && pos < 0;  // short: stop asking
+  if (capLong || capShort) console.log(`[mm] ${m.symbol}: inventory ${pos} (~${Math.round(notional).toLocaleString()} notional) at cap — quoting ${capLong ? 'asks' : 'bids'} only`);
 
   for (let i = 0; i < levels; i++) {
     const depth = i + 1;
@@ -225,11 +254,11 @@ function buildOrders(marketId, mid) {
     const skipAsks = top.bid > 0 && top.bid > mid * (1 + STALE_BAND);
     const skipBids = top.ask > 0 && top.ask < mid * (1 - STALE_BAND);
 
-    if (bidPrice >= 1 && !skipBids) {
+    if (bidPrice >= 1 && !skipBids && !capLong) {
       orders.push({ marketId, side: 'buy',  price: bidPrice, size });
     }
     if (askPrice >= 2) {
-      if (!skipAsks) orders.push({ marketId, side: 'sell', price: askPrice, size });
+      if (!skipAsks && !capShort) orders.push({ marketId, side: 'sell', price: askPrice, size });
     }
   }
 
@@ -328,31 +357,31 @@ async function resolveOwner() {
 }
 
 async function ensureCollateral() {
+  // Collateral is kept at MM_TARGET_COLLATERAL MRSN by ensureSettlementCollateral
+  // (era-aware units). The old fixed-unit seed deposit would be 1e12 MRSN after
+  // the settlement switch and revert on every start.
   if (OWNER !== maker.address.toLowerCase()) {
     console.log(`[mm] acting as agent for ${OWNER}: collateral is the vault's, not seeding`);
-    return;
-  }
-  try {
-    const txHash = await maker.depositCollateral(BigInt(CONFIG.seedCollateral));
-    console.log(`[mm] deposited ${CONFIG.seedCollateral} collateral for ${CONFIG.owner} (tx ${txHash})`);
-  } catch (e) {
-    console.error(`[mm] depositCollateral failed for ${CONFIG.owner}: ${e.message} — is the wallet funded with native MRSN at genesis?`);
   }
 }
 
-// From the settlement switch the maker holds MM_TARGET_COLLATERAL MRSN of
-// collateral (10x margin → ~2M notional of quotes) and keeps every taker
-// wallet funded with native MRSN so they can hold theirs (they were seeded
-// with 2 MRSN each at genesis — enough for gas, not for margin).
-const TARGET_COLLATERAL = BigInt(process.env.MM_TARGET_COLLATERAL || 200_000);
-const TAKER_FUND_MRSN = BigInt(process.env.MM_TAKER_FUND_MRSN || 6_000);
+// The maker holds MM_TARGET_COLLATERAL MRSN of collateral (10x margin from
+// the settlement switch → 25M notional of capacity, 4M cap per market) and
+// keeps every taker wallet funded with native MRSN so they can hold theirs
+// (50k each → 500k capacity, ~6 BTC). The maker wallet was topped up with 3M
+// MRSN from the faucet wallet on 18 Sep for this. Funded in every era: a
+// deposit made before the switch carries over as the same MRSN.
+const TARGET_COLLATERAL = BigInt(process.env.MM_TARGET_COLLATERAL || 2_500_000);
+const TAKER_FUND_MRSN = BigInt(process.env.MM_TAKER_FUND_MRSN || 60_000);
 const NUM_TAKERS = Number(process.env.NUM_TAKERS || 20);
 let lastSettlementCheck = 0;
 async function ensureSettlementCollateral() {
   if (Date.now() - lastSettlementCheck < 60_000) return;
   lastSettlementCheck = Date.now();
-  if (!(await settlementActive(rpcCall))) return;
-  try { await ensureUnits(maker, TARGET_COLLATERAL, 'mm'); } catch (e) { console.warn('[mm] collateral top-up failed:', e.message); }
+  await refreshProtocol(rpcCall);
+  if (OWNER === maker.address.toLowerCase() || CONFIG.owner === maker.address.toLowerCase()) {
+    try { await ensureUnits(maker, TARGET_COLLATERAL, 'mm'); } catch (e) { console.warn('[mm] collateral top-up failed:', e.message); }
+  }
   // Fund takers and the liquidation keeper (only when a balance is below half its target).
   const wallets = [...Array.from({ length: NUM_TAKERS }, (_, i) => `taker-${i}`), 'liquidator'];
   for (const label of wallets) {
@@ -368,11 +397,18 @@ async function ensureSettlementCollateral() {
   }
 }
 
+let quietLogged = false;
 async function refreshQuotes() {
   if (isRefreshing) return;
+  if (quietForSwitch()) {
+    if (!quietLogged) { console.log(`[mm] quiet: ${quietReason()}`); quietLogged = true; }
+    return;
+  }
+  if (quietLogged) { console.log('[mm] switch passed, quoting with the new scales'); quietLogged = false; }
   isRefreshing = true;
   await resolveOwner();
   await ensureSettlementCollateral();
+  await refreshPositions();
   cycleCount++;
   submitErrLogged = false;
   marketMissing = false;
