@@ -58,7 +58,8 @@ async function calculatePortfolioMargin(address) {
     fetchPerpPositions(address),
   ]);
 
-  const perpCollateral = Number(perpCollateralRaw) / 1e6;
+  // Collateral is in CLOB units (1 MRSN per unit from the settlement switch).
+  const perpCollateral = Number(perpCollateralRaw);
 
   let spotValue = 0;
   for (const bal of spotBalances) {

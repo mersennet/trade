@@ -1115,8 +1115,8 @@ async function snapshotDailyMetrics() {
 // derived PnL/APY). LP points accrue to depositors pro-rata to the MRSN value
 // of their shares: LP_POINTS_PER_MRSN_DAY per MRSN per day, credited every run.
 // ---------------------------------------------------------------------------
-const VAULT_ADDRESS = (process.env.VAULT_ADDRESS || '0x2ccc6FB9a1853Ad4C217047CC74Bd0D032325284').toLowerCase();
-const VAULT_DEPLOY_BLOCK = Number(process.env.VAULT_DEPLOY_BLOCK || 1476800);
+const VAULT_ADDRESS = (process.env.VAULT_ADDRESS || '0xe77F94c4Bf7D6d2E2371aFdE440a0b9b8a567725').toLowerCase();
+const VAULT_DEPLOY_BLOCK = Number(process.env.VAULT_DEPLOY_BLOCK || 1505525);
 const LP_POINTS_PER_MRSN_DAY = Number(process.env.LP_POINTS_PER_MRSN_DAY || 0.1); // 1,000 MRSN parked for a day = 100 pts
 // keccak topics / selectors precomputed (cast keccak / cast sig) — no ABI lib needed:
 // the event data is three plain uint256 words.

@@ -23,6 +23,7 @@ const IFACE = new ethers.Interface([
   'function placeOrder(uint64 marketId, bool isBuy, uint256 price, uint256 size, uint8 tif) returns (uint256, uint256, uint256)',
   'function cancelOrder(uint256 orderId) returns (bool)',
   'function depositCollateral(uint256 amount) returns (bool)',
+  'function getCollateral() view returns (uint256)',
 ]);
 
 const TIF_CODE = { gtc: 0, ioc: 1, fok: 2, Gtc: 0, Ioc: 1, Fok: 2 };
@@ -140,7 +141,7 @@ class BotWallet {
     return { mined: this._mined, local: this._nonce, skipped: this._skipped, stallResyncs: this._stallResyncs };
   }
 
-  _send(data, gasLimit) {
+  _send(data, gasLimit, to = PRECOMPILE, value = 0n) {
     // Queue behind any in-flight send so nonces stay strictly sequential.
     const run = this._chain.then(async () => {
       if (this._nonce == null) await this.syncNonce();
@@ -177,13 +178,13 @@ class BotWallet {
       this._lastSendAt = Date.now();
       const tx = {
         type: 0,
-        to: PRECOMPILE,
+        to,
         data,
         nonce: this._nonce,
         gasLimit: BigInt(gasLimit),
         gasPrice,
         chainId: CHAIN_ID,
-        value: 0n,
+        value,
       };
       const raw = await this.wallet.signTransaction(tx);
       try {
@@ -221,6 +222,25 @@ class BotWallet {
   depositCollateral(amount) {
     const data = IFACE.encodeFunctionData('depositCollateral', [BigInt(amount)]);
     return this._send(data, 200_000);
+  }
+
+  /** Plain native transfer (funding another bot wallet). */
+  sendValue(to, wei) {
+    return this._send('0x', 21_000, to, BigInt(wei));
+  }
+
+  /** This wallet's CLOB collateral in units (wei before the settlement switch, MRSN after). */
+  async getCollateral() {
+    const data = IFACE.encodeFunctionData('getCollateral', []);
+    const out = await this.rpc('eth_call', [{ from: this.address, to: PRECOMPILE, data, gas: '0x30000' }, 'latest']);
+    if (!out || out === '0x') return 0n;
+    return BigInt(out);
+  }
+
+  /** Native balance in wei. */
+  async balance() {
+    const out = await this.rpc('eth_getBalance', [this.address, 'latest']);
+    return BigInt(out || '0x0');
   }
 }
 
