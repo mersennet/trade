@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
 const { strictLimiter } = require('../middleware/rateLimit');
+const { sendError } = require('../middleware/httpError');
 
 const router = Router();
 
@@ -99,7 +100,7 @@ router.post('/order', strictLimiter, async (req, res) => {
     res.json({ order: { ...placed, remaining_size: remaining, status: finalStatus }, fills });
   } catch (e) {
     await client.query('ROLLBACK');
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'prelaunch');
   } finally {
     client.release();
   }
@@ -202,7 +203,7 @@ router.post('/settle/:marketId', strictLimiter, async (req, res) => {
     res.json({ settled: true, launchPrice: lp, settlements });
   } catch (e) {
     await client.query('ROLLBACK');
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'prelaunch');
   } finally {
     client.release();
   }

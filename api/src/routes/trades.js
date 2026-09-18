@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
 const chain = require('../services/chain');
+const { sendError } = require('../middleware/httpError');
 
 const router = Router();
 
@@ -35,7 +36,7 @@ router.get('/export/:address', async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="trades-${addr}.csv"`);
     res.send(lines.join('\n'));
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'trades');
   }
 });
 
@@ -64,7 +65,7 @@ router.get('/export-orders/:address', async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="orders-${addr}.csv"`);
     res.send(lines.join('\n'));
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'trades');
   }
 });
 
@@ -105,7 +106,7 @@ router.get('/:marketId', async (req, res) => {
       limit, offset,
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'trades');
   }
 });
 
@@ -133,7 +134,7 @@ router.get('/user/:address', async (req, res) => {
       limit, offset,
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'trades');
   }
 });
 

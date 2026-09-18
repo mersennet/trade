@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
+const { sendError } = require('../middleware/httpError');
 
 const router = Router();
 
@@ -65,7 +66,7 @@ router.get('/comparison', async (req, res) => {
     // simulated: external-venue rates are preview data, not live feeds.
     res.json({ comparison, simulated: true, timestamp: Date.now() });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'fundingArb');
   }
 });
 
@@ -118,7 +119,7 @@ router.get('/opportunities', async (req, res) => {
       timestamp: Date.now(),
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'fundingArb');
   }
 });
 

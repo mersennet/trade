@@ -2,6 +2,7 @@ const { Router } = require('express');
 const pool = require('../db/pool');
 const { strictLimiter } = require('../middleware/rateLimit');
 const { matchOrders } = require('../services/spotEngine');
+const { sendError } = require('../middleware/httpError');
 
 const router = Router();
 
@@ -62,7 +63,7 @@ router.get('/orderbook/:pair', async (req, res) => {
       timestamp: Date.now(),
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'spot');
   }
 });
 
@@ -106,7 +107,7 @@ router.post('/order', strictLimiter, async (req, res) => {
       filled: Number(placed.filled),
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'spot');
   }
 });
 
@@ -126,7 +127,7 @@ router.delete('/order/:id', strictLimiter, async (req, res) => {
     }
     res.json({ cancelled: result.rows[0] });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'spot');
   }
 });
 
@@ -147,7 +148,7 @@ router.get('/trades/:pair', async (req, res) => {
     );
     res.json({ trades: result.rows });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'spot');
   }
 });
 

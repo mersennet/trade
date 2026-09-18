@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const pool = require('../db/pool');
 const { hashKey } = require('../middleware/apiKey');
 const { strictLimiter } = require('../middleware/rateLimit');
+const { sendError } = require('../middleware/httpError');
 
 const router = Router();
 
@@ -16,7 +17,7 @@ router.get('/:address', async (req, res) => {
     );
     res.json({ keys: result.rows });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'apiKeys');
   }
 });
 
@@ -36,7 +37,7 @@ router.post('/', strictLimiter, async (req, res) => {
 
     res.json({ key: rawKey, label: label || 'My API Key', permissions: perms });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'apiKeys');
   }
 });
 
@@ -45,7 +46,7 @@ router.delete('/:id', strictLimiter, async (req, res) => {
     await pool.query('UPDATE api_keys SET active = false WHERE id = $1', [req.params.id]);
     res.json({ success: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'apiKeys');
   }
 });
 

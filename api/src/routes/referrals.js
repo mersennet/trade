@@ -12,6 +12,7 @@ const { Router } = require('express');
 const { ethers } = require('ethers');
 const pool = require('../db/pool');
 const { strictLimiter } = require('../middleware/rateLimit');
+const { sendError } = require('../middleware/httpError');
 
 const router = Router();
 
@@ -58,7 +59,7 @@ router.get('/status/:wallet', async (req, res) => {
       share: 0.10,
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'referrals');
   }
 });
 
@@ -93,7 +94,7 @@ router.post('/attribute', strictLimiter, async (req, res) => {
     await pool.query('UPDATE builder_codes SET total_orders = total_orders + 1 WHERE code = $1', [c]).catch(() => {});
     res.json({ ok: true, referrer, code: c });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'referrals');
   }
 });
 

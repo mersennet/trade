@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
 const chain = require('../services/chain');
+const { sendError } = require('../middleware/httpError');
 
 const router = Router();
 
@@ -45,7 +46,7 @@ router.get('/proposals/:id', async (req, res) => {
     );
     res.json({ proposal: result.rows[0], votes: votes.rows });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'governance');
   }
 });
 
@@ -71,7 +72,7 @@ router.post('/proposals', async (req, res) => {
     );
     res.json({ proposal: result.rows[0] });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'governance');
   }
 });
 
@@ -108,7 +109,7 @@ router.post('/proposals/:id/vote', async (req, res) => {
 
     res.json({ success: true, votingPower });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'governance');
   }
 });
 

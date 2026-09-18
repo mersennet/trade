@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
 const { strictLimiter } = require('../middleware/rateLimit');
+const { sendError } = require('../middleware/httpError');
 
 const router = Router();
 
@@ -74,7 +75,7 @@ router.post('/', strictLimiter, async (req, res) => {
     );
     res.json({ agent: await shapeAgent(result.rows[0]) });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'agents');
   }
 });
 
@@ -116,7 +117,7 @@ router.put('/:id', strictLimiter, async (req, res) => {
     );
     res.json({ agent: await shapeAgent(result.rows[0]) });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'agents');
   }
 });
 
@@ -141,7 +142,7 @@ router.post('/:id/start', strictLimiter, async (req, res) => {
     );
     res.json({ agent: await shapeAgent(result.rows[0]) });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'agents');
   }
 });
 
@@ -166,7 +167,7 @@ router.post('/:id/stop', strictLimiter, async (req, res) => {
     );
     res.json({ agent: await shapeAgent(result.rows[0]) });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'agents');
   }
 });
 
@@ -237,7 +238,7 @@ router.get('/:id/performance', async (req, res) => {
       })),
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'agents');
   }
 });
 

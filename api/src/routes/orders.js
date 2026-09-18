@@ -2,6 +2,7 @@ const { Router } = require('express');
 const chain = require('../services/chain');
 const pool = require('../db/pool');
 const { strictLimiter } = require('../middleware/rateLimit');
+const { sendError } = require('../middleware/httpError');
 
 const router = Router();
 const ETH_ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
@@ -53,7 +54,7 @@ router.get('/:address', async (req, res) => {
 
     res.json({ orders, total, limit, offset, timestamp: Date.now() });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'orders');
   }
 });
 
@@ -70,7 +71,7 @@ router.get('/:address/conditional', async (req, res) => {
     );
     res.json({ orders: result.rows, timestamp: Date.now() });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'orders');
   }
 });
 
@@ -88,7 +89,7 @@ router.get('/:address/history', async (req, res) => {
 
     res.json({ orders: result.rows, limit, offset });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'orders');
   }
 });
 
@@ -185,7 +186,7 @@ router.post('/:orderId/cancel-conditional', strictLimiter, async (req, res) => {
     }
     res.json({ cancelled: result.rows[0], timestamp: Date.now() });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'orders');
   }
 });
 
@@ -224,7 +225,7 @@ router.post('/cancel-all/:address', strictLimiter, async (req, res) => {
       timestamp: Date.now(),
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'orders');
   }
 });
 
@@ -266,7 +267,7 @@ router.post('/twap', strictLimiter, async (req, res) => {
     );
     res.json({ order: result.rows[0], timestamp: Date.now() });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'orders');
   }
 });
 
@@ -278,7 +279,7 @@ router.get('/twap/:address', async (req, res) => {
     );
     res.json({ orders: result.rows });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'orders');
   }
 });
 
@@ -287,7 +288,7 @@ router.delete('/twap/:id', strictLimiter, async (req, res) => {
     await pool.query("UPDATE twap_orders SET status = 'cancelled' WHERE id = $1", [req.params.id]);
     res.json({ cancelled: true });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'orders');
   }
 });
 

@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
+const { sendError } = require('../middleware/httpError');
 
 const router = Router();
 
@@ -45,7 +46,7 @@ router.get('/price/:symbol', async (req, res) => {
       timestamp: Date.now(),
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'oracle');
   }
 });
 

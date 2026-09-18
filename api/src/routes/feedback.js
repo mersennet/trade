@@ -9,6 +9,7 @@
  */
 const { Router } = require('express');
 const pool = require('../db/pool');
+const { sendError } = require('../middleware/httpError');
 
 const router = Router();
 
@@ -138,7 +139,7 @@ router.get('/', async (req, res) => {
     );
     res.json({ items: r.rows });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'feedback');
   }
 });
 

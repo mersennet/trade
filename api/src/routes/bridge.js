@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
 const { strictLimiter } = require('../middleware/rateLimit');
+const { sendError } = require('../middleware/httpError');
 
 const router = Router();
 
@@ -37,7 +38,7 @@ router.get('/status/:txHash', async (req, res) => {
   try {
     const { txHash } = req.params;
     const result = await pool.query(
-      'SELECT * FROM bridge_deposits WHERE tx_hash = $1',
+      'SELECT * FROM bridge_deposits WHERE source_tx_hash = $1',
       [txHash]
     );
     if (!result.rows[0]) {
@@ -55,7 +56,7 @@ router.get('/status/:txHash', async (req, res) => {
       createdAt: deposit.created_at,
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'bridge');
   }
 });
 

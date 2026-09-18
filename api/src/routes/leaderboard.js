@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
+const { sendError } = require('../middleware/httpError');
 
 const router = Router();
 
@@ -79,7 +80,7 @@ router.get('/', async (req, res) => {
     });
   } catch (e) {
     console.error('[leaderboard] error:', e.message);
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'leaderboard');
   }
 });
 
@@ -115,7 +116,7 @@ router.get('/trader/:address', async (req, res) => {
       })),
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'leaderboard');
   }
 });
 

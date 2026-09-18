@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
 const { strictLimiter } = require('../middleware/rateLimit');
+const { sendError } = require('../middleware/httpError');
 
 const router = Router();
 
@@ -22,7 +23,7 @@ router.get('/', async (req, res) => {
     const result = await pool.query(query, params);
     res.json({ competitions: result.rows.map(shapeCompetition) });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'competitions');
   }
 });
 
@@ -50,7 +51,7 @@ router.get('/:id', async (req, res) => {
       })),
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'competitions');
   }
 });
 
@@ -73,7 +74,7 @@ router.post('/:id/join', strictLimiter, async (req, res) => {
 
     res.json({ joined: true, timestamp: Date.now() });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'competitions');
   }
 });
 

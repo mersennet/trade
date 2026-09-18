@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
 const chain = require('../services/chain');
+const { sendError } = require('../middleware/httpError');
 
 const router = Router();
 
@@ -35,7 +36,7 @@ router.get('/sprint', async (req, res) => {
       lastWinners: last.rows,
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'points');
   }
 });
 
@@ -84,7 +85,7 @@ router.get('/:address', async (req, res) => {
       history: history.rows,
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'points');
   }
 });
 
@@ -116,7 +117,7 @@ router.get('/leaderboard/season/:season', async (req, res) => {
       })),
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'points');
   }
 });
 

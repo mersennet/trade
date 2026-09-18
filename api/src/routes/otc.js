@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
 const { strictLimiter } = require('../middleware/rateLimit');
+const { sendError } = require('../middleware/httpError');
 
 const router = Router();
 
@@ -41,7 +42,7 @@ router.post('/rfq', strictLimiter, async (req, res) => {
 
     res.json({ quote: result.rows[0] });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'otc');
   }
 });
 
@@ -105,7 +106,7 @@ router.post('/accept/:id', strictLimiter, async (req, res) => {
     res.json({ accepted: true, trade: trade.rows[0] });
   } catch (e) {
     await client.query('ROLLBACK');
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'otc');
   } finally {
     client.release();
   }

@@ -2,6 +2,7 @@ const { Router } = require('express');
 const pool = require('../db/pool');
 const chain = require('../services/chain');
 const { strictLimiter } = require('../middleware/rateLimit');
+const { sendError } = require('../middleware/httpError');
 
 const router = Router();
 const ETH_ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
@@ -55,7 +56,7 @@ router.get('/state', async (req, res) => {
     });
   } catch (e) {
     console.error('[vault] GET /state error:', e.message);
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'vault');
   }
 });
 
@@ -92,7 +93,7 @@ router.get('/user/:address', async (req, res) => {
     });
   } catch (e) {
     console.error('[vault] GET /user error:', e.message);
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'vault');
   }
 });
 

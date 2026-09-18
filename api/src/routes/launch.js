@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
 const chain = require('../services/chain');
+const { sendError } = require('../middleware/httpError');
 
 const router = Router();
 
@@ -103,7 +104,7 @@ router.get('/', async (req, res) => {
     }
     res.json(await cache.inflight);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'launch');
   }
 });
 

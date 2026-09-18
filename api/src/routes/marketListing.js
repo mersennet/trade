@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
 const { strictLimiter } = require('../middleware/rateLimit');
+const { sendError } = require('../middleware/httpError');
 
 const router = Router();
 
@@ -69,7 +70,7 @@ router.post('/propose', strictLimiter, async (req, res) => {
     );
     res.json({ proposal: result.rows[0] });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'marketListing');
   }
 });
 
@@ -118,7 +119,7 @@ router.post('/proposals/:id/vote', strictLimiter, async (req, res) => {
 
     res.json({ success: true, votingPower, proposal: updated.rows[0] });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'marketListing');
   }
 });
 
@@ -134,7 +135,7 @@ router.get('/proposals/:id', async (req, res) => {
     );
     res.json({ proposal: result.rows[0], votes: votes.rows });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    sendError(res, e, 'marketListing');
   }
 });
 
