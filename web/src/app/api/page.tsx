@@ -98,7 +98,7 @@ export default function ApiPage() {
         {[
           { label: 'Base URL', value: API_BASE },
           { label: 'WebSocket', value: WS_URL },
-          { label: 'Rate Limit', value: '600 requests/min (read), 60/min (write)' },
+          { label: 'Rate Limit', value: '600 requests/min per IP (read), 60/min (write)' },
         ].map((item) => (
           <div key={item.label} className="bg-surface border border-border rounded-xl p-4">
             <p className="text-[10px] text-dim uppercase tracking-wider font-medium mb-1">{item.label}</p>
@@ -164,6 +164,29 @@ ws.onmessage = (e) => console.log(JSON.parse(e.data));`}
               <span className="text-xs text-dim">{e.desc}</span>
             </div>
           ))}
+        </div>
+      </div>
+
+      <div className="bg-surface border border-border rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-border">
+          <h3 className="text-xs font-medium text-foreground uppercase tracking-wider">Responses &amp; errors</h3>
+        </div>
+        <div className="divide-y divide-border text-xs">
+          {[
+            ['200', 'JSON body. Market ids are numeric (see /markets); candles also accept a symbol such as MRSN-USD.'],
+            ['400', '{ "error": "Invalid parameter", "detail"?: string } — a non-numeric id, malformed timestamp or out-of-range number.'],
+            ['404', '{ "error": "Not found" } — unknown route or market.'],
+            ['429', '{ "error": "Too many requests…" } — per-IP budget exhausted; RateLimit-Remaining / RateLimit-Reset headers say when to retry.'],
+            ['500', '{ "error": "Internal error" } — logged server-side; report persistent ones via Feedback.'],
+          ].map(([code, text]) => (
+            <div key={code} className="flex items-start gap-3 px-4 py-2.5">
+              <span className={cn('w-10 font-mono font-bold', code === '200' ? 'text-green' : code === '500' ? 'text-red' : 'text-yellow')}>{code}</span>
+              <span className="text-dim font-mono break-words">{text}</span>
+            </div>
+          ))}
+        </div>
+        <div className="px-4 py-3 border-t border-border text-xs text-dim">
+          WebSocket: frames up to 16 KiB, at most 64 channels per connection; the server closes with 1009 (frame too large) or 1013 (busy — retry with backoff).
         </div>
       </div>
 
