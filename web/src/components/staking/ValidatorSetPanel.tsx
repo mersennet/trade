@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useWallet } from '@/hooks/useWallet';
 import { useToast } from '@/components/shared/Toast';
 import { api, type VerifiedNode, type NodeBuild } from '@/lib/api';
+import UpgradeBadge from '@/components/shared/UpgradeBadge';
 import { cn, shortenAddress } from '@/lib/utils';
 import { getDefaultChain } from '@/lib/chain';
 import { startPoll } from '@/lib/poll';
@@ -228,8 +229,9 @@ export default function ValidatorSetPanel() {
                     <td className="py-1.5 pr-3 text-right font-mono">{fmtMrsn(v.delegated)}</td>
                     <td className={cn('py-1.5 pr-3 text-right font-mono', v.missedSlots > 0 && v.proposedSlots === 0 ? 'text-down' : '')} title="Leader slots this epoch: blocks your node proposed vs. slots it missed. Missing more than 20% of at least 5 slots jails the node for the next epoch.">{v.proposedSlots} proposed<span className="text-dim"> · {v.missedSlots} missed</span></td>
                     <td className="py-1.5 pr-3 font-mono" title={b?.version || 'The node has not answered a build query yet'}>
-                      {b?.build ? <span className={b.outdated ? 'text-yellow-400' : 'text-dim'}>{b.build}</span> : <span className="text-dim">—</span>}
-                      {b?.outdated && <span className="ml-1 font-mono text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded text-yellow-400 bg-yellow-400/10" title={`Behind the current release ${builds.latest || ''} — must upgrade before the next protocol switch`}>upgrade</span>}
+                      {!b?.build && <span className="text-dim">—</span>}
+                      {b?.build && !b.outdated && <span className="text-dim">{b.build}</span>}
+                      {b?.build && b.outdated && <UpgradeBadge build={b.build} latest={builds.latest} />}
                     </td>
                     <td className="py-1.5 text-right"><span className={cn('font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded', STATUS_TONE[v.status] || 'text-dim')}>{v.status}</span>{v.benched && <span title="Missed 3 leader slots this epoch: out of the leader rotation until the epoch boundary (still voting)" className="ml-1 font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded text-yellow-400 bg-yellow-400/10">benched</span>}</td>
                   </tr>
