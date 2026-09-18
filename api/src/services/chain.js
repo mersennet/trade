@@ -202,8 +202,46 @@ async function getCollateralRaw(address) {
   }
 }
 
+// One collateral unit is one MRSN from the settlement switch (block
+// 1,605,600) and one wei before it. `mersennet_orders_getProtocol` exposes the
+// live factor as `weiPerCollateralUnit`, so units ↔ MRSN is derived from the
+// chain rather than hard-coded to either era: a deposit made on Friday reads as
+// the same number of MRSN on Sunday.
+const WEI_PER_MRSN = 10n ** 18n;
+function weiPerCollateralUnit() {
+  const raw = protocolCache.value && protocolCache.value.weiPerCollateralUnit;
+  try { const v = BigInt(raw ?? 1); return v > 0n ? v : 1n; } catch { return 1n; }
+}
+/** Collateral units that make up one MRSN (1e18 before the settlement switch, 1 after). */
+function unitsPerMrsn() {
+  return WEI_PER_MRSN / weiPerCollateralUnit();
+}
+/** Decimal places implied by the current unit (18 before the switch, 0 after). */
+function collateralDecimals() {
+  return String(unitsPerMrsn()).length - 1;
+}
+/** Raw collateral units → human MRSN (float, display precision). */
+function unitsToMrsn(raw) {
+  if (raw == null) return 0;
+  let u; try { u = BigInt(String(raw)); } catch { return 0; }
+  const per = unitsPerMrsn();
+  const whole = u / per;
+  const frac = u % per;
+  return Number(whole) + Number(frac) / Number(per);
+}
+/** Human MRSN (string/number) → raw collateral units (BigInt, floor). */
+function mrsnToUnits(human) {
+  const s = String(human).trim();
+  if (!/^\d+(\.\d+)?$/.test(s)) throw new Error(`Invalid amount: ${human}`);
+  const [int, frac = ''] = s.split('.');
+  const wei = BigInt(int) * WEI_PER_MRSN + BigInt((frac + '0'.repeat(18)).slice(0, 18));
+  return wei / weiPerCollateralUnit();
+}
+
 async function getCollateral(address) {
-  return rawToUnits(await getCollateralRaw(address), USDC_DECIMALS);
+  const raw = await getCollateralRaw(address);
+  await getProtocol(); // make sure the unit factor is current
+  return unitsToMrsn(raw);
 }
 
 // The precompile tracks a single collateral balance; margin reservation is
@@ -441,6 +479,61 @@ async function getProtocol() {
   return protocolCache.value;
 }
 
+/**
+ * Observed seconds per block over the last ~1,800 blocks (one hour), cached
+ * 60 s. The nominal slot is 2 s; missed leader slots stretch the average (2.1 s
+ * on 18 Sep), which is enough to put a switch ETA off by hours over two days.
+ */
+let blockTimeCache = { at: 0, value: 2 };
+async function observedBlockTime() {
+  if (Date.now() - blockTimeCache.at < 60_000) return blockTimeCache.value;
+  try {
+    const head = await rpcCall('eth_getBlockByNumber', ['latest', false]);
+    const h = parseInt(head.number, 16);
+    const span = Math.min(1800, h - 1);
+    const old = await rpcCall('eth_getBlockByNumber', ['0x' + (h - span).toString(16), false]);
+    const dt = parseInt(head.timestamp, 16) - parseInt(old.timestamp, 16);
+    if (span > 0 && dt > 0) blockTimeCache = { at: Date.now(), value: Math.min(10, Math.max(1, dt / span)) };
+  } catch { /* keep the previous value */ }
+  return blockTimeCache.value;
+}
+
+/**
+ * Upcoming protocol switches with live ETAs: CLOB switches from getProtocol
+ * plus the validator-set switches the node exposes. Sorted by height.
+ */
+async function upcomingSwitches() {
+  const [p, vset, secPerBlock] = await Promise.all([
+    getProtocol(),
+    rpcCall('mersennet_validatorSet', []).catch(() => null),
+    observedBlockTime(),
+  ]);
+  if (!p) return { blockTimeSec: secPerBlock, height: null, switches: [] };
+  const height = Number(p.height) || 0;
+  const labels = {
+    agentDelegationHeight: 'Agent keys for one-click trading',
+    priceScaleHeight: '$0.01 ticks on MRSN, SOL and ARB',
+    frameCallerHeight: 'Contracts own their CLOB accounts (maker vault deposits)',
+    settlementHeight: 'Settlement: 1 unit = 1 MRSN, PnL settles, 10%/5% margin, liquidations',
+    benchHeight: 'Benching after 3 missed leader slots',
+    jailEscalationHeight: 'Escalating jail',
+    rewardsToOperatorHeight: 'Block rewards to the operator wallet',
+  };
+  const all = { ...(p.switches || {}) };
+  const vp = vset && vset.params;
+  if (vp) for (const k of ['benchHeight', 'jailEscalationHeight', 'rewardsToOperatorHeight']) if (typeof vp[k] === 'number') all[k] = vp[k];
+  const now = Date.now();
+  const switches = Object.entries(all)
+    .filter(([, h]) => typeof h === 'number' && h > height)
+    .map(([key, h]) => {
+      const blocksLeft = h - height;
+      const etaSec = Math.round(blocksLeft * secPerBlock);
+      return { key, label: labels[key] || key, height: h, blocksLeft, etaSec, etaAt: new Date(now + etaSec * 1000).toISOString() };
+    })
+    .sort((a, b) => a.height - b.height);
+  return { blockTimeSec: Number(secPerBlock.toFixed(3)), height, switches };
+}
+
 /** Chain price (hex/decimal string/number) → human price for `marketId`. */
 function toHumanPrice(marketId, raw) {
   if (raw == null) return 0;
@@ -480,6 +573,8 @@ module.exports = {
   ethCall,
   // Decimal helpers (exposed so routes can convert raw -> human consistently)
   USDC_DECIMALS, SIZE_DECIMALS, PRICE_DECIMALS,
+  weiPerCollateralUnit, unitsPerMrsn, collateralDecimals, unitsToMrsn, mrsnToUnits,
+  observedBlockTime, upcomingSwitches,
   USDC_UNIT, SIZE_UNIT, PRICE_UNIT,
   rawToUnits,
   // Reads

@@ -1,5 +1,6 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
+import UpgradeBadge from '@/components/shared/UpgradeBadge';
 import { useWallet } from '@/hooks/useWallet';
 import { api, type VerifiedNode } from '@/lib/api';
 import type { JsonRpcSigner } from 'ethers';
@@ -18,10 +19,11 @@ export default function NodeRunnerCard() {
   const [result, setResult] = useState<{ ok: boolean; text: string; hint?: string } | null>(null);
   const [mine, setMine] = useState<VerifiedNode[]>([]);
   const [pointsPerDay, setPointsPerDay] = useState(500);
+  const [latestSha, setLatestSha] = useState<string | null>(null);
   const [network, setNetwork] = useState<{ total: number; active: number } | null>(null);
 
   const refresh = useCallback(() => {
-    if (address) api.getMyNodes(address).then((r) => { setMine(r.nodes); setPointsPerDay(r.pointsPerDay); }).catch(() => {});
+    if (address) api.getMyNodes(address).then((r) => { setMine(r.nodes); setPointsPerDay(r.pointsPerDay); setLatestSha(r.latest_sha || null); }).catch(() => {});
     api.getVerifiedNodes().then((r) => setNetwork({ total: r.total, active: r.active })).catch(() => {});
   }, [address]);
   useEffect(() => { refresh(); }, [refresh]);
@@ -68,9 +70,7 @@ export default function NodeRunnerCard() {
                 <div>
                   <span className="font-mono text-foreground">{n.host}</span>
                   <span className="text-dim"> · {n.identity.slice(0, 10)}… · {n.version || 'unknown build'}</span>
-                  {n.outdated && (
-                    <a href="/staking" className="ml-2 text-[10px] uppercase tracking-wider text-yellow-400 hover:underline" title="A newer node release is out. Re-run the install command (keeps keys and data); required before the next protocol switch.">upgrade available</a>
-                  )}
+                  {n.outdated && <UpgradeBadge latest={latestSha} className="ml-2" />}
                 </div>
                 <span className={cn('font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded', n.active ? 'text-primary bg-primary/10' : 'text-dim bg-surface-2')}>
                   {n.active ? 'online' : 'offline'}

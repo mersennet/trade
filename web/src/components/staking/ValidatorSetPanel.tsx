@@ -2,7 +2,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useWallet } from '@/hooks/useWallet';
 import { useToast } from '@/components/shared/Toast';
-import { api, type VerifiedNode, type NodeBuild } from '@/lib/api';
+import { api, type VerifiedNode, type NodeBuild, type ProtocolSwitches } from '@/lib/api';
+import UpgradeBadge from '@/components/shared/UpgradeBadge';
 import { cn, shortenAddress } from '@/lib/utils';
 import { getDefaultChain } from '@/lib/chain';
 import { startPoll } from '@/lib/poll';
@@ -32,6 +33,7 @@ export default function ValidatorSetPanel() {
   const { address, provider, isConnected } = useWallet();
   const { toast } = useToast();
   const [view, setView] = useState<ValidatorSetView | null>(null);
+  const [switches, setSwitches] = useState<ProtocolSwitches | null>(null);
   const [mine, setMine] = useState<VerifiedNode[]>([]);
   const [selected, setSelected] = useState<string>('');
   const [stake, setStake] = useState('1000');
@@ -50,6 +52,7 @@ export default function ValidatorSetPanel() {
   const refresh = useCallback(async () => {
     try { setView(await getValidatorSet()); } catch { /* rpc hiccup */ }
     api.getNodeBuilds().then((r) => setBuilds({ latest: r.latest, byId: Object.fromEntries((r.nodes || []).map((n) => [n.identity.toLowerCase(), n])) })).catch(() => {});
+    api.getProtocolSwitches().then(setSwitches).catch(() => {});
     if (address) api.getMyNodes(address).then((r) => { setMine(r.nodes); setLatestSha(r.latest_sha || null); }).catch(() => {});
     if (address) {
       // Native balance straight from the Mersennet RPC (the wallet provider
@@ -99,6 +102,21 @@ export default function ValidatorSetPanel() {
   const sorted = [...(view?.validators || [])].sort((a, b) => (BigInt(b.votingStake) > BigInt(a.votingStake) ? 1 : -1));
   const outdatedNodes = useMemo(() => mine.filter((n) => n.outdated), [mine]);
   const nextSwitch = view ? nextProtocolSwitch(view.params, view.height) : 0;
+  // Live schedule: every armed switch, grouped by height, ETA from the observed block time.
+  const schedule = useMemo(() => {
+    const byHeight = new Map<number, { height: number; etaAt: string; etaSec: number; labels: string[] }>();
+    for (const sw of switches?.switches || []) {
+      const g = byHeight.get(sw.height) || { height: sw.height, etaAt: sw.etaAt, etaSec: sw.etaSec, labels: [] };
+      g.labels.push(sw.label);
+      byHeight.set(sw.height, g);
+    }
+    return [...byHeight.values()].sort((a, b) => a.height - b.height);
+  }, [switches]);
+  const fmtEta = (etaSec: number, etaAt: string) => {
+    const h = etaSec / 3600;
+    const when = new Date(etaAt).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+    return `${h >= 48 ? `~${Math.round(h / 24)} d` : h >= 1 ? `~${Math.round(h)} h` : `~${Math.max(1, Math.round(etaSec / 60))} min`} · ${when} UTC`;
+  };
 
   return (
     <div className="bg-surface border border-border rounded-xl overflow-hidden" data-testid="validator-set-panel">
@@ -120,6 +138,22 @@ export default function ValidatorSetPanel() {
           (epochs are {view ? Math.round(view.params.epochBlocks * 2 / 60) : 60} minutes; the top {view?.params.maxValidators ?? 12} by self + delegated stake produce blocks).
           Miss more than {view ? view.params.jailMissBps / 100 : 20}% of your leader slots in an epoch and you sit out the next one{view?.params.benchHeight ? (view.height >= view.params.benchHeight ? '; three missed slots bench you for the rest of the epoch' : ` (from block ${view.params.benchHeight.toLocaleString()}, three missed slots bench you for the rest of the epoch)`) : ''}. Unregister any time; your stake unbonds over ~{view ? Math.round(view.params.unbondingBlocks * 2 / 3600) : 3} hours.
         </p>
+
+        {schedule.length > 0 && (
+          <div className="border border-border rounded-lg p-3 space-y-1.5" data-testid="switch-schedule">
+            <p className="text-[10px] font-semibold text-dim uppercase tracking-wider">
+              Protocol switches ahead <span className="font-normal normal-case">· blocks run at {switches?.blockTimeSec?.toFixed(2)} s, so times are estimates</span>
+            </p>
+            {schedule.map((g) => (
+              <div key={g.height} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[12px]">
+                <span className="font-mono text-foreground">block {g.height.toLocaleString()}</span>
+                <span className="font-mono text-yellow-400">{fmtEta(g.etaSec, g.etaAt)}</span>
+                <span className="text-dim">{g.labels.join(' · ')}</span>
+              </div>
+            ))}
+            <p className="text-[11px] text-dim">Validators must run the current release{builds.latest ? <> (<code className="font-mono text-foreground">{builds.latest}</code>)</> : null} before each height. Nothing to do for traders.</p>
+          </div>
+        )}
 
         {outdatedNodes.length > 0 && (
           <div className="border border-yellow-400/40 bg-yellow-400/5 rounded-lg p-3 space-y-1" data-testid="node-upgrade-notice">
@@ -228,8 +262,9 @@ export default function ValidatorSetPanel() {
                     <td className="py-1.5 pr-3 text-right font-mono">{fmtMrsn(v.delegated)}</td>
                     <td className={cn('py-1.5 pr-3 text-right font-mono', v.missedSlots > 0 && v.proposedSlots === 0 ? 'text-down' : '')} title="Leader slots this epoch: blocks your node proposed vs. slots it missed. Missing more than 20% of at least 5 slots jails the node for the next epoch.">{v.proposedSlots} proposed<span className="text-dim"> · {v.missedSlots} missed</span></td>
                     <td className="py-1.5 pr-3 font-mono" title={b?.version || 'The node has not answered a build query yet'}>
-                      {b?.build ? <span className={b.outdated ? 'text-yellow-400' : 'text-dim'}>{b.build}</span> : <span className="text-dim">—</span>}
-                      {b?.outdated && <span className="ml-1 font-mono text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded text-yellow-400 bg-yellow-400/10" title={`Behind the current release ${builds.latest || ''} — must upgrade before the next protocol switch`}>upgrade</span>}
+                      {!b?.build && <span className="text-dim">—</span>}
+                      {b?.build && !b.outdated && <span className="text-dim">{b.build}</span>}
+                      {b?.build && b.outdated && <UpgradeBadge build={b.build} latest={builds.latest} />}
                     </td>
                     <td className="py-1.5 text-right"><span className={cn('font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded', STATUS_TONE[v.status] || 'text-dim')}>{v.status}</span>{v.benched && <span title="Missed 3 leader slots this epoch: out of the leader rotation until the epoch boundary (still voting)" className="ml-1 font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded text-yellow-400 bg-yellow-400/10">benched</span>}</td>
                   </tr>
