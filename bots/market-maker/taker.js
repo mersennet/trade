@@ -261,7 +261,12 @@ async function runWave() {
     if (!quietLogged) { console.log(`[taker] quiet: ${quietReason()}`); quietLogged = true; }
     return;
   }
-  if (quietLogged) { console.log('[taker] switch passed, trading with the new scales'); quietLogged = false; }
+  if (quietLogged) {
+    // Mids were read in the old scale; re-read before the first post-switch wave.
+    await fetchMidPrices().catch(() => {});
+    console.log('[taker] switch passed, trading with the new scales');
+    quietLogged = false;
+  }
   submitErrLogged = false;
   const waveSize = randInt(CONFIG.waveSizeMin, CONFIG.waveSizeMax);
   const trades = Array.from({ length: waveSize }, () => generateTrade());
