@@ -6,10 +6,25 @@ const router = Router();
 
 const VALID_RESOLUTIONS = ['1m', '5m', '15m', '1h', '4h', '1d', '1w'];
 
+// Accepts the numeric market id or a symbol (MRSN/USD, MRSN-USD, mrsn).
+function resolveMarketId(param) {
+  if (/^\d+$/.test(param)) {
+    const id = Number(param);
+    return chain.MARKETS.some((m) => m.id === id) ? id : null;
+  }
+  const key = String(param).toUpperCase().replace('-', '/');
+  const m = chain.MARKETS.find((x) => x.symbol === key || x.base === key || x.symbol === `${key}/USD`);
+  return m ? m.id : null;
+}
+
 router.get('/:marketId', async (req, res) => {
   try {
-    const { marketId } = req.params;
-    const resolution = req.query.resolution || '1h';
+    const marketId = resolveMarketId(req.params.marketId);
+    if (marketId == null) {
+      return res.status(404).json({ error: `Unknown market '${req.params.marketId}'. Use the numeric id or symbol from /api/v1/markets.` });
+    }
+    // `interval` is accepted as an alias for `resolution`.
+    const resolution = req.query.resolution || req.query.interval || '1h';
     const from = req.query.from ? new Date(Number(req.query.from)) : new Date(Date.now() - 24 * 3600 * 1000);
     const to = req.query.to ? new Date(Number(req.query.to)) : new Date();
     const limit = Math.min(Number(req.query.limit) || 500, 2000);
@@ -33,7 +48,7 @@ router.get('/:marketId', async (req, res) => {
     const toBase = (v) => { try { return Number(BigInt(String(v))); } catch { return Number(v) || 0; } };
 
     res.json({
-      marketId: Number(marketId),
+      marketId,
       resolution,
       candles: result.rows.map(r => ({
         time: Math.floor(new Date(r.open_time).getTime() / 1000),
@@ -47,7 +62,8 @@ router.get('/:marketId', async (req, res) => {
       count: result.rows.length,
     });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    console.error('[candles]', e.message);
+    res.status(500).json({ error: 'Internal error' });
   }
 });
 
