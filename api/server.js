@@ -111,6 +111,16 @@ app.use('/api/v1/referrals', require('./src/routes/referrals'));
 app.use('/api/v1/api-keys', apiKeysRouter);
 app.use('/api/v1/governance', governanceRouter);
 app.use('/api/v1/stats/launch', require('./src/routes/launch'));
+// Live CLOB protocol parameters (switch heights, margin bps, wei per unit) —
+// the terminal and bots read this instead of hard-coding heights.
+app.get('/api/v1/protocol', async (_req, res) => {
+  try {
+    const p = await require('./src/services/chain').getProtocol();
+    if (!p) return res.status(503).json({ error: 'node unavailable' });
+    res.set('Cache-Control', 'public, max-age=15');
+    res.json(p);
+  } catch (e) { res.status(503).json({ error: e.message }); }
+});
 app.use('/api/v1/stats', statsRouter);
 app.use('/api/v1', statsRouter);
 app.use('/api/v1/spot', spotRouter);

@@ -116,6 +116,22 @@ services:
       - indexer
     profiles: ["bots"]
 
+  # Liquidation keeper: closes under-margin accounts on the book (earns half
+  # of the 1% fee). Idle until the settlement switch; gas funded by the maker.
+  liquidator:
+    build:
+      context: ./bots/market-maker
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["node", "liquidator.js"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      RPC_URL: ${RPC_URL:-https://rpc.mersennet.com}
+      BOT_SEED: ${BOT_SEED:-mersennet-bot-v1}
+      CHAIN_ID: ${CHAIN_ID:-131071}
+    profiles: ["bots"]
+
   # Keeps the MakerVault wired to the maker: agent grant, deposits → collateral
   # (10 % reserve for withdrawals), price scales. Manager key = maker key.
   vault-manager:

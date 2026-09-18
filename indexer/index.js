@@ -20,6 +20,10 @@ const REPORT_SECRET = process.env.REPORT_SECRET || '';
 // system addresses), so the old prefix heuristic no longer catches them.
 // Default list matches BOT_SEED=mersennet-bot-v1 / NUM_TAKERS=20 (maker + taker-0..19).
 const DEFAULT_BOT_ADDRESSES = [
+  // The maker vault (quoted by the maker bot through an agent key): its fills
+  // are bot fills for every human-vs-bot statistic. The liquidation keeper's
+  // address depends on BOT_SEED and is listed in BOT_ADDRESSES (.env).
+  '0xe77f94c4bf7d6d2e2371afde440a0b9b8a567725',
   '0x6dd9bb44ddfaba76d8868915d6fe80c3f8a932ec',
   '0x2d268a6cf714a0a58a84c5345f2113f562a9ecb6',
   '0x05ed2c228f7fd5fc5750fbc36e7cc9ed95fdb08e',

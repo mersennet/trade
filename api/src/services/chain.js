@@ -426,6 +426,20 @@ async function getOnChainVotingPower(address) {
   return Number(totalWei / 10n ** 18n);
 }
 
+/**
+ * Live CLOB protocol parameters (`mersennet_orders_getProtocol`), cached 30 s:
+ * margin bps, settlement/agent/frame switches, wei per collateral unit.
+ */
+let protocolCache = { at: 0, value: null };
+async function getProtocol() {
+  if (protocolCache.value && Date.now() - protocolCache.at < 30_000) return protocolCache.value;
+  try {
+    const p = await rpcCall('mersennet_orders_getProtocol', []);
+    if (p) protocolCache = { at: Date.now(), value: p };
+  } catch { /* keep the previous value */ }
+  return protocolCache.value;
+}
+
 /** Chain price (hex/decimal string/number) → human price for `marketId`. */
 function toHumanPrice(marketId, raw) {
   if (raw == null) return 0;
@@ -460,6 +474,7 @@ module.exports = {
   priceScaleSql,
   toHumanPrice,
   toChainPrice,
+  getProtocol,
   rpcCall,
   ethCall,
   // Decimal helpers (exposed so routes can convert raw -> human consistently)

@@ -4,7 +4,7 @@ import { useStore } from '@/stores/useStore';
 import { useWallet } from '@/hooks/useWallet';
 import { useMarketTick } from '@/hooks/useMarketTick';
 import { useToast } from '@/components/shared/Toast';
-import { api } from '@/lib/api';
+import { api, type ClobProtocol } from '@/lib/api';
 import { cn, formatPrice, formatNumber } from '@/lib/utils';
 import { getReferralCode } from '@/lib/referral';
 import { playSound } from '@/lib/sounds';
@@ -113,6 +113,14 @@ export default function TradeForm() {
       .catch(() => {});
   }, [address]);
 
+  const [protocol, setProtocol] = useState<ClobProtocol | null>(null);
+  useEffect(() => {
+    let alive = true;
+    api.getProtocol().then((p) => { if (alive) setProtocol(p); }).catch(() => {});
+    const t = setInterval(() => api.getProtocol().then((p) => { if (alive) setProtocol(p); }).catch(() => {}), 60_000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+
   const orderSummary = useMemo(() => {
     const ticker = tickers[market.id];
     // Reference price for the ticket: limit → entered price; stop → trigger
@@ -130,18 +138,21 @@ export default function TradeForm() {
 
     const notional = price * size;
     const marginRequired = notional / trade.leverage;
-    // Indicative only: the testnet currently enforces 0 bps maintenance margin
-    // on-chain, so this estimate assumes a conventional 0.5% for guidance.
-    const maintenanceMargin = notional * 0.005;
-    const liqDistance = (marginRequired - maintenanceMargin) / size;
+    // Liquidation estimate with the margin the chain enforces (5% maintenance
+    // from the settlement switch; the node reports 0 before it, in which
+    // case nothing is liquidatable and we show the post-switch rule). Isolated
+    // view of this order: collateral = margin posted at the chosen leverage.
+    //   long : m = (e − C/s) / (1 − mm)     short: m = (e + C/s) / (1 + mm)
+    const mm = (protocol?.maintenanceMarginBps || protocol?.settlementMaintenanceMarginBps || 500) / 10000;
+    const cPerUnit = marginRequired / size;
     const liquidationPrice = trade.side === 'buy'
-      ? Math.max(0, price - liqDistance)
-      : price + liqDistance;
+      ? Math.max(0, (price - cPerUnit) / (1 - mm))
+      : (price + cPerUnit) / (1 + mm);
     const takes = trade.orderType === 'market' || trade.orderType === 'trailing' || trade.orderType === 'twap' || (trade.orderType === 'stop' && !stopLimit);
     const fee = feesCharged ? notional * (takes ? feeRates.taker : feeRates.maker) : 0;
 
     return { notional, marginRequired, liquidationPrice, fee };
-  }, [tickers, market.id, trade, feeRates, feesCharged, stopLimit, triggerPrice, scaleFrom, scaleTo]);
+  }, [tickers, market.id, trade, feeRates, feesCharged, stopLimit, triggerPrice, scaleFrom, scaleTo, protocol]);
 
   const calcSize = () => {
     const r = parseFloat(riskPct) / 100;
