@@ -156,12 +156,11 @@ export default function TradeForm() {
     // maintenance) would never allow — and the keeper closes it in the switch
     // block. Flag it here rather than let a tester find out on Sunday.
     const imBps = protocol?.settlementInitialMarginBps || 1000;
-    const preSwitchOversized = !!protocol && !protocol.settlementActive && collateral > 0
-      ? notional > collateral * (10000 / imBps)
-      : !!protocol && !protocol.settlementActive && collateral === 0 && notional > 0;
+    const preSwitchOversized = !!protocol && !protocol.settlementActive && isConnected
+      && notional > collateral * (10000 / imBps);
 
     return { notional, marginRequired, liquidationPrice, fee, preSwitchOversized };
-  }, [tickers, market.id, trade, feeRates, feesCharged, stopLimit, triggerPrice, scaleFrom, scaleTo, protocol, collateral]);
+  }, [tickers, market.id, trade, feeRates, feesCharged, stopLimit, triggerPrice, scaleFrom, scaleTo, protocol, collateral, isConnected]);
 
   const calcSize = () => {
     const r = parseFloat(riskPct) / 100;
