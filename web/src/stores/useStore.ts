@@ -138,6 +138,8 @@ interface AppState {
   /** Timestamp of the last "Deposit" request from the header — AccountPanel
    * watches it and opens its transfer panel in deposit mode. */
   depositRequestTs: number;
+  /** Set when the onboarding checklist asks for a prefilled first market order. */
+  firstOrderRequestTs: number;
   /** Bumped by "Connect" CTAs outside the header; WalletButton opens its menu. */
   connectRequestTs: number;
   /** Client-side TP/SL brackets (persisted per wallet). */
@@ -174,6 +176,7 @@ interface AppState {
   setPrivateMode: (v: boolean) => void;
   setPrivacyForkActive: (v: boolean) => void;
   requestDeposit: () => void;
+  requestFirstOrder: () => void;
   requestConnect: () => void;
   setBracket: (b: Bracket) => void;
   removeBracket: (id: string) => void;
@@ -221,6 +224,7 @@ export const useStore = create<AppState>()(
       privateMode: false,
       privacyForkActive: false,
       depositRequestTs: 0,
+      firstOrderRequestTs: 0,
       connectRequestTs: 0,
       brackets: [],
       conditionals: [],
@@ -263,6 +267,8 @@ export const useStore = create<AppState>()(
         privateMode: privacyForkActive ? s.privateMode : false,
       })),
       requestDeposit: () => set({ depositRequestTs: Date.now() }),
+      // A 1-unit market buy on the selected market: the smallest real trade.
+      requestFirstOrder: () => set((s) => ({ firstOrderRequestTs: Date.now(), trade: { ...s.trade, orderType: 'market', side: 'buy', size: '1' } })),
       requestConnect: () => set({ connectRequestTs: Date.now() }),
       // One bracket per wallet+market: setting replaces any previous one.
       setBracket: (b) => set((s) => ({

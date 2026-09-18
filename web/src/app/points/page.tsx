@@ -44,17 +44,17 @@ export default function PointsPage() {
           <h1 className="page-title">Points & Rewards</h1>
           <span className="px-1.5 py-0.5 bg-primary/10 text-primary rounded text-[9px] font-semibold uppercase tracking-wider">Season 1 · Live</span>
         </div>
-        <p className="page-sub">Earn points by trading, running a verified node, referring traders and winning the weekly sprint — liquidity points are next</p>
+        <p className="page-sub">Earn points by trading, running a verified node, providing liquidity in the maker vault, referring traders and winning the weekly sprint</p>
       </header>
 
-      {/* Trading, node, referral and sprint points are live; LP points wait for the vault. */}
+      {/* Every source is live: trading, node, vault LP, referral, sprint. */}
       <div className="flex items-start gap-2.5 bg-primary/[0.06] border border-primary/20 rounded-xl px-4 py-3">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary shrink-0 mt-0.5">
           <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" />
         </svg>
         <p className="text-[12px] leading-relaxed text-foreground/80">
           <span className="text-primary font-semibold">Trading, node-runner, referral and weekly-sprint points are live.</span>{' '}
-          Trading points accrue from your on-chain volume (updated every few minutes); a verified node earns 500 points a day while it is online (below); a referrer earns 10% of each referee&apos;s trading points; the top three traders by volume each week (Monday 00:00 UTC) receive 3,000 / 2,000 / 1,000 bonus points — see the <Link href="/leaderboard" className="text-primary hover:underline">leaderboard</Link>. LP points start with the vault.
+          Trading points accrue from your on-chain volume (updated every few minutes); a verified node earns 500 points a day while it is online (below); a referrer earns 10% of each referee&apos;s trading points; the top three traders by volume each week (Monday 00:00 UTC) receive 3,000 / 2,000 / 1,000 bonus points — see the <Link href="/leaderboard" className="text-primary hover:underline">leaderboard</Link>; MRSN parked in the <Link href="/vault" className="text-primary hover:underline">maker vault</Link> earns LP points every day it stays deposited.
         </p>
       </div>
 
@@ -116,7 +116,7 @@ export default function PointsPage() {
           {[
             { action: 'Trading',     desc: '1 point per $1 of volume traded',       mult: 'Live',   tone: 'text-primary', live: true  },
             { action: 'Node runner', desc: '500 points per day for a verified, online full node', mult: 'Live', tone: 'text-primary', live: true },
-            { action: 'Vault LP',    desc: '2 points per 1 MRSN deposited per day', mult: 'Soon',   tone: 'text-dim',     live: false },
+            { action: 'Vault LP',    desc: '0.1 point per MRSN per day deposited in the maker vault (1,000 MRSN for a day = 100 points), credited every few minutes', mult: 'Live', tone: 'text-primary', live: true },
             { action: 'Referrals',   desc: '10% of referee trading points — share your code from the Referrals page; the referee confirms with one signature', mult: 'Live', tone: 'text-primary', live: true },
             { action: 'Weekly sprint', desc: 'Top 3 by volume each week (Monday 00:00 UTC): 3,000 / 2,000 / 1,000 bonus points', mult: 'Live', tone: 'text-primary', live: true },
           ].map((e) => (

@@ -125,6 +125,7 @@ export default function LeaderboardPage() {
                 <th className="text-right px-4 py-2.5">Total</th>
                 <th className="text-right px-4 py-2.5 hidden md:table-cell">Trading</th>
                 <th className="text-right px-4 py-2.5 hidden md:table-cell">Node</th>
+                <th className="text-right px-4 py-2.5 hidden md:table-cell" title="Maker vault deposits: 0.1 point per MRSN per day">Vault LP</th>
                 <th className="text-right px-4 py-2.5 hidden md:table-cell">Referral</th>
                 <th className="text-right px-4 py-2.5 hidden md:table-cell">Bonus</th>
                 <th className="text-right px-4 py-2.5">Tier</th>
@@ -132,7 +133,7 @@ export default function LeaderboardPage() {
             </thead>
             <tbody>
               {points.length === 0 ? (
-                <tr><td colSpan={8} className="text-center py-12 text-dim text-xs">No points awarded yet this season.</td></tr>
+                <tr><td colSpan={9} className="text-center py-12 text-dim text-xs">No points awarded yet this season.</td></tr>
               ) : points.map((p) => {
                 const rb = rankBadge(p.rank);
                 return (
@@ -149,6 +150,7 @@ export default function LeaderboardPage() {
                     <td className="px-4 py-2.5 text-right font-mono font-semibold tabular-nums text-primary">{Math.round(p.totalPoints).toLocaleString()}</td>
                     <td className="px-4 py-2.5 text-right font-mono tabular-nums text-foreground/70 hidden md:table-cell">{Math.round(p.tradingPoints || 0).toLocaleString()}</td>
                     <td className="px-4 py-2.5 text-right font-mono tabular-nums text-foreground/70 hidden md:table-cell">{Math.round(p.nodePoints || 0).toLocaleString()}</td>
+                    <td className="px-4 py-2.5 text-right font-mono tabular-nums text-foreground/70 hidden md:table-cell">{Math.round(p.lpPoints || 0).toLocaleString()}</td>
                     <td className="px-4 py-2.5 text-right font-mono tabular-nums text-foreground/70 hidden md:table-cell">{Math.round(p.referralPoints || 0).toLocaleString()}</td>
                     <td className="px-4 py-2.5 text-right font-mono tabular-nums text-foreground/70 hidden md:table-cell">{Math.round(p.bonusPoints || 0).toLocaleString()}</td>
                     <td className="px-4 py-2.5 text-right text-[11px] text-dim">{p.tier}</td>
