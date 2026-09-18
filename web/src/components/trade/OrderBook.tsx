@@ -5,6 +5,7 @@ import { api, type Trade } from '@/lib/api';
 import { formatPrice, formatNumber, cn } from '@/lib/utils';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { startPoll } from '@/lib/poll';
+import { useMarketTick } from '@/hooks/useMarketTick';
 import EmptyState, { SkeletonRows } from '@/components/shared/EmptyState';
 
 interface BookLevel { price: number; size: number; total: number; pct: number; }
@@ -18,7 +19,14 @@ export default function OrderBook() {
   // those stay truthful no matter what display grouping is selected.
   const [rawBids, setRawBids] = useState<[number, number][]>([]);
   const [rawAsks, setRawAsks] = useState<[number, number][]>([]);
+  // Display grouping in quote units. The finest bucket is the market's tick
+  // (tickSize ÷ priceScale — $0.01 on MRSN/SOL/ARB after the rescale, $10 on
+  // BTC); the options scale up from there so a coarse view is one click away.
+  const { tick, decimals: tickDecimals } = useMarketTick(market);
   const [grouping, setGrouping] = useState(1);
+  useEffect(() => { setGrouping(tick); }, [tick]);
+  const groupings = useMemo(() => [1, 5, 10, 50, 100].map((m) => m * tick), [tick]);
+  const fmtGroup = (g: number) => (g >= 1 ? String(Math.round(g * 100) / 100) : g.toFixed(tickDecimals));
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<BookTab>('book');
   const [recentTrades, setRecentTrades] = useState<Trade[]>([]);
@@ -118,11 +126,15 @@ export default function OrderBook() {
   // the same bucket whenever the true spread is tighter than the grouping).
   const { bids, asks } = useMemo(() => {
     const processLevels = (levels: [number, number][], isAsk: boolean): BookLevel[] => {
+      // Bucket in integer multiples of the grouping (with a tiny epsilon so
+      // 115.37 / 0.01 does not floor to 11536 through float error), then map
+      // back to a price rounded to the tick's decimals so keys dedupe.
       const grouped = new Map<number, number>();
+      const decimals = Math.max(tickDecimals, grouping < 1 ? Math.ceil(-Math.log10(grouping)) : 0);
       for (const [p, s] of levels) {
-        const key = isAsk
-          ? Math.ceil(p / grouping) * grouping
-          : Math.floor(p / grouping) * grouping;
+        const q = p / grouping;
+        const n = isAsk ? Math.ceil(q - 1e-9) : Math.floor(q + 1e-9);
+        const key = Number((n * grouping).toFixed(decimals));
         grouped.set(key, (grouped.get(key) || 0) + s);
       }
       const sorted = [...grouped.entries()]
@@ -240,12 +252,12 @@ export default function OrderBook() {
                 aria-expanded={showGrouping}
                 className="bg-surface-2 text-foreground text-[11px] px-2 py-0.5 rounded border border-border hover:border-primary/40 transition-colors font-mono flex items-center gap-1"
               >
-                {grouping}
+                {fmtGroup(grouping)}
                 <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className={cn('text-dim transition-transform', showGrouping && 'rotate-180')}><polyline points="6 9 12 15 18 9" /></svg>
               </button>
               {showGrouping && (
                 <div className="absolute right-0 top-full mt-1 bg-surface border border-border rounded-lg shadow-xl z-50 py-1 min-w-[72px]">
-                  {[1, 10, 50, 100, 500].map((g) => (
+                  {groupings.map((g) => (
                     <button
                       key={g}
                       onClick={() => { setGrouping(g); setShowGrouping(false); }}
@@ -253,7 +265,7 @@ export default function OrderBook() {
                         'block w-full text-right px-3 py-1.5 text-[11px] font-mono transition-colors',
                         g === grouping ? 'text-primary bg-primary/10' : 'text-foreground hover:bg-surface-2'
                       )}
-                    >{g}</button>
+                    >{fmtGroup(g)}</button>
                   ))}
                 </div>
               )}

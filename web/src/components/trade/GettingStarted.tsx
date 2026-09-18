@@ -19,6 +19,8 @@ export default function GettingStarted() {
   const oneClickEnabled = useStore((s) => s.oneClickEnabled);
   const setShowSettings = useStore((s) => s.setShowSettings);
   const requestDeposit = useStore((s) => s.requestDeposit);
+  const requestFirstOrder = useStore((s) => s.requestFirstOrder);
+  const marketBase = useStore((s) => s.market.base);
   const requestConnect = useStore((s) => s.requestConnect);
   const [dismissed, setDismissed] = useState(() => {
     if (typeof window === 'undefined' || !address) return false;
@@ -69,7 +71,14 @@ export default function GettingStarted() {
     {
       label: 'Place your first order',
       done: positions.length > 0 || orders.length > 0,
-      action: null,
+      // Prefill the smallest real trade — a 1-unit market buy on the selected
+      // market — and bring the ticket on screen; the user only presses Buy.
+      action: collateral > 0 ? (
+        <button
+          onClick={() => requestFirstOrder()}
+          className="text-[10px] text-primary hover:underline font-medium"
+        >Try 1 {marketBase} market buy</button>
+      ) : null,
     },
     {
       label: 'Enable one-click trading',

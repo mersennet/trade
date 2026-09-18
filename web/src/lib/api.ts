@@ -350,7 +350,7 @@ export interface TraderStatRow {
 }
 export interface TraderProfile { address: string; stats: Record<string, TraderStatRow>; recentTrades: Trade[]; }
 export interface PointsResponse { address: string; totalPoints: number; tradingPoints: number; lpPoints: number; referralPoints: number; nodePoints?: number; bonusPoints?: number; tier: string; rank: number; history: { point_type: string; amount: number; reason: string; created_at: string }[]; }
-export interface PointsEntry { rank: number; address: string; totalPoints: number; tier: string; tradingPoints?: number; nodePoints?: number; referralPoints?: number; bonusPoints?: number; }
+export interface PointsEntry { rank: number; address: string; totalPoints: number; tier: string; tradingPoints?: number; nodePoints?: number; lpPoints?: number; referralPoints?: number; bonusPoints?: number; }
 export interface SprintStatus { weekStart: string; awardAt: string; prizes: number[]; standings: { rank: number; address: string; volume: number; trades: number }[]; lastWinners: { week_start: string; address: string; rank: number; volume: number; points: number }[]; }
 export interface ReferralStatus { referredBy: { referrer: string; code: string; at: string } | null; referees: number; referralPoints: number; share: number; }
 export interface NodeBuild { identity: string; host: string; version: string | null; build: string | null; outdated: boolean; height: number | null; seen_at: string; }

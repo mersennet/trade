@@ -12,6 +12,7 @@ import EmptyState, { SkeletonRows } from '@/components/shared/EmptyState';
 import EquityCurve from '@/components/shared/EquityCurve';
 import { buildEquityCurve } from '@/lib/pnl';
 import { startPoll } from '@/lib/poll';
+import { readVault, type VaultOnChain } from '@/lib/makerVault';
 
 type MarginMode = 'cross' | 'isolated' | 'portfolio';
 
@@ -69,11 +70,13 @@ export default function PortfolioPage() {
   const [data, setData] = useState<PortfolioMarginData | null>(null);
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<TraderProfile | null>(null);
+  const [vault, setVault] = useState<VaultOnChain | null>(null);
   const marginMode = useStore((s) => s.marginMode);
   const setMarginMode = useStore((s) => s.setMarginMode);
 
   const refresh = useCallback(async () => {
     if (!address) return;
+    readVault(address).then(setVault).catch(() => {});
     try {
       const res = await api.getPortfolioMargin(address);
       setData(res);
@@ -218,7 +221,7 @@ export default function PortfolioPage() {
             <div className="px-4 py-2.5 border-b border-border flex items-center justify-between">
               <h3 className="text-[11px] font-semibold text-foreground uppercase tracking-wider">Collateral Breakdown</h3>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-border">
+            <div className={cn('grid grid-cols-1 divide-y md:divide-y-0 md:divide-x divide-border', vault && vault.myShares > 0 ? 'md:grid-cols-3' : 'md:grid-cols-2')}>
               <div className="p-4">
                 <h4 className="text-[10px] text-dim uppercase tracking-wider font-medium mb-3">Perp Margin</h4>
                 <div className="space-y-2">
@@ -238,6 +241,17 @@ export default function PortfolioPage() {
                 </div>
               </div>
 
+              {vault && vault.myShares > 0 && (
+                <div className="p-4">
+                  <h4 className="text-[10px] text-dim uppercase tracking-wider font-medium mb-3">Maker vault</h4>
+                  <div className="space-y-2">
+                    <Row label="mvMRSN shares" value={formatNumber(vault.myShares, 4)} />
+                    <Row label="Value at NAV" value={`${formatNumber(vault.myValue, 2)} MRSN`} valueClass="text-foreground font-medium" />
+                    <Row label="Share price" value={`${vault.sharePrice.toFixed(6)} MRSN`} valueClass={vault.sharePrice >= 1 ? 'text-green' : 'text-red'} />
+                    <Link href="/vault" className="inline-block text-[11px] text-primary hover:underline">Manage on the Vault page →</Link>
+                  </div>
+                </div>
+              )}
               <div className="p-4">
                 <h4 className="text-[10px] text-dim uppercase tracking-wider font-medium mb-3">Spot Holdings (with haircuts)</h4>
                 {data.spotBalances && Array.isArray(data.spotBalances) && data.spotBalances.length > 0 ? (

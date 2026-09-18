@@ -109,6 +109,7 @@ router.get('/leaderboard/season/:season', async (req, res) => {
         totalPoints: Number(r.total_points),
         tradingPoints: Number(r.trading_points),
         nodePoints: Number(r.node_points),
+        lpPoints: Number(r.lp_points),
         referralPoints: Number(r.referral_points),
         bonusPoints: Number(r.bonus_points),
         tier: r.tier,

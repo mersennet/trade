@@ -1,7 +1,8 @@
 'use client';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useStore } from '@/stores/useStore';
 import { useWallet } from '@/hooks/useWallet';
+import { useMarketTick } from '@/hooks/useMarketTick';
 import { useToast } from '@/components/shared/Toast';
 import { api } from '@/lib/api';
 import { cn, formatPrice, formatNumber } from '@/lib/utils';
@@ -39,6 +40,22 @@ const CONDITIONAL_TYPES = new Set(['stop', 'trailing', 'twap']);
 
 export default function TradeForm() {
   const { market, trade, setTrade, skipConfirm, marginMode, setMarginMode, tickers, positions, oneClickEnabled, sessionKey } = useStore();
+  // Price inputs step by the market's tick ($0.01 on rescaled markets, $10 on BTC).
+  const { step: priceStep, tick: priceTick } = useMarketTick(market);
+  // "Place your first order" in the checklist prefilled a 1-unit market buy:
+  // bring the form on screen and flash it so the click visibly did something.
+  const firstOrderRequestTs = useStore((s) => s.firstOrderRequestTs);
+  const formRef = useRef<HTMLDivElement | null>(null);
+  const [formFlash, setFormFlash] = useState(false);
+  useEffect(() => {
+    if (!firstOrderRequestTs) return;
+    const t = setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setFormFlash(true);
+      setTimeout(() => setFormFlash(false), 1600);
+    }, 120);
+    return () => clearTimeout(t);
+  }, [firstOrderRequestTs]);
   const tradeMode = useStore((s) => s.tradeMode);
   const isSpot = tradeMode === 'spot';
   const privateMode = useStore((s) => s.privateMode);
@@ -495,7 +512,7 @@ export default function TradeForm() {
   };
 
   return (
-    <div data-trade-form className="relative bg-surface border border-border rounded-xl md:border-0 md:rounded-none p-2.5 md:p-3 xl:p-3.5 flex flex-col gap-2 overflow-hidden shrink-0">
+    <div ref={formRef} data-trade-form className={cn('relative bg-surface border border-border rounded-xl md:border-0 md:rounded-none p-2.5 md:p-3 xl:p-3.5 flex flex-col gap-2 overflow-hidden shrink-0 transition-shadow duration-500', formFlash && 'ring-2 ring-primary/70 ring-inset')}>
       {/* Inline order confirmation — replaces the native window.confirm popup.
           Shows the full order ticket and keeps the user in the terminal. */}
       {confirming && (
@@ -650,10 +667,10 @@ export default function TradeForm() {
         <div>
           <label className="label-caps mb-1.5 flex justify-between"><span>{t('trade.price', 'Price')}</span><span>{market.quote}</span></label>
           <input
-            type="number" value={trade.price}
+            type="number" value={trade.price} step={priceStep} inputMode="decimal"
             aria-label={`Price (${market.quote})`}
             onChange={(e) => setTrade({ price: e.target.value })}
-            placeholder="0.00"
+            placeholder={priceTick < 1 ? (0).toFixed(Math.ceil(-Math.log10(priceTick))) : '0'}
             className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-dim font-mono outline-none focus:border-primary/60 focus:bg-surface-3 transition-all"
           />
         </div>
@@ -668,7 +685,7 @@ export default function TradeForm() {
         <div className="space-y-2">
           <div>
             <label className="label-caps mb-1.5 flex justify-between"><span>Trigger price</span><span>{market.quote}</span></label>
-            <input type="number" value={triggerPrice} aria-label={`Trigger price (${market.quote})`} onChange={(e) => setTriggerPrice(e.target.value)}
+            <input type="number" step={priceStep} inputMode="decimal" value={triggerPrice} aria-label={`Trigger price (${market.quote})`} onChange={(e) => setTriggerPrice(e.target.value)}
               placeholder={tickers[market.id]?.markPrice ? String(tickers[market.id].markPrice) : '0.00'}
               className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-dim font-mono outline-none focus:border-primary/60 transition-all" />
           </div>
@@ -677,7 +694,7 @@ export default function TradeForm() {
             Stop-limit: rest a limit order at a price once triggered (default takes the market)
           </label>
           {stopLimit && (
-            <input type="number" value={trade.price} aria-label={`Limit price (${market.quote})`} onChange={(e) => setTrade({ price: e.target.value })} placeholder={`Limit price (${market.quote})`}
+            <input type="number" step={priceStep} inputMode="decimal" value={trade.price} aria-label={`Limit price (${market.quote})`} onChange={(e) => setTrade({ price: e.target.value })} placeholder={`Limit price (${market.quote})`}
               className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-dim font-mono outline-none focus:border-primary/60 transition-all" />
           )}
           <p className="text-[10px] text-dim leading-relaxed">
@@ -709,11 +726,11 @@ export default function TradeForm() {
           <div className="grid grid-cols-3 gap-1.5">
             <div>
               <label className="label-caps mb-1.5 block">From</label>
-              <input type="number" value={scaleFrom} aria-label="Ladder start price" onChange={(e) => setScaleFrom(e.target.value)} placeholder="0" className="w-full bg-surface-3 border border-border rounded-lg px-2.5 py-2.5 text-sm text-foreground placeholder:text-dim font-mono outline-none focus:border-primary/60" />
+              <input type="number" step={priceStep} inputMode="decimal" value={scaleFrom} aria-label="Ladder start price" onChange={(e) => setScaleFrom(e.target.value)} placeholder="0" className="w-full bg-surface-3 border border-border rounded-lg px-2.5 py-2.5 text-sm text-foreground placeholder:text-dim font-mono outline-none focus:border-primary/60" />
             </div>
             <div>
               <label className="label-caps mb-1.5 block">To</label>
-              <input type="number" value={scaleTo} aria-label="Ladder end price" onChange={(e) => setScaleTo(e.target.value)} placeholder="0" className="w-full bg-surface-3 border border-border rounded-lg px-2.5 py-2.5 text-sm text-foreground placeholder:text-dim font-mono outline-none focus:border-primary/60" />
+              <input type="number" step={priceStep} inputMode="decimal" value={scaleTo} aria-label="Ladder end price" onChange={(e) => setScaleTo(e.target.value)} placeholder="0" className="w-full bg-surface-3 border border-border rounded-lg px-2.5 py-2.5 text-sm text-foreground placeholder:text-dim font-mono outline-none focus:border-primary/60" />
             </div>
             <div>
               <label className="label-caps mb-1.5 block">Orders</label>

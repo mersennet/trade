@@ -66,6 +66,10 @@ export default function TradePage() {
   // account panel lives in the Trade tab, so switch to it (the panel then
   // scrolls itself into view and opens in deposit mode).
   const depositRequestTs = useStore((s) => s.depositRequestTs);
+  const firstOrderRequestTs = useStore((s) => s.firstOrderRequestTs);
+  useEffect(() => {
+    if (firstOrderRequestTs) setMobileTab('trade');
+  }, [firstOrderRequestTs]);
   useEffect(() => {
     if (depositRequestTs) setMobileTab('trade');
   }, [depositRequestTs]);
