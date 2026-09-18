@@ -119,6 +119,8 @@ export const api = {
   getSprint: () => memo('sprint', 15_000, () => apiFetch<SprintStatus>('/points/sprint')),
   getVaultState: () => apiFetch<VaultState>('/vault/state'),
   getVaultInfo: () => memo('vault-info', 30_000, () => apiFetch<VaultInfo>('/vault/info')),
+  /** Live CLOB parameters (margin, switches) straight from the node via the API. */
+  getProtocol: () => memo('protocol', 30_000, () => apiFetch<ClobProtocol>('/protocol')),
   getVaultUser: (addr: string) => apiFetch<VaultUserState>(`/vault/user/${addr}`),
   getStakingState: () => apiFetch<StakingState>('/staking/state'),
   getStakingUser: (addr: string) => apiFetch<StakingUserState>(`/staking/user/${addr}`),
@@ -356,6 +358,7 @@ export interface SprintStatus { weekStart: string; awardAt: string; prizes: numb
 export interface ReferralStatus { referredBy: { referrer: string; code: string; at: string } | null; referees: number; referralPoints: number; share: number; }
 export interface NodeBuild { identity: string; host: string; version: string | null; build: string | null; outdated: boolean; height: number | null; seen_at: string; }
 export interface VerifiedNode { identity: string; operator?: string; host: string; version: string; height: number; first_verified_at: string; last_seen_at: string; active: boolean; registration_proof?: string | null; build_sha?: string | null; outdated?: boolean; }
+export interface ClobProtocol { height: number; settlementActive: boolean; agentDelegationActive: boolean; frameCallerActive: boolean; initialMarginBps: number; maintenanceMarginBps: number; settlementInitialMarginBps: number; settlementMaintenanceMarginBps: number; weiPerCollateralUnit: string; switches: { agentDelegationHeight: number; frameCallerHeight: number; priceScaleHeight: number; settlementHeight: number }; }
 export interface VaultInfo { address: string; activeFromBlock: number | null; active: boolean; height: number | null; symbol: string; asset: string; minDepositMrsn: number; reserveBps: number; lpPointsPerMrsnDay: number; }
 export interface VaultState { totalShares: number; totalTvl: number; totalPnl: number; apy7d: number; apy30d: number; depositors: number; }
 export interface VaultUserState { address: string; shares: number; value: number; shareOfVault: string; lpPoints?: number; history: unknown[]; }

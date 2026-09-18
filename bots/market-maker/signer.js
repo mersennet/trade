@@ -24,6 +24,7 @@ const IFACE = new ethers.Interface([
   'function cancelOrder(uint256 orderId) returns (bool)',
   'function depositCollateral(uint256 amount) returns (bool)',
   'function getCollateral() view returns (uint256)',
+  'function liquidate(address account) returns (bool)',
 ]);
 
 const TIF_CODE = { gtc: 0, ioc: 1, fok: 2, Gtc: 0, Ioc: 1, Fok: 2 };
@@ -222,6 +223,12 @@ class BotWallet {
   depositCollateral(amount) {
     const data = IFACE.encodeFunctionData('depositCollateral', [BigInt(amount)]);
     return this._send(data, 200_000);
+  }
+
+  /** Force-close an under-margin account (keeper). */
+  liquidate(account) {
+    const data = IFACE.encodeFunctionData('liquidate', [account]);
+    return this._send(data, 600_000);
   }
 
   /** Plain native transfer (funding another bot wallet). */

@@ -353,16 +353,18 @@ async function ensureSettlementCollateral() {
   lastSettlementCheck = Date.now();
   if (!(await settlementActive(rpcCall))) return;
   try { await ensureUnits(maker, TARGET_COLLATERAL, 'mm'); } catch (e) { console.warn('[mm] collateral top-up failed:', e.message); }
-  // Fund takers (once each: only when their balance is below half the target).
-  for (let i = 0; i < NUM_TAKERS; i++) {
+  // Fund takers and the liquidation keeper (only when a balance is below half its target).
+  const wallets = [...Array.from({ length: NUM_TAKERS }, (_, i) => `taker-${i}`), 'liquidator'];
+  for (const label of wallets) {
     try {
-      const addr = new ethersLib.Wallet(deriveKey(`taker-${i}`)).address;
+      const addr = new ethersLib.Wallet(deriveKey(label)).address;
       const bal = BigInt(await rpcCall('eth_getBalance', [addr, 'latest']) || '0x0');
-      if (bal < (TAKER_FUND_MRSN * 10n ** 18n) / 2n) {
-        const tx = await maker.sendValue(addr, TAKER_FUND_MRSN * 10n ** 18n);
-        console.log(`[mm] funded taker-${i} ${addr} with ${TAKER_FUND_MRSN} MRSN (tx ${tx})`);
+      const target = label === 'liquidator' ? 200n : TAKER_FUND_MRSN; // the keeper only needs gas
+      if (bal < (target * 10n ** 18n) / 2n) {
+        const tx = await maker.sendValue(addr, target * 10n ** 18n);
+        console.log(`[mm] funded ${label} ${addr} with ${target} MRSN (tx ${tx})`);
       }
-    } catch (e) { console.warn(`[mm] taker-${i} funding failed:`, e.message); }
+    } catch (e) { console.warn(`[mm] ${label} funding failed:`, e.message); }
   }
 }
 

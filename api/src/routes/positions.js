@@ -65,18 +65,22 @@ router.get('/:address', async (req, res) => {
 
       const margin = positionNotional / leverage;
 
-      const liquidationPrice = isLong
-        ? entryPrice * (1 - 1 / leverage)
-        : entryPrice * (1 + 1 / leverage);
-
-      // Per-market maintenance margin requirement for this position (used to
-      // derive a real portfolio health factor). maintenanceMarginBps comes from
-      // the market's max leverage (chain.getMarketConfig).
-      let maintenanceMarginBps = 50; // conservative default (0.5%)
-      try {
-        const cfg = await chain.getMarketConfig(m.id);
-        if (cfg && cfg.maintenanceMarginBps) maintenanceMarginBps = cfg.maintenanceMarginBps;
-      } catch { /* ignore */ }
+      // Maintenance margin as the chain enforces it (settlement era: 5%);
+      // before the switch the node reports 0 and nothing is liquidatable.
+      const protocol = await chain.getProtocol().catch(() => null);
+      const maintenanceMarginBps = Number(protocol?.maintenanceMarginBps || 0);
+      const mm = maintenanceMarginBps / 10000;
+      // Cross-margin liquidation price for this position alone: the mark at
+      // which collateral + PnL equals the maintenance requirement.
+      //   long : C + s(m − e) = mm·s·m  →  m = (e − C/s) / (1 − mm)
+      //   short: C − s(m − e) = mm·s·m  →  m = (e + C/s) / (1 + mm)
+      let liquidationPrice = null;
+      if (maintenanceMarginBps > 0 && absSize > 0) {
+        const cPerUnit = totalCollateral / absSize;
+        liquidationPrice = isLong
+          ? Math.max(0, (entryPrice - cPerUnit) / (1 - mm))
+          : (entryPrice + cPerUnit) / (1 + mm);
+      }
       const maintenanceMargin = (notional * maintenanceMarginBps) / 10000;
 
       positions.push({
