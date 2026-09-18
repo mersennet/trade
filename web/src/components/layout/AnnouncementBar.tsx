@@ -16,12 +16,16 @@ export default function AnnouncementBar() {
   const [hydrated, setHydrated] = useState(false);
   // Live protocol state drives the switch-related entries (see showWhen).
   const [protocol, setProtocol] = useState<ClobProtocol | null>(null);
+  // Wait for the first /protocol answer (or 2.5 s) before rendering, so a
+  // lower-priority entry does not flash and get replaced a moment later.
+  const [settled, setSettled] = useState(false);
   useEffect(() => {
     let alive = true;
-    const load = () => api.getProtocol().then((p) => { if (alive) setProtocol(p); });
+    const load = () => api.getProtocol().then((p) => { if (alive) setProtocol(p); }).finally(() => { if (alive) setSettled(true); });
     load().catch(() => {});
+    const t = setTimeout(() => { if (alive) setSettled(true); }, 2500);
     const stop = startPoll(load, 60_000);
-    return () => { alive = false; stop(); };
+    return () => { alive = false; stop(); clearTimeout(t); };
   }, []);
 
   useEffect(() => {
@@ -33,7 +37,7 @@ export default function AnnouncementBar() {
 
   const active = ANNOUNCEMENTS.filter((a) => !dismissed.includes(a.id) && (a.showWhen ? a.showWhen(protocol) : true));
 
-  if (!hydrated || active.length === 0) return null;
+  if (!hydrated || !settled || active.length === 0) return null;
   const current = active[0];
 
   const dismiss = () => {
