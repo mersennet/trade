@@ -58,7 +58,7 @@ async function calculatePortfolioMargin(address) {
     fetchPerpPositions(address),
   ]);
 
-  // Collateral is in CLOB units (1 MRSN per unit from the settlement switch).
+  // chain.getCollateral already returns human MRSN for the current unit era.
   const perpCollateral = Number(perpCollateralRaw);
 
   let spotValue = 0;

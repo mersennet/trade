@@ -121,6 +121,15 @@ app.get('/api/v1/protocol', async (_req, res) => {
     res.json(p);
   } catch (e) { res.status(503).json({ error: e.message }); }
 });
+// Upcoming protocol switches with ETAs from the observed block time (the
+// terminal's staking panel, the explorer and the reminder bot read this).
+app.get('/api/v1/protocol/switches', async (_req, res) => {
+  try {
+    const out = await require('./src/services/chain').upcomingSwitches();
+    res.set('Cache-Control', 'public, max-age=30');
+    res.json(out);
+  } catch (e) { res.status(503).json({ error: e.message }); }
+});
 app.use('/api/v1/stats', statsRouter);
 app.use('/api/v1', statsRouter);
 app.use('/api/v1/spot', spotRouter);

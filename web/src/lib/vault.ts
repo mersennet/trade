@@ -6,11 +6,14 @@
  * collateral — there is no server-side gasless credit anymore (that trusted an
  * unsigned `owner` and let anyone fund/mutate any account). Standard
  * Ethereum-format signed txs are accepted by the node and tracked by the wallet.
- * The CLOB tracks collateral, prices and sizes in plain integer units (no
- * decimal scaling), so amounts are floored to integers to match order notionals.
+ * The CLOB tracks collateral in plain integer units. One unit is one MRSN from
+ * the settlement switch (block 1,605,600) and one wei before it; the live factor
+ * comes from `mersennet_orders_getProtocol` (`weiPerCollateralUnit`), so a
+ * deposit of "10" always moves 10 MRSN and survives the switch as 10 MRSN.
  */
 
 import { MERSENNET_ORDERS_PRECOMPILE, getDefaultChain } from './chain';
+import { api } from './api';
 
 export interface VaultTxResult {
   approveTx?: string;
@@ -25,11 +28,28 @@ const PRECOMPILE_ABI = [
   'function getTokenCollateral(address account, address token) view returns (uint256)',
 ];
 
-/** Human amount -> integer chain units (floor). The CLOB is integer-only. */
-function toChainAmount(human: string): bigint {
-  const n = Number(String(human).trim());
-  if (!Number.isFinite(n) || n <= 0) throw new Error('Amount must be positive');
-  return BigInt(Math.floor(n));
+const WEI_PER_MRSN = 10n ** 18n;
+
+/** Wei per collateral unit right now (1 before the settlement switch, 1e18 after). */
+async function weiPerCollateralUnit(): Promise<bigint> {
+  try {
+    const p = await api.getProtocol();
+    const v = BigInt(p?.weiPerCollateralUnit ?? 1);
+    return v > 0n ? v : 1n;
+  } catch {
+    return 1n;
+  }
+}
+
+/** Human MRSN amount -> integer collateral units for the current era (floor). */
+async function toChainAmount(human: string): Promise<bigint> {
+  const s = String(human).trim();
+  if (!/^\d+(\.\d+)?$/.test(s) || Number(s) <= 0) throw new Error('Amount must be positive');
+  const [int, frac = ''] = s.split('.');
+  const wei = BigInt(int) * WEI_PER_MRSN + BigInt((frac + '0'.repeat(18)).slice(0, 18));
+  const units = wei / (await weiPerCollateralUnit());
+  if (units <= 0n) throw new Error('Amount is below one collateral unit');
+  return units;
 }
 
 async function getSigner(provider: unknown) {
@@ -52,7 +72,7 @@ export async function depositToVault(
   humanAmount: string,
 ): Promise<VaultTxResult> {
   const { e, signer } = await getSigner(provider);
-  const amount = toChainAmount(humanAmount);
+  const amount = await toChainAmount(humanAmount);
   const iface = new e.Interface(PRECOMPILE_ABI);
   const data = iface.encodeFunctionData('depositCollateral', [amount]);
   const tx = await signer.sendTransaction({ to: MERSENNET_ORDERS_PRECOMPILE, data, gasLimit: 200_000 });
@@ -71,7 +91,7 @@ export async function withdrawFromVault(
   humanAmount: string,
 ): Promise<VaultTxResult> {
   const { e, signer } = await getSigner(provider);
-  const amount = toChainAmount(humanAmount);
+  const amount = await toChainAmount(humanAmount);
   const iface = new e.Interface(PRECOMPILE_ABI);
   const data = iface.encodeFunctionData('withdrawCollateral', [amount]);
   const tx = await signer.sendTransaction({ to: MERSENNET_ORDERS_PRECOMPILE, data, gasLimit: 200_000 });

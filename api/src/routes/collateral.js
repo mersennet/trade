@@ -14,15 +14,13 @@ const { strictLimiter } = require('../middleware/rateLimit');
 const router = Router();
 const ETH_ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
 
-// Convert a human MRSN amount string (e.g. "100.5") to raw 18-decimal units.
+// Convert a human MRSN amount string (e.g. "100.5") to raw collateral units
+// for the current era (wei before the settlement switch, whole MRSN after).
 // Throws on invalid input rather than silently coercing to 0.
-function humanToRaw(value) {
+async function humanToRaw(value) {
   if (typeof value === 'string' && value.startsWith('0x')) return BigInt(value);
-  const s = String(value).trim();
-  if (!/^\d+(\.\d+)?$/.test(s)) throw new Error(`Invalid amount: ${value}`);
-  const [int, frac = ''] = s.split('.');
-  const fracPadded = (frac + '0'.repeat(chain.USDC_DECIMALS)).slice(0, chain.USDC_DECIMALS);
-  return BigInt(int + fracPadded);
+  await chain.getProtocol();
+  return chain.mrsnToUnits(value);
 }
 
 router.get('/:address', async (req, res) => {
@@ -40,7 +38,7 @@ router.get('/:address', async (req, res) => {
       collateral,        // human (e.g. 100.5 MRSN)
       free,              // human
       collateralRaw,     // raw string for callers that need exact precision
-      decimals: chain.USDC_DECIMALS,
+      decimals: chain.collateralDecimals(),
       timestamp: Date.now(),
     });
   } catch (e) {
@@ -57,7 +55,7 @@ router.post('/deposit', strictLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Amount must be positive' });
     }
 
-    const value = humanToRaw(amount);
+    const value = await humanToRaw(amount);
     res.json({
       // Frontend signs and sends this tx; the precompile credits the
       // caller's collateral from the calldata amount.
@@ -74,7 +72,7 @@ router.post('/deposit', strictLimiter, async (req, res) => {
         amount: value.toString(),
       },
       amountRaw: value.toString(),
-      decimals: chain.USDC_DECIMALS,
+      decimals: chain.collateralDecimals(),
       timestamp: Date.now(),
     });
   } catch (e) {
@@ -102,7 +100,7 @@ router.post('/withdraw', strictLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Amount must be positive' });
     }
 
-    const value = humanToRaw(amount);
+    const value = await humanToRaw(amount);
     res.json({
       tx: {
         to: chain.PRECOMPILE,
@@ -110,7 +108,7 @@ router.post('/withdraw', strictLimiter, async (req, res) => {
         value: '0x0',
       },
       amountRaw: value.toString(),
-      decimals: chain.USDC_DECIMALS,
+      decimals: chain.collateralDecimals(),
       timestamp: Date.now(),
     });
   } catch (e) {
