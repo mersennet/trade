@@ -157,8 +157,10 @@ export default function StakingPage() {
         </div>
       )}
 
-      <div className="bg-surface border border-border rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
+      {/* overflow-x-auto: seven columns are ~930px wide; on a phone the Stake /
+          Delegate actions were clipped off the right edge with no way to reach them. */}
+      <div className="bg-surface border border-border rounded-xl overflow-x-auto">
+        <table className="w-full min-w-[720px] text-sm">
           <thead>
             <tr className="text-[10px] text-dim uppercase tracking-wider border-b border-border">
               <th className="text-left font-medium px-4 py-3">Validator</th>

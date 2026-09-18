@@ -2,7 +2,7 @@
 import { Fragment, useEffect, useState } from 'react';
 import { useStore } from '@/stores/useStore';
 import { useWallet } from '@/hooks/useWallet';
-import { api, type Trade, type Order, type FundingRate } from '@/lib/api';
+import { api, type Trade, type Order } from '@/lib/api';
 import { formatPrice, formatNumber, cn } from '@/lib/utils';
 import { useToast } from '@/components/shared/Toast';
 import EmptyState, { SkeletonRows } from '@/components/shared/EmptyState';
@@ -10,7 +10,7 @@ import { playSound } from '@/lib/sounds';
 import { startPoll } from '@/lib/poll';
 import { useStore as useAppStore } from '@/stores/useStore';
 
-type Tab = 'positions' | 'orders' | 'trades' | 'funding' | 'history';
+type Tab = 'positions' | 'orders' | 'trades' | 'history';
 
 export default function PositionsTable() {
   const { market, positions, orders, setPositions, setOrders, tickers, pendingOrders, removePendingOrder } = useStore();
@@ -18,11 +18,12 @@ export default function PositionsTable() {
   const { toast } = useToast();
   const [tab, setTab] = useState<Tab>('positions');
   const [trades, setTrades] = useState<Trade[]>([]);
-  const [fundingHistory, setFundingHistory] = useState<FundingRate[]>([]);
   const [orderHistory, setOrderHistory] = useState<Order[]>([]);
   const [hideOtherSymbols, setHideOtherSymbols] = useState(false);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Skeleton only while a connected wallet's first fetch is in flight; a
+  // visitor without a wallet used to see placeholder bars forever.
+  const [loading, setLoading] = useState(isConnected);
   // Inline TP/SL editor state. Brackets are CLIENT-SIDE (local store) and
   // executed by the useBrackets watcher while the session is open — the chain
   // has no server-side auto-execution since the auth hardening.
@@ -66,7 +67,6 @@ export default function PositionsTable() {
 
   useEffect(() => {
     api.getTrades(market.id, 30).then((r) => setTrades(r.trades || [])).catch((e) => console.error('[trades] fetch error:', e));
-    api.getFundingHistory(market.id).then((r) => setFundingHistory(r.rates || [])).catch(() => {});
   }, [market.id]);
 
   useEffect(() => {
@@ -233,7 +233,6 @@ export default function PositionsTable() {
     { key: 'positions', label: 'Positions', count: filteredPositions.length },
     { key: 'orders', label: 'Orders', count: filteredOrders.length + myConditionals.length },
     { key: 'trades', label: 'Trades' },
-    { key: 'funding', label: 'Funding' },
     { key: 'history', label: 'History' },
   ];
 
@@ -282,12 +281,13 @@ export default function PositionsTable() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      {/* overflow-x-auto so the 8-column positions table scrolls sideways on phones instead of clipping */}
+      <div className="flex-1 overflow-y-auto overflow-x-auto">
         {tab === 'positions' && (
           loading ? (
             <SkeletonRows rows={3} />
           ) : filteredPositions.length > 0 ? (
-            <table className="w-full text-xs">
+            <table className="w-full min-w-[640px] text-xs">
               <thead><tr className="text-dim text-[10px] border-b border-border">
                 <th className="text-left px-3 py-2 font-medium">Market</th>
                 <th className="text-right px-2 py-2 font-medium">Size</th>
@@ -450,7 +450,7 @@ export default function PositionsTable() {
           ) : (
             <EmptyState
               label="No open positions"
-              hint={isConnected ? 'Place your first order to open a position' : 'Connect a wallet to track live P&L, margin, and funding'}
+              hint={isConnected ? 'Place your first order to open a position' : 'Connect a wallet to see your positions, margin and P&L'}
               action={!isConnected ? (
                 <button
                   onClick={() => { connect().catch(() => {}); }}
@@ -566,38 +566,6 @@ export default function PositionsTable() {
             <EmptyState
               label="No recent trades"
               hint={`Trades on ${market.symbol} will stream in here`}
-            />
-          )
-        )}
-
-        {tab === 'funding' && (
-          fundingHistory.length > 0 ? (
-            <table className="w-full text-xs">
-              <thead><tr className="text-dim text-[10px] border-b border-border">
-                <th className="text-left px-3 py-2 font-medium">Time</th>
-                <th className="text-right px-2 py-2 font-medium">Rate</th>
-                <th className="text-right px-2 py-2 font-medium">Annual</th>
-              </tr></thead>
-              <tbody>
-                {fundingHistory.slice().reverse().slice(0, 50).map((f, i) => (
-                  <tr key={i} className="border-b border-border/30 hover:bg-surface-2/50 transition-colors">
-                    <td className="px-3 py-2 text-foreground/70 text-[11px]">
-                      {new Date(f.timestamp).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                    </td>
-                    <td className={cn('px-2 py-2 text-right font-mono tabular-nums', f.rate >= 0 ? 'text-green' : 'text-red')}>
-                      {f.rate >= 0 ? '+' : ''}{(f.rate * 100).toFixed(4)}%
-                    </td>
-                    <td className={cn('px-2 py-2 text-right font-mono tabular-nums text-[11px]', f.rate >= 0 ? 'text-green/60' : 'text-red/60')}>
-                      {((f.rate * 365 * 3) * 100).toFixed(2)}%
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <EmptyState
-              label="No funding history"
-              hint="Funding accrues every 8 hours on open positions"
             />
           )
         )}

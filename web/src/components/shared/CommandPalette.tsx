@@ -6,11 +6,14 @@ const COMMANDS = [
   { label: 'Go to Trade', action: '/trade', keys: 'T' },
   { label: 'Go to Markets', action: '/markets', keys: 'M' },
   { label: 'Go to Portfolio', action: '/portfolio', keys: 'P' },
-  { label: 'Go to Vault', action: '/vault', keys: 'V' },
+  { label: 'Go to Maker Vault', action: '/vault', keys: 'V' },
+  { label: 'Go to Staking & validators', action: '/staking', keys: 'S' },
   { label: 'Go to Leaderboard', action: '/leaderboard', keys: 'L' },
   { label: 'Go to Points', action: '/points', keys: '' },
   { label: 'Go to API Docs', action: '/api', keys: '' },
   { label: 'Go to Referrals', action: '/referrals', keys: '' },
+  { label: 'Go to Testnet guide', action: '/testnet', keys: '' },
+  { label: 'Claim testnet MRSN (faucet)', action: '/faucet', keys: '' },
 ];
 
 export default function CommandPalette() {

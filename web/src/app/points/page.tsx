@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import { useStore } from '@/stores/useStore';
 import { useEffect, useState } from 'react';
 import { useWallet } from '@/hooks/useWallet';
 import { api, type PointsResponse, type PointsEntry } from '@/lib/api';
@@ -57,6 +58,21 @@ export default function PointsPage() {
           Trading points accrue from your on-chain volume (updated every few minutes); a verified node earns 500 points a day while it is online (below); a referrer earns 10% of each referee&apos;s trading points; the top three traders by volume each week (Monday 00:00 UTC) receive 3,000 / 2,000 / 1,000 bonus points — see the <Link href="/leaderboard" className="text-primary hover:underline">leaderboard</Link>; MRSN parked in the <Link href="/vault" className="text-primary hover:underline">maker vault</Link> earns LP points every day it stays deposited.
         </p>
       </div>
+
+      {!isConnected && (
+        <div className="bg-surface border border-border rounded-xl p-5 md:p-6 flex flex-col md:flex-row items-start md:items-center gap-4" data-testid="points-connect">
+          <div className="flex-1">
+            <p className="text-sm text-foreground font-semibold">Connect a wallet to see your points</p>
+            <p className="text-xs text-dim mt-1 leading-relaxed">Your tier, rank, daily accrual and referral code are read for the connected address. The public leaderboard below works without a wallet.</p>
+          </div>
+          <button
+            onClick={() => useStore.getState().requestConnect()}
+            className="px-5 h-9 premium-gradient text-black rounded-lg text-[11.5px] font-semibold transition-all hover:brightness-110 shrink-0"
+          >
+            Connect Wallet
+          </button>
+        </div>
+      )}
 
       {isConnected && points && (
         <>

@@ -1,5 +1,7 @@
 'use client';
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { startPoll } from '@/lib/poll';
+import { faucetUrl } from '@/lib/links';
 import { useStore } from '@/stores/useStore';
 import { useWallet } from '@/hooks/useWallet';
 import { useMarketTick } from '@/hooks/useMarketTick';
@@ -16,7 +18,17 @@ import { loadViewingKey, submitShieldedOrder, toChainUnits } from '@/lib/shielde
 // wallet popup at trigger time. Scale places its ladder immediately. Spot
 // keeps Limit / Market only.
 
-const LEVERAGE_PRESETS = [1, 2, 5, 10, 25, 50];
+// Time-in-force in plain words; the acronym stays as the compact label.
+const TIF_LABEL: Record<'gtc' | 'ioc' | 'fok', { short: string; long: string; help: string }> = {
+  gtc: { short: 'GTC', long: 'Good till cancelled', help: 'Rests on the book until filled or cancelled' },
+  ioc: { short: 'IOC', long: 'Immediate or cancel', help: 'Fills what it can right now; the rest is cancelled' },
+  fok: { short: 'FOK', long: 'Fill or kill', help: 'Fills completely right now or is cancelled entirely' },
+};
+
+// Presets are filtered by the market's max leverage, which is the inverse of
+// the initial margin the chain enforces (10% → 10×); the old 25×/50× steps
+// were never enforceable.
+const LEVERAGE_PRESETS = [1, 2, 3, 5, 10, 25, 50];
 const SIZE_PRESETS = [25, 50, 75, 100];
 
 const SPOT_ORDER_TYPES = [
@@ -63,6 +75,9 @@ export default function TradeForm() {
   const shieldedActive = privateMode && privacyForkActive && !isSpot;
   const { address, isConnected, provider } = useWallet();
   const collateral = useStore((s) => Number(s.wallet.collateral) || 0);
+  const walletMrsn = useStore((s) => Number(s.wallet.balance || '0') / 1e18);
+  const requestDeposit = useStore((s) => s.requestDeposit);
+  const faucetHref = faucetUrl(address);
   const { toast } = useToast();
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
@@ -113,12 +128,18 @@ export default function TradeForm() {
       .catch(() => {});
   }, [address]);
 
+  // A leverage persisted from before the cap (25×/50× presets) is clamped to
+  // the market's enforceable max so notional/margin math never uses it.
+  useEffect(() => {
+    if (trade.leverage > market.maxLeverage) setTrade({ leverage: market.maxLeverage });
+  }, [trade.leverage, market.maxLeverage, setTrade]);
+
   const [protocol, setProtocol] = useState<ClobProtocol | null>(null);
   useEffect(() => {
     let alive = true;
     api.getProtocol().then((p) => { if (alive) setProtocol(p); }).catch(() => {});
-    const t = setInterval(() => api.getProtocol().then((p) => { if (alive) setProtocol(p); }).catch(() => {}), 60_000);
-    return () => { alive = false; clearInterval(t); };
+    const stop = startPoll(() => api.getProtocol().then((p) => { if (alive) setProtocol(p); }), 60_000);
+    return () => { alive = false; stop(); };
   }, []);
 
   const orderSummary = useMemo(() => {
@@ -168,8 +189,10 @@ export default function TradeForm() {
     const sl = parseFloat(calcSl);
     if (!r || !entry || !sl || entry === sl) return '—';
     const riskPerUnit = Math.abs(entry - sl);
-    const accountSize = collateral > 0 ? collateral : 10000;
-    return (accountSize * r / riskPerUnit).toFixed(4);
+    // Sizes against real collateral only; an imaginary 10,000 MRSN account
+    // produced sizes the chain could never fill.
+    if (!(collateral > 0)) return '—';
+    return (collateral * r / riskPerUnit).toFixed(4);
   };
 
   const handleSubmit = async () => {
@@ -553,7 +576,7 @@ export default function TradeForm() {
                 <span className="text-dim">Type</span>
                 <span className="text-foreground capitalize">
                   {trade.orderType === 'stop' ? (stopLimit ? 'Stop-limit' : 'Stop') : trade.orderType === 'trailing' ? 'Trailing stop' : trade.orderType}
-                  {trade.orderType === 'limit' ? ` · ${trade.tif.toUpperCase()}` : trade.orderType === 'market' ? ' · IOC' : trade.orderType === 'scale' ? ` · ${scaleCount} × GTC` : trade.orderType === 'twap' ? ` · ${twapSlices} slices / ${TWAP_DURATIONS.find((d) => d.value === twapDuration)?.label}` : ' · client-side trigger'}
+                  {trade.orderType === 'limit' ? ` · ${trade.tif.toUpperCase()}` : trade.orderType === 'market' ? ' · immediate or cancel' : trade.orderType === 'scale' ? ` · ${scaleCount} × GTC` : trade.orderType === 'twap' ? ` · ${twapSlices} slices / ${TWAP_DURATIONS.find((d) => d.value === twapDuration)?.label}` : ' · client-side trigger'}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -872,11 +895,13 @@ export default function TradeForm() {
       {!isSpot && (
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="label-caps">{t('trade.leverage', 'Leverage')}</label>
-            <span className="text-xs font-mono font-bold text-primary-bright">{trade.leverage}×</span>
+            <label className="label-caps" title={market.marginEnforced ? 'Initial margin 10% of notional (10× max), maintenance 5%' : 'Max 10× from block 1,605,600 (10% initial margin). Until then the chain enforces no margin; the ticket keeps you inside the limit anyway.'}>
+              {t('trade.leverage', 'Leverage')} <span className="text-dim normal-case tracking-normal">· max {market.maxLeverage}×</span>
+            </label>
+            <span className="text-xs font-mono font-bold text-primary-bright">{Math.min(trade.leverage, market.maxLeverage)}×</span>
           </div>
           <input
-            type="range" min={1} max={market.maxLeverage} value={trade.leverage}
+            type="range" min={1} max={market.maxLeverage} value={Math.min(trade.leverage, market.maxLeverage)}
             aria-label="Leverage"
             onChange={(e) => setTrade({ leverage: Number(e.target.value) })}
             className="range-fill w-full"
@@ -941,6 +966,8 @@ export default function TradeForm() {
               <div className="flex flex-1 gap-px bg-background rounded-md border border-border overflow-hidden">
                 {(['gtc', 'ioc', 'fok'] as const).map((tifVal) => (
                   <button key={tifVal} onClick={() => setTrade({ tif: tifVal })}
+                    title={`${TIF_LABEL[tifVal].long} — ${TIF_LABEL[tifVal].help}`}
+                    aria-label={TIF_LABEL[tifVal].long}
                     className={cn(
                       'flex-1 py-1 text-[10.5px] font-medium uppercase tracking-wide transition-colors',
                       trade.tif === tifVal ? 'bg-foreground/[0.07] text-foreground' : 'bg-surface-2 text-dim hover:text-foreground'
@@ -956,6 +983,9 @@ export default function TradeForm() {
                 Slip {useStore.getState().slippage}%
               </button>
             </div>
+            <p className="text-[10px] text-dim leading-snug">
+              {TIF_LABEL[trade.tif as 'gtc' | 'ioc' | 'fok']?.long}: {TIF_LABEL[trade.tif as 'gtc' | 'ioc' | 'fok']?.help}.
+            </p>
             <div className="flex items-center gap-4 flex-wrap">
               {trade.orderType === 'limit' && trade.tif === 'gtc' && (
                 <label className="flex items-center gap-2 text-[11px] text-muted cursor-pointer select-none"
@@ -1049,10 +1079,19 @@ export default function TradeForm() {
       {/* Submit — flat colored button, no glow. Label is a single short verb
           ("Place Order" / "Connect Wallet") since the directional intent is
           already shown by the Long/Short toggle and the button color. */}
+      {isConnected && !isSpot && collateral <= 0 && !trade.reduceOnly && (
+        <div className="rounded-lg border border-yellow/30 bg-yellow/5 px-3 py-2 text-[11px] leading-relaxed text-foreground/85" data-testid="no-collateral-hint">
+          No collateral yet — an order needs margin escrowed on the order book first.{' '}
+          <button type="button" onClick={requestDeposit} className="underline text-primary hover:text-primary-hover font-medium">Deposit MRSN</button>
+          {walletMrsn < 1 && (
+            <> · <a href={faucetHref} target="_blank" rel="noopener noreferrer" className="underline text-primary hover:text-primary-hover font-medium">claim 1,001 MRSN</a></>
+          )}
+        </div>
+      )}
       <button
         data-submit-order
         onClick={handleSubmit}
-        disabled={loading || !isConnected}
+        disabled={loading || !isConnected || (!isSpot && collateral <= 0 && !trade.reduceOnly)}
         className={cn(
           // On phones the form lives in a bottom sheet: keep the action in view
           // while the fields above scroll (sticky within the sheet's scroller).
@@ -1068,7 +1107,9 @@ export default function TradeForm() {
           ? t('trade.placing', 'Placing…')
           : !isConnected
             ? t('common.connectWallet', 'Connect Wallet')
-            : t('trade.placeOrder', 'Place Order')}
+            : (!isSpot && collateral <= 0 && !trade.reduceOnly)
+              ? 'Deposit collateral first'
+              : t('trade.placeOrder', 'Place Order')}
       </button>
 
       {/* Order Summary — notional is the headline number (how traders actually

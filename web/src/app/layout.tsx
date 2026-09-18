@@ -10,6 +10,7 @@ import StatusLine from '@/components/layout/StatusLine';
 import WrongNetworkModal from '@/components/shared/WrongNetworkModal';
 import WelcomeModal from '@/components/beta/WelcomeModal';
 import Footer from '@/components/beta/Footer';
+import PreviewBanner from '@/components/shared/PreviewBanner';
 
 const SITE_URL = 'https://trade.mersennet.com';
 const OG_IMAGE = `${SITE_URL}/og-image.png`;
@@ -89,6 +90,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Header />
               <AnnouncementBar />
               <main className="page-glow flex-1 flex flex-col pb-[52px] md:pb-6">
+                <PreviewBanner />
                 <ErrorBoundary>{children}</ErrorBoundary>
                 <Footer />
               </main>

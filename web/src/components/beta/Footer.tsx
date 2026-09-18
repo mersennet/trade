@@ -1,6 +1,7 @@
 'use client';
 import Link from 'next/link';
 import Image from 'next/image';
+import { usePathname } from 'next/navigation';
 import ChainStatusChip from './ChainStatusChip';
 
 const FOOTER_LINKS = [
@@ -9,7 +10,7 @@ const FOOTER_LINKS = [
     links: [
       { label: 'Trade', href: '/trade' },
       { label: 'Markets', href: '/markets' },
-      { label: 'Vault', href: '/vault' },
+      { label: 'Maker Vault', href: '/vault' },
       { label: 'Staking & validators', href: '/staking' },
       { label: 'Points', href: '/points' },
     ],
@@ -49,6 +50,11 @@ const FOOTER_LINKS = [
 ];
 
 export default function Footer() {
+  // The terminal is a fixed-height workspace (chart, book, ticket, positions
+  // fill the viewport); a site footer underneath made the page scroll and
+  // squeezed the positions panel to ~100px. Every other page keeps it.
+  const pathname = usePathname();
+  if (pathname === '/trade') return null;
   // mt-auto pushes the footer to the bottom of the flex column when the page
   // content is shorter than the viewport (e.g. /markets with just 5 cards).
   // Without it the footer floats mid-page with a void of empty surface below.
@@ -92,10 +98,7 @@ export default function Footer() {
           <div className="flex items-center gap-2.5 text-[12.5px] text-foreground/60">
             <Image src="/logo.png" alt="Mersennet Trade" width={28} height={28} className="shrink-0" />
             <span className="font-semibold text-foreground/80">Mersennet Trade</span>
-            <span className="text-dim">· Mersennet</span>
-            <span className="px-1.5 py-0.5 rounded bg-yellow/10 border border-yellow/30 text-yellow text-[10px] uppercase font-semibold tracking-wider">
-              Beta
-            </span>
+            <span className="text-dim">· public testnet</span>
           </div>
           <div className="flex items-center gap-3">
             <ChainStatusChip />

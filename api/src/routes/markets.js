@@ -2,6 +2,7 @@ const { Router } = require('express');
 const chain = require('../services/chain');
 const pool = require('../db/pool');
 const { dataCache } = require('../ws');
+const oi = require('../services/openInterest');
 
 const router = Router();
 
@@ -138,36 +139,13 @@ router.get('/:marketId/ticker', async (req, res) => {
         : 0;
     }
 
-    // Per-market open interest + long/short account ratio, aggregated from the
-    // full trade history: a fill moves the taker and maker in opposite
-    // directions, so each account's net position is the sum of signed sizes.
-    // OI (one side, in USD at mark) = sum of positive net sizes x mark.
-    let openInterest = 0;
-    let longAccounts = 0;
-    let shortAccounts = 0;
-    try {
-      const oiRes = await pool.query(
-        `WITH fills AS (
-           SELECT taker AS account, CASE WHEN side = 'buy' THEN size ELSE -size END AS signed
-           FROM trades WHERE market_id = $1
-           UNION ALL
-           SELECT maker AS account, CASE WHEN side = 'buy' THEN -size ELSE size END AS signed
-           FROM trades WHERE market_id = $1
-         ), net AS (
-           SELECT account, SUM(signed)::float8 AS net_size FROM fills GROUP BY account
-         )
-         SELECT
-           COALESCE(SUM(GREATEST(net_size, 0)), 0)::float8 AS long_size,
-           COUNT(*) FILTER (WHERE net_size > 0) AS longs,
-           COUNT(*) FILTER (WHERE net_size < 0) AS shorts
-         FROM net`,
-        [marketId]
-      );
-      const row = oiRes.rows[0] || {};
-      openInterest = Math.round(Number(row.long_size || 0) * (markPrice || 0));
-      longAccounts = Number(row.longs || 0);
-      shortAccounts = Number(row.shorts || 0);
-    } catch (_) { /* OI is best-effort; never fail the ticker over it */ }
+    // Open interest + long/short accounts from CHAIN positions (services/
+    // openInterest.js, refreshed every minute). null until the first snapshot
+    // so the UI shows "—" rather than a made-up figure.
+    const snap = oi.openInterest(marketId, markPrice);
+    const openInterest = snap ? snap.openInterest : null;
+    const longAccounts = snap ? snap.longAccounts : null;
+    const shortAccounts = snap ? snap.shortAccounts : null;
 
     res.json({
       marketId, bestBid, bestAsk, markPrice,
@@ -202,21 +180,10 @@ router.get('/:marketId/funding-history', async (req, res) => {
       return res.json({ rates: existing.rows, synthetic: false, timestamp: Date.now() });
     }
 
-    // No real history yet (no funding interval has settled on-chain). Return a
-    // flat line at the current rate instead of a random walk — random noise on
-    // a per-8h funding rate gets multiplied by ~1095 in APR display, which made
-    // a tiny ±0.2% wobble look like "-178% APR". Honest UX > pretty noise.
-    const baseRate = Number(market.fundingRate) || 0;
-    const now = Date.now();
-    const history = [];
-    for (let i = 0; i < limit; i++) {
-      history.push({
-        marketId,
-        rate: Number(baseRate.toFixed(6)),
-        timestamp: new Date(now - i * 8 * 3600 * 1000),
-      });
-    }
-    res.json({ rates: history, synthetic: true, timestamp: Date.now() });
+    // The testnet CLOB has no funding mechanism (no interval, no payments), so
+    // there is nothing to report. The old response fabricated a flat history
+    // at a made-up rate; the UIs now show "No funding on testnet".
+    res.json({ rates: [], synthetic: false, funding: 'none', timestamp: Date.now() });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

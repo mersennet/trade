@@ -38,7 +38,7 @@ const ITEMS = [
   },
   {
     href: '/vault',
-    label: 'Earn',
+    label: 'Vault',
     tKey: 'nav.vault',
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">

@@ -31,7 +31,7 @@ const NAV_ITEMS = [
       <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" /><path d="M3 5v14a2 2 0 0 0 2 2h16v-5" /><path d="M18 12a2 2 0 0 0 0 4h4v-4Z" />
     </svg>
   )},
-  { href: '/vault', label: 'Vault', tKey: 'nav.vault', icon: (
+  { href: '/vault', label: 'Maker Vault', tKey: 'nav.vault', icon: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="12" cy="12" r="4" /><path d="M12 8v8M8 12h8" />
     </svg>

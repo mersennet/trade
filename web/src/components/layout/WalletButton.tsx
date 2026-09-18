@@ -63,7 +63,16 @@ export default function WalletButton() {
     }, 10000);
   }, [address, isConnected, setWallet, refreshTokens]);
 
+  // Set when the browser has no injected wallet: shown inline in the connect
+  // menu (a toast vanished in 3 s and left the visitor with nothing to do).
+  const [noInjected, setNoInjected] = useState(false);
+  const hasInjected = typeof window !== 'undefined' && typeof (window as unknown as { ethereum?: unknown }).ethereum !== 'undefined';
+
   const handleConnect = async (method: 'injected' | 'walletconnect') => {
+    if (method === 'injected' && !hasInjected) {
+      setNoInjected(true);
+      return;
+    }
     setShowConnectMenu(false);
     setLoading(true);
     try {
@@ -73,12 +82,12 @@ export default function WalletButton() {
       const msg = (e as Error)?.message || '';
       // The WC modal throws when the user just closes it — not an error worth toasting.
       if (/connection request reset|user rejected|modal closed/i.test(msg)) return;
-      toast(
-        /no (injected )?(ethereum|wallet)|metamask|window\.ethereum/i.test(msg)
-          ? 'No browser wallet found. Install MetaMask, or use WalletConnect to link a mobile wallet.'
-          : `Connection failed: ${msg.replace(/^Error: /, '') || 'unknown error'}`,
-        'error',
-      );
+      if (/no (injected )?(ethereum|wallet)|metamask|window\.ethereum/i.test(msg)) {
+        setNoInjected(true);
+        setShowConnectMenu(true);
+        return;
+      }
+      toast(`Connection failed: ${msg.replace(/^Error: /, '') || 'unknown error'}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -176,9 +185,16 @@ export default function WalletButton() {
               <span className="text-base leading-none">🦊</span>
               <span>
                 <span className="block font-medium">Browser wallet</span>
-                <span className="block text-[10px] text-dim">MetaMask or any injected wallet</span>
+                <span className="block text-[10px] text-dim">{hasInjected ? 'MetaMask, Rabby or any injected wallet' : 'None detected in this browser'}</span>
               </span>
             </button>
+            {noInjected && (
+              <div className="mx-1.5 mb-1.5 rounded-lg border border-yellow/30 bg-yellow/5 px-3 py-2 text-[11px] leading-relaxed text-foreground/85" role="alert">
+                No browser wallet found.{' '}
+                <a href="https://metamask.io/download/" target="_blank" rel="noopener noreferrer" className="underline text-primary hover:text-primary-hover">Install MetaMask</a>
+                {' '}and reload, or use WalletConnect below with a mobile wallet.
+              </div>
+            )}
             <button
               onClick={() => handleConnect('walletconnect')}
               className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left text-xs text-foreground hover:bg-surface-2 transition-colors"

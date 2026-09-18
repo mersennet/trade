@@ -27,8 +27,14 @@ export const useLocale = create<I18nState>()(
   )
 );
 
+// Only complete locales are rendered. Others exist as partial dictionaries
+// (nav + a few ticket strings) and would produce a mixed-language UI, so a
+// persisted choice from before the switcher was hidden falls back to English.
+const COMPLETE_LOCALES: ReadonlySet<Locale> = new Set<Locale>(['en']);
+
 export function useTranslation() {
-  const locale = useLocale((s) => s.locale);
+  const stored = useLocale((s) => s.locale);
+  const locale: Locale = COMPLETE_LOCALES.has(stored) ? stored : 'en';
 
   function t(key: string, fallback?: string): string {
     const parts = key.split('.');

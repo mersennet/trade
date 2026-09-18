@@ -357,7 +357,7 @@ function Row({ label, labelClass, value, valueClass }: { label: string; labelCla
 
 /**
  * What the page shows before a wallet is connected: the live markets a
- * portfolio would hold (real mark prices, funding, open interest), so the
+ * portfolio would hold (real mark prices, open interest), so the
  * page is never a blank prompt. Nothing here pretends to be the visitor's.
  */
 function PortfolioPreview() {
@@ -389,7 +389,7 @@ function PortfolioPreview() {
             <th className="text-left px-4 py-2 font-medium">Market</th>
             <th className="text-right px-4 py-2 font-medium">Mark</th>
             <th className="text-right px-4 py-2 font-medium hidden md:table-cell">24h</th>
-            <th className="text-right px-4 py-2 font-medium hidden md:table-cell">Funding / 8h</th>
+            <th className="text-right px-4 py-2 font-medium hidden md:table-cell">Open interest</th>
             <th className="text-right px-4 py-2 font-medium">Max lev.</th>
             <th className="text-right px-4 py-2 font-medium"></th>
           </tr>
@@ -403,7 +403,7 @@ function PortfolioPreview() {
                 <td className="px-4 py-2.5 font-mono text-foreground">{m.symbol}</td>
                 <td className="px-4 py-2.5 text-right font-mono tabular-nums text-foreground">{t ? formatPrice(t.markPrice) : '—'}</td>
                 <td className={cn('px-4 py-2.5 text-right font-mono tabular-nums hidden md:table-cell', chg >= 0 ? 'text-green' : 'text-red')}>{t ? `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%` : '—'}</td>
-                <td className="px-4 py-2.5 text-right font-mono tabular-nums text-foreground/70 hidden md:table-cell">{(m.fundingRate * 100).toFixed(4)}%</td>
+                <td className="px-4 py-2.5 text-right font-mono tabular-nums text-foreground/70 hidden md:table-cell">{t?.openInterest != null ? `$${formatNumber(t.openInterest)}` : '—'}</td>
                 <td className="px-4 py-2.5 text-right font-mono text-foreground/70">{m.maxLeverage}×</td>
                 <td className="px-4 py-2.5 text-right">
                   <button onClick={() => { setMarket(m); router.push('/trade'); }} className="text-[10px] uppercase tracking-wider text-primary hover:underline">Trade</button>

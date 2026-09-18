@@ -203,7 +203,7 @@ export default function ValidatorSetPanel() {
                     </span>
                   )}
                 </label>
-                <label className="text-[10px] text-dim uppercase tracking-wider">Commission (bps)
+                <label className="text-[10px] text-dim uppercase tracking-wider" title="Basis points: 100 bps = 1% of your delegators' rewards">Commission <span className="normal-case tracking-normal">(bps · {commission && Number.isFinite(Number(commission)) ? `${(Number(commission) / 100).toFixed(2)}%` : '—'})</span>
                   <input value={commission} onChange={(e) => setCommission(e.target.value)} inputMode="numeric" className="mt-1 w-full bg-surface-2 border border-border rounded-lg px-2 py-2 text-[12px] font-mono text-foreground" />
                 </label>
                 <button

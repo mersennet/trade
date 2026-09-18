@@ -1,5 +1,7 @@
 /**
- * Collateral deposit / withdraw helpers.
+ * Collateral (margin) deposit / withdraw helpers for the CLOB precompile.
+ * Not the Maker Vault: that is a separate contract with its own helpers in
+ * ./makerVault.ts. "Vault" in user-facing copy means the Maker Vault only.
  *
  * Deposits and withdrawals are wallet-signed transactions to the MersennetOrders
  * precompile (0x…0100). The chain credits/debits the *verified signer's*
@@ -66,7 +68,7 @@ async function getSigner(provider: unknown) {
  * signed by the wallet; the precompile escrows the amount from the signer's
  * native balance (1:1 backed). Throws on rejection/chain error.
  */
-export async function depositToVault(
+export async function depositCollateral(
   provider: unknown,
   _owner: string,
   humanAmount: string,
@@ -85,7 +87,7 @@ export async function depositToVault(
  * precompile validates margin before releasing funds and reverts if the
  * withdrawal would breach maintenance margin.
  */
-export async function withdrawFromVault(
+export async function withdrawCollateral(
   provider: unknown,
   _owner: string,
   humanAmount: string,
@@ -176,7 +178,7 @@ function toTokenUnits(human: string, decimals: number): bigint {
  * Deposit a registered ERC-20 (e.g. USDC) as margin collateral. The precompile
  * moves the token balance directly in contract storage — no approve step.
  */
-export async function depositTokenToVault(
+export async function depositTokenCollateral(
   provider: unknown,
   asset: CollateralAsset,
   humanAmount: string,
@@ -191,7 +193,7 @@ export async function depositTokenToVault(
 }
 
 /** Withdraw deposited token collateral back to the signer's wallet. */
-export async function withdrawTokenFromVault(
+export async function withdrawTokenCollateral(
   provider: unknown,
   asset: CollateralAsset,
   humanAmount: string,
