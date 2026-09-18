@@ -82,6 +82,18 @@ export default function VaultPage() {
   // (frame-caller switch); before that the contract cannot hold collateral.
   const depositsOpen = !info || info.active;
   const blocksToOpen = info && !info.active && info.activeFromBlock && info.height ? Math.max(0, info.activeFromBlock - info.height) : 0;
+  // ETA from the observed block time (the API's switch schedule), not a fixed 2.1 s.
+  const [openEta, setOpenEta] = useState<string | null>(null);
+  useEffect(() => {
+    if (!info || info.active || !info.activeFromBlock) { setOpenEta(null); return; }
+    api.getProtocolSwitches().then((s) => {
+      const sw = s.switches.find((x) => x.height === info.activeFromBlock);
+      if (!sw) return;
+      const h = sw.etaSec / 3600;
+      const when = new Date(sw.etaAt).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+      setOpenEta(`${h >= 48 ? `~${Math.round(h / 24)} d` : h >= 1 ? `~${Math.round(h)} h` : `~${Math.max(1, Math.round(sw.etaSec / 60))} min`} · ${when} UTC`);
+    }).catch(() => {});
+  }, [info]);
   const capLeft = chain && chain.depositCap > 0 ? Math.max(0, chain.depositCap - chain.nav) : null;
   const deployed = chain ? chain.collateral : 0;
   const deployedPct = chain && chain.nav > 0 ? (deployed / chain.nav) * 100 : 0;
@@ -196,7 +208,7 @@ export default function VaultPage() {
           )}
           {!depositsOpen && info?.activeFromBlock && (
             <p className="text-[11px] text-yellow mt-2">
-              Deposits open at block {info.activeFromBlock.toLocaleString()} (~{Math.round(blocksToOpen * 2.1 / 3600)} h) — the protocol switch that lets contracts hold their own order-book accounts. Until then the vault cannot take collateral.
+              Deposits open at block {info.activeFromBlock.toLocaleString()} ({openEta ? `${openEta}` : `~${Math.round(blocksToOpen * 2.1 / 3600)} h`}) — the protocol switch that lets contracts hold their own order-book accounts. Until then the vault cannot take collateral.
             </p>
           )}
           {!isConnected && <p className="text-[11px] text-dim mt-2">Connect a wallet to deposit. Need MRSN? <a href="https://faucet.mersennet.com" className="text-primary hover:underline">Faucet</a>.</p>}

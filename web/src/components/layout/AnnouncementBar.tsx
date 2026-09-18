@@ -2,6 +2,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ANNOUNCEMENTS } from '@/config/announcements';
+import { api, type ClobProtocol } from '@/lib/api';
+import { startPoll } from '@/lib/poll';
 
 /**
  * Announcement line under the header. Shows the newest undismissed entry
@@ -12,6 +14,15 @@ import { ANNOUNCEMENTS } from '@/config/announcements';
 export default function AnnouncementBar() {
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  // Live protocol state drives the switch-related entries (see showWhen).
+  const [protocol, setProtocol] = useState<ClobProtocol | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const load = () => api.getProtocol().then((p) => { if (alive) setProtocol(p); });
+    load().catch(() => {});
+    const stop = startPoll(load, 60_000);
+    return () => { alive = false; stop(); };
+  }, []);
 
   useEffect(() => {
     try {
@@ -20,7 +31,7 @@ export default function AnnouncementBar() {
     setHydrated(true);
   }, []);
 
-  const active = ANNOUNCEMENTS.filter((a) => !dismissed.includes(a.id));
+  const active = ANNOUNCEMENTS.filter((a) => !dismissed.includes(a.id) && (a.showWhen ? a.showWhen(protocol) : true));
 
   if (!hydrated || active.length === 0) return null;
   const current = active[0];

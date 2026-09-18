@@ -15,6 +15,7 @@ export function formatNumber(n: number, decimals = 2): string {
 }
 
 export function formatUsd(n: number): string {
+  if (n == null || !Number.isFinite(n)) return '—';
   return '$' + formatNumber(n);
 }
 
