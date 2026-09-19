@@ -174,7 +174,14 @@ async function snapshot() {
   const nodes = require('../routes/nodes');
   const latest = typeof nodes.latestReleaseSha === 'function' ? await nodes.latestReleaseSha().catch(() => null) : null;
   const switches = typeof chain.upcomingSwitches === 'function' ? await chain.upcomingSwitches().catch(() => null) : null;
-  return { vset, head, protocol, latest, knownBuildOf: nodes.knownBuildOf, switches: switches && switches.switches ? switches.switches : [] };
+  // One entry per height (the API lists one per feature label).
+  const byHeight = new Map();
+  for (const sw of (switches && switches.switches) || []) {
+    const g = byHeight.get(sw.height) || { height: sw.height, etaSec: sw.etaSec, etaAt: sw.etaAt, labels: [] };
+    g.labels.push(sw.label); byHeight.set(sw.height, g);
+  }
+  const grouped = [...byHeight.values()].sort((a, b) => a.height - b.height).map((g) => ({ ...g, label: g.labels.join(' · ') }));
+  return { vset, head, protocol, latest, knownBuildOf: nodes.knownBuildOf, switches: grouped };
 }
 async function verifiedNodesOf(addresses) {
   if (!addresses.length) return [];
@@ -345,4 +352,4 @@ function start() {
   }).catch((e) => console.error('[alerts] init:', e.message));
 }
 
-module.exports = { start, initTables, botName, linkMessage, verifyLinkSignature, createLinkCode, linksFor, unlinkAddress, KINDS };
+module.exports = { start, initTables, botName, linkMessage, verifyLinkSignature, createLinkCode, linksFor, unlinkAddress, KINDS, statusText, tick };
