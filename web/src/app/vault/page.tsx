@@ -29,7 +29,7 @@ function PosTile({ label, value, valueClass }: { label: string; value: string; v
 }
 
 export default function VaultPage() {
-  const { address, isConnected, provider } = useWallet();
+  const { address, isConnected, provider, balance: walletBalanceWei } = useWallet();
   const { toast } = useToast();
   const [chain, setChain] = useState<VaultOnChain | null>(null);
   const [indexed, setIndexed] = useState<VaultState | null>(null);
@@ -192,8 +192,22 @@ export default function VaultPage() {
                 type="number" inputMode="decimal" min={chain?.minDeposit ?? 1} step="any"
                 value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={`min ${chain?.minDeposit ?? 1}`}
                 aria-label="Deposit amount in MRSN"
-                className="w-full bg-surface-2 border border-border rounded-md pl-9 pr-3 py-2.5 text-sm text-foreground font-mono tabular-nums outline-none focus:border-primary/40 transition-colors"
+                className="w-full bg-surface-2 border border-border rounded-md pl-9 pr-14 py-2.5 text-sm text-foreground font-mono tabular-nums outline-none focus:border-primary/40 transition-colors"
               />
+              {isConnected && (
+                <button
+                  type="button"
+                  title="Whole wallet balance minus a little gas"
+                  onClick={() => {
+                    // Wallet balance is wei; leave 0.01 MRSN for gas, two decimals.
+                    const bal = Number(BigInt(walletBalanceWei || '0')) / 1e18;
+                    const max = Math.max(0, Math.floor((bal - 0.01) * 100) / 100);
+                    if (max <= 0) { setError('No MRSN in this wallet to deposit — claim from the faucet first.'); return; }
+                    setAmount(String(max));
+                  }}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider text-primary hover:bg-primary/10"
+                >Max</button>
+              )}
             </div>
             <button
               onClick={handleDeposit}

@@ -9,6 +9,8 @@ import ValidatorSetPanel from '@/components/staking/ValidatorSetPanel';
 import {
   claimRewards,
   delegate,
+  fmtMrsnWei,
+  maxSpendable,
   getDelegation,
   getUnbonding,
   getValidatorsFull,
@@ -153,12 +155,12 @@ export default function StakingPage() {
       <div ref={setOwnSlot} data-testid="your-node-slot" />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <StatTile label="Network stake" value={`${weiToMrsn(totalNetwork, 0)} MRSN`} />
-        <StatTile label="Your delegation" value={`${weiToMrsn(totalMine)} MRSN`} valueClass="text-primary" />
-        <StatTile label="Claimable rewards" value={`${weiToMrsn(totalPending, 6)} MRSN`} valueClass={totalPending > 0n ? 'text-green' : undefined} />
+        <StatTile label="Network stake" value={`${fmtMrsnWei(totalNetwork, 0)} MRSN`} />
+        <StatTile label="Your delegation" value={`${fmtMrsnWei(totalMine)} MRSN`} valueClass="text-primary" />
+        <StatTile label="Claimable rewards" value={`${fmtMrsnWei(totalPending, 6)} MRSN`} valueClass={totalPending > 0n ? 'text-green' : undefined} />
         <StatTile
           label="Unbonding"
-          value={unbonding ? `${weiToMrsn(unbonding.total)} MRSN` : '—'}
+          value={unbonding ? `${fmtMrsnWei(unbonding.total)} MRSN` : '—'}
           valueClass={unbonding && BigInt(unbonding.withdrawable) > 0n ? 'text-yellow' : undefined}
         />
       </div>
@@ -166,7 +168,7 @@ export default function StakingPage() {
       {unbonding && BigInt(unbonding.withdrawable) > 0n && (
         <div className="mb-6 flex items-center justify-between bg-yellow/5 border border-yellow/20 rounded-xl px-4 py-3">
           <p className="text-sm text-foreground">
-            <span className="font-mono font-semibold">{weiToMrsn(unbonding.withdrawable)} MRSN</span>{' '}
+            <span className="font-mono font-semibold">{fmtMrsnWei(unbonding.withdrawable)} MRSN</span>{' '}
             finished unbonding and is ready to withdraw.
           </p>
           <button
@@ -184,11 +186,11 @@ export default function StakingPage() {
           <thead>
             <tr className="text-[10px] text-dim uppercase tracking-wider border-b border-border">
               <th className="text-left font-medium px-4 py-3">Validator</th>
-              <th className="text-right font-medium px-4 py-3">Self-stake</th>
-              <th className="text-right font-medium px-4 py-3">Delegated</th>
-              <th className="text-right font-medium px-4 py-3">Commission</th>
-              <th className="text-right font-medium px-4 py-3" title="MRSN this wallet has delegated to the validator">Your delegation</th>
-              <th className="text-right font-medium px-4 py-3">Rewards</th>
+              <th className="text-right font-medium px-4 py-3" title="Bonded by the operator">Self-stake (MRSN)</th>
+              <th className="text-right font-medium px-4 py-3" title="Staked behind the validator by delegators">Delegated (MRSN)</th>
+              <th className="text-right font-medium px-4 py-3" title="Share of delegators' rewards the operator keeps">Commission</th>
+              <th className="text-right font-medium px-4 py-3" title="MRSN this wallet has delegated to the validator">Your delegation (MRSN)</th>
+              <th className="text-right font-medium px-4 py-3" title="Claimable rewards on your delegation">Rewards (MRSN)</th>
               <th className="text-right font-medium px-4 py-3 w-[300px]">Actions</th>
             </tr>
           </thead>
@@ -210,14 +212,14 @@ export default function StakingPage() {
               return (
                 <tr key={r.address} id={`delegate-${r.address.toLowerCase()}`} className={cn('border-b border-border/50 last:border-0', own && 'bg-primary/5')}>
                   <td className="px-4 py-3 font-mono text-foreground">{shortenAddress(r.address)}{own && <span className="text-primary"> · your node</span>}</td>
-                  <td className="px-4 py-3 text-right font-mono tabular-nums">{weiToMrsn(r.selfStake, 0)}</td>
-                  <td className="px-4 py-3 text-right font-mono tabular-nums">{weiToMrsn(r.delegatedTotal)}</td>
+                  <td className="px-4 py-3 text-right font-mono tabular-nums">{fmtMrsnWei(r.selfStake, 0)}</td>
+                  <td className="px-4 py-3 text-right font-mono tabular-nums">{fmtMrsnWei(r.delegatedTotal)}</td>
                   <td className="px-4 py-3 text-right font-mono tabular-nums">{(r.commissionBps / 100).toFixed(1)}%</td>
                   <td className={cn('px-4 py-3 text-right font-mono tabular-nums', BigInt(r.myDelegation) > 0n && 'text-primary')}>
-                    {weiToMrsn(r.myDelegation)}
+                    {fmtMrsnWei(r.myDelegation)}
                   </td>
                   <td className={cn('px-4 py-3 text-right font-mono tabular-nums', BigInt(r.myPending) > 0n && 'text-green')}>
-                    {weiToMrsn(r.myPending, 6)}
+                    {fmtMrsnWei(r.myPending, 6)}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1.5">
@@ -231,15 +233,27 @@ export default function StakingPage() {
                           className={cn('px-2 py-1 text-[10px] font-semibold', m === 'undelegate' ? 'bg-red/15 text-red' : 'text-dim hover:text-foreground')}
                         >Unstake</button>
                       </div>
-                      <input
-                        ref={(el) => { amountRefs.current[r.address] = el; }}
-                        value={amt}
-                        onChange={(e) => setAmounts((s) => ({ ...s, [r.address]: e.target.value }))}
-                        placeholder="MRSN"
-                        inputMode="decimal"
-                        aria-label={`Amount in MRSN to ${m} with ${shortenAddress(r.address)}`}
-                        className="w-20 bg-surface-2 border border-border rounded-lg px-2 py-1 text-xs font-mono text-right focus:outline-none focus:border-primary"
-                      />
+                      <div className="relative">
+                        <input
+                          ref={(el) => { amountRefs.current[r.address] = el; }}
+                          value={amt}
+                          onChange={(e) => setAmounts((s) => ({ ...s, [r.address]: e.target.value }))}
+                          placeholder="MRSN"
+                          inputMode="decimal"
+                          aria-label={`Amount in MRSN to ${m} with ${shortenAddress(r.address)}`}
+                          className="w-28 bg-surface-2 border border-border rounded-lg pl-2 pr-9 py-1 text-xs font-mono text-right focus:outline-none focus:border-primary"
+                        />
+                        <button
+                          type="button"
+                          title={m === 'delegate' ? 'Whole wallet balance minus a little gas' : 'Everything you have delegated here'}
+                          onClick={() => {
+                            const v = m === 'delegate' ? maxSpendable(walletBalance) : weiToMrsn(r.myDelegation, 6);
+                            if (!v || v === '0') { toast(m === 'delegate' ? 'No MRSN in this wallet to delegate — claim from the faucet first' : 'Nothing delegated to this validator', 'error'); return; }
+                            setAmounts((s) => ({ ...s, [r.address]: v }));
+                          }}
+                          className="absolute right-1 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider text-primary hover:bg-primary/10"
+                        >Max</button>
+                      </div>
                       <button
                         onClick={() => {
                           if (!isConnected) { toast('Connect your wallet first', 'error'); return; }
@@ -289,6 +303,31 @@ export default function StakingPage() {
               );
             })}
           </tbody>
+          {!loading && rows.length > 0 && (
+            <tfoot>
+              <tr className="border-t-2 border-border bg-surface-2/40">
+                <td className="px-4 py-3 text-xs font-semibold text-foreground">Grand total <span className="text-dim font-normal">· {rows.length} validators</span></td>
+                <td className="px-4 py-3 text-right font-mono tabular-nums font-semibold" title="Grand total staked (MRSN)">
+                  {fmtMrsnWei(rows.reduce((s, r) => s + BigInt(r.selfStake), 0n), 0)}
+                  <div className="text-[10px] text-dim font-normal">staked (MRSN)</div>
+                </td>
+                <td className="px-4 py-3 text-right font-mono tabular-nums font-semibold" title="Grand total delegated (MRSN)">
+                  {fmtMrsnWei(rows.reduce((s, r) => s + BigInt(r.delegatedTotal), 0n), 0)}
+                  <div className="text-[10px] text-dim font-normal">delegated (MRSN)</div>
+                </td>
+                <td className="px-4 py-3" />
+                <td className={cn('px-4 py-3 text-right font-mono tabular-nums font-semibold', totalMine > 0n && 'text-primary')} title="Your total delegation (MRSN)">
+                  {fmtMrsnWei(totalMine)}
+                  <div className="text-[10px] text-dim font-normal">yours (MRSN)</div>
+                </td>
+                <td className={cn('px-4 py-3 text-right font-mono tabular-nums font-semibold', totalPending > 0n && 'text-green')} title="Your claimable rewards (MRSN)">
+                  {fmtMrsnWei(totalPending, 6)}
+                  <div className="text-[10px] text-dim font-normal">claimable (MRSN)</div>
+                </td>
+                <td className="px-4 py-3" />
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
 

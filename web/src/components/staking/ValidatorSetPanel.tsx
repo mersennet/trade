@@ -9,7 +9,7 @@ import { cn, shortenAddress } from '@/lib/utils';
 import { getDefaultChain } from '@/lib/chain';
 import { startPoll } from '@/lib/poll';
 import {
-  addSelfStake, getValidatorSet, nextProtocolSwitch, registerValidator, stakingErrorMessage, unregisterValidator, weiToMrsn,
+  addSelfStake, getValidatorSet, maxSpendable, nextProtocolSwitch, registerValidator, stakingErrorMessage, unregisterValidator, weiToMrsn,
   type ValidatorSetEntry, type ValidatorSetView,
 } from '@/lib/staking';
 
@@ -187,14 +187,26 @@ export default function ValidatorSetPanel({ ownNodesSlot }: { ownNodesSlot?: HTM
                 ) : (
                   <>
                     <div className="flex items-center gap-2">
-                      <input
-                        value={topUp[v.identity] || ''}
-                        onChange={(e) => setTopUp({ ...topUp, [v.identity]: e.target.value })}
-                        placeholder="Amount in MRSN"
-                        inputMode="decimal"
-                        aria-label="Self-stake to add, in MRSN"
-                        className={cn('flex-1 min-w-0 bg-surface-2 border rounded-lg px-3 py-2 text-[12px] font-mono text-foreground focus:outline-none focus:border-primary', overBalance ? 'border-down/60 text-down' : 'border-border')}
-                      />
+                      <div className="relative flex-1 min-w-0">
+                        <input
+                          value={topUp[v.identity] || ''}
+                          onChange={(e) => setTopUp({ ...topUp, [v.identity]: e.target.value })}
+                          placeholder="Amount in MRSN"
+                          inputMode="decimal"
+                          aria-label="Self-stake to add, in MRSN"
+                          className={cn('w-full bg-surface-2 border rounded-lg pl-3 pr-14 py-2 text-[12px] font-mono text-foreground focus:outline-none focus:border-primary', overBalance ? 'border-down/60 text-down' : 'border-border')}
+                        />
+                        <button
+                          type="button"
+                          title="Whole wallet balance minus a little gas"
+                          onClick={() => {
+                            const m = maxSpendable(balance);
+                            if (!m || m === '0') { toast('No MRSN in this wallet to bond — claim from the faucet first', 'error'); return; }
+                            setTopUp({ ...topUp, [v.identity]: m });
+                          }}
+                          className="absolute right-1.5 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider text-primary hover:bg-primary/10"
+                        >Max</button>
+                      </div>
                       <button
                         disabled={!!busy}
                         onClick={() => {
@@ -330,7 +342,10 @@ export default function ValidatorSetPanel({ ownNodesSlot }: { ownNodesSlot?: HTM
                   <span className="block mt-1 text-[10px] normal-case tracking-normal text-dim">The identity is your node&apos;s signing key, not your wallet; your wallet {address ? shortenAddress(address) : ''} is recorded as the operator and receives the rewards.</span>
                 </label>
                 <label className="text-[10px] text-dim uppercase tracking-wider">Self-stake (MRSN)
-                  <input value={stake} onChange={(e) => setStake(e.target.value)} inputMode="decimal" className="mt-1 w-full bg-surface-2 border border-border rounded-lg px-2 py-2 text-[12px] font-mono text-foreground" />
+                  <span className="relative block mt-1">
+                    <input value={stake} onChange={(e) => setStake(e.target.value)} inputMode="decimal" className="w-full bg-surface-2 border border-border rounded-lg pl-2 pr-12 py-2 text-[12px] font-mono text-foreground" />
+                    <button type="button" title="Whole wallet balance minus a little gas" onClick={() => { const m = maxSpendable(balance); if (m && m !== '0') setStake(m); }} className="absolute right-1.5 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider text-primary hover:bg-primary/10 normal-case">Max</button>
+                  </span>
                   {balance !== null && (
                     <span className={cn('block mt-1 text-[10px] normal-case tracking-normal', balance < minStake + 0.001 ? 'text-down' : 'text-dim')}>
                       Balance {balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} MRSN
@@ -373,8 +388,8 @@ export default function ValidatorSetPanel({ ownNodesSlot }: { ownNodesSlot?: HTM
                 <th className="text-left py-1.5 pr-3" title="By self + delegated stake; the top N produce blocks">#</th>
                 <th className="text-left py-1.5 pr-3">Validator</th>
                 <th className="text-left py-1.5 pr-3">Operator</th>
-                <th className="text-right py-1.5 pr-3">Self-stake</th>
-                <th className="text-right py-1.5 pr-3">Delegated</th>
+                <th className="text-right py-1.5 pr-3" title="Bonded by the operator">Self-stake (MRSN)</th>
+                <th className="text-right py-1.5 pr-3" title="Staked behind the validator by delegators">Delegated (MRSN)</th>
                 <th className="text-right py-1.5 pr-3">Proposed / missed (this epoch)</th>
                 <th className="text-left py-1.5 pr-3" title="Node build reported by the node itself (whoami); the current release is on mersennet.com/downloads">Build</th>
                 <th className="text-right py-1.5">Status</th>
@@ -408,6 +423,17 @@ export default function ValidatorSetPanel({ ownNodesSlot }: { ownNodesSlot?: HTM
                 );
               })}
             </tbody>
+            {sorted.length > 0 && (
+              <tfoot>
+                <tr className="border-t-2 border-border bg-surface-2/40 text-[12px]">
+                  <td className="py-1.5 pr-3" />
+                  <td className="py-1.5 pr-3 font-semibold text-foreground" colSpan={2}>Grand total <span className="text-dim font-normal">· {sorted.length} registered</span></td>
+                  <td className="py-1.5 pr-3 text-right font-mono font-semibold" title="Grand total staked (MRSN)">{fmtMrsn(sorted.reduce((a, x) => (BigInt(a) + BigInt(x.selfStake)).toString(), '0'))}<div className="text-[10px] text-dim font-normal">staked (MRSN)</div></td>
+                  <td className="py-1.5 pr-3 text-right font-mono font-semibold" title="Grand total delegated (MRSN)">{fmtMrsn(sorted.reduce((a, x) => (BigInt(a) + BigInt(x.delegated)).toString(), '0'))}<div className="text-[10px] text-dim font-normal">delegated (MRSN)</div></td>
+                  <td className="py-1.5 pr-3" colSpan={3} />
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
 

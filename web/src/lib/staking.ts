@@ -77,6 +77,24 @@ export function weiToMrsn(wei: string | bigint, decimals = 4): string {
   return frac ? `${whole}.${frac}` : whole.toString();
 }
 
+/** weiToMrsn with thousands separators: 1,000,000 · 65,000 · 1,234.5678. */
+export function fmtMrsnWei(wei: string | bigint, decimals = 4): string {
+  const [whole, frac] = weiToMrsn(wei, decimals).split('.');
+  const w = BigInt(whole).toLocaleString('en-US');
+  return frac ? `${w}.${frac}` : w;
+}
+
+/**
+ * Largest amount a wallet can bond or delegate from `balanceMrsn`, leaving a
+ * little for gas (staking calls cost well under 0.01 MRSN). Two decimals so
+ * the number reads like a number, never negative.
+ */
+export function maxSpendable(balanceMrsn: number | null, reserve = 0.01): string {
+  if (balanceMrsn == null || !Number.isFinite(balanceMrsn)) return '';
+  const v = Math.max(0, Math.floor((balanceMrsn - reserve) * 100) / 100);
+  return v > 0 ? String(v) : '0';
+}
+
 export function delegate(signerSource: unknown, validator: string, amountMrsn: string): Promise<string> {
   return sendStaking(signerSource, 'delegate', [validator, mrsnToWei(amountMrsn)], 200_000);
 }
