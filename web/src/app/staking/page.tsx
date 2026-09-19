@@ -13,6 +13,7 @@ import {
   getUnbonding,
   getValidatorsFull,
   getValidatorSet,
+  stakingErrorMessage,
   undelegate,
   weiToMrsn,
   withdrawUnbonded,
@@ -126,8 +127,7 @@ export default function StakingPage() {
       toast(okMsg, 'success');
       await refresh();
     } catch (e) {
-      const msg = (e as Error).message || 'Transaction failed';
-      toast(msg.length > 140 ? `${msg.slice(0, 140)}…` : msg, 'error');
+      toast(stakingErrorMessage(e), 'error');
     } finally {
       setBusy(null);
     }

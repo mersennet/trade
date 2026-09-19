@@ -193,6 +193,31 @@ export async function getValidatorsFull(): Promise<ValidatorFull[]> {
   });
 }
 
+/**
+ * A staking transaction error as one sentence the operator or delegator can
+ * act on. ethers wraps a wallet rejection in a 300-character
+ * `user rejected action (action="sendTransaction", …)` string; the precompile
+ * reverts with short reasons (staking.rs) that need a hint about what to do.
+ */
+export function stakingErrorMessage(e: unknown): string {
+  const raw = (e as Error)?.message || String(e ?? '');
+  const code = (e as { code?: unknown })?.code;
+  if (code === 4001 || code === 'ACTION_REJECTED' || /user (rejected|denied)|ethers-user-denied/i.test(raw)) return 'Cancelled in the wallet.';
+  if (/insufficient funds|insufficient balance for gas/i.test(raw)) return 'Not enough MRSN in the wallet for the amount plus gas — the faucet gives 1,001 an hour.';
+  if (/caller is not this validator'?s operator/i.test(raw)) return 'Only the operator wallet that registered this node can change its stake — switch to that wallet.';
+  if (/self-stake below the minimum/i.test(raw)) return 'Self-stake would be below the 1,000 MRSN minimum.';
+  if (/already registered/i.test(raw)) return 'This node identity is already registered.';
+  if (/registration is not active/i.test(raw)) return 'Validator registration has not opened yet.';
+  if (/validator is exiting/i.test(raw)) return 'This validator is leaving the set; no stake changes until it has exited.';
+  if (/genesis validators cannot/i.test(raw)) return 'Genesis validators hold a fixed bond.';
+  if (/insufficient delegated amount/i.test(raw)) return 'You have less than that delegated to this validator.';
+  if (/unknown validator/i.test(raw)) return 'That validator is not registered.';
+  if (/amount must be > 0/i.test(raw)) return 'Enter an amount above zero.';
+  if (/nonce too low|replacement transaction underpriced/i.test(raw)) return 'The wallet sent a stale nonce — wait a few seconds and try again.';
+  if (/execution reverted/i.test(raw)) return 'The chain rejected the transaction (execution reverted).';
+  return raw.length > 160 ? raw.slice(0, 160) + '…' : raw || 'Transaction failed';
+}
+
 // ─── Open validator set ─────────────────────────────────────────────────────
 
 export interface ValidatorSetParams {

@@ -9,7 +9,7 @@ import { cn, shortenAddress } from '@/lib/utils';
 import { getDefaultChain } from '@/lib/chain';
 import { startPoll } from '@/lib/poll';
 import {
-  addSelfStake, getValidatorSet, nextProtocolSwitch, registerValidator, unregisterValidator, weiToMrsn,
+  addSelfStake, getValidatorSet, nextProtocolSwitch, registerValidator, stakingErrorMessage, unregisterValidator, weiToMrsn,
   type ValidatorSetEntry, type ValidatorSetView,
 } from '@/lib/staking';
 
@@ -112,7 +112,7 @@ export default function ValidatorSetPanel({ ownNodesSlot }: { ownNodesSlot?: HTM
     if (!isConnected || !provider) { toast('Connect your wallet first', 'error'); return; }
     setBusy(label);
     try { await fn(); toast(ok, 'success'); await refresh(); }
-    catch (e) { toast((e as Error).message?.slice(0, 160) || 'Transaction failed', 'error'); }
+    catch (e) { toast(stakingErrorMessage(e), 'error'); }
     finally { setBusy(null); }
   };
 
