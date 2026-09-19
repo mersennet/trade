@@ -153,6 +153,16 @@ app.get('/api/v1/protocol/switches', async (_req, res) => {
     res.json(out);
   } catch (e) { res.status(503).json({ error: e.message }); }
 });
+// Protocol upgrades as a record: upcoming (live ETA + the announced one) and
+// completed (actual activation time from the block, against the estimates
+// that were shown). Explorer /upgrades page and the terminal's staking panel.
+app.get('/api/v1/protocol/upgrades', async (_req, res) => {
+  try {
+    const out = await require('./src/services/upgrades').report();
+    res.set('Cache-Control', 'public, max-age=20');
+    res.json(out);
+  } catch (e) { res.status(503).json({ error: e.message }); }
+});
 app.use('/api/v1/stats', statsRouter);
 app.use('/api/v1', statsRouter);
 app.use('/api/v1/spot', spotRouter);
@@ -442,6 +452,8 @@ if (STANDBY) {
   initAllTables().catch(err => console.error('[api] Init error:', err.message));
   // Telegram alerts: bot poller + rule engine — one instance only (the primary).
   try { require('./src/services/alerts').start(); } catch (e) { console.log('[api] alerts start:', e.message); }
+  // Protocol upgrade estimates on record (hourly snapshots) — primary only.
+  try { require('./src/services/upgrades').start(); } catch (e) { console.log('[api] upgrades start:', e.message); }
 }
 
 // Unknown /api/v1 route → JSON 404 (not the HTML default); anything thrown
