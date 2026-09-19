@@ -10,7 +10,8 @@ const pool = require('../db/pool');
 // per 10 minutes with a count.
 const router = Router();
 
-const ready = pool.query(`CREATE TABLE IF NOT EXISTS client_errors (
+// On the standby (read-only replica) the table already exists via replication.
+const ready = process.env.API_ROLE === 'standby' ? Promise.resolve() : pool.query(`CREATE TABLE IF NOT EXISTS client_errors (
   id BIGSERIAL PRIMARY KEY,
   message TEXT NOT NULL,
   stack TEXT,
