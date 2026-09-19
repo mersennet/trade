@@ -59,7 +59,7 @@ export default function AnnouncementBar() {
       <button
         onClick={dismiss}
         aria-label="Dismiss announcement"
-        className="absolute right-2 text-dim hover:text-foreground transition-colors text-xs px-1"
+        className="absolute right-1 top-1/2 -translate-y-1/2 min-w-6 min-h-6 flex items-center justify-center text-dim hover:text-foreground transition-colors text-sm"
       >×</button>
     </div>
   );

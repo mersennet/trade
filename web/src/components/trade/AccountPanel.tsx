@@ -163,7 +163,7 @@ export default function AccountPanel() {
     // instead of a blank prompt.
     return (
       <div className="bg-surface border border-border rounded-xl md:border-0 md:rounded-none p-3 shrink-0">
-        <h3 className="text-[11px] text-dim font-medium uppercase tracking-wider mb-2">Account</h3>
+        <h2 className="text-[11px] text-dim font-medium uppercase tracking-wider mb-2">Account</h2>
         <div className="space-y-1.5 opacity-60 select-none" aria-hidden>
           {[['Equity', '— MRSN'], ['Unrealized PnL', '—'], ['Margin used', '—'], ['Available', '—']].map(([k, v]) => (
             <div key={k} className="flex items-center justify-between"><span className="text-[11px] text-dim">{k}</span><span className="text-xs font-mono text-foreground/60">{v}</span></div>

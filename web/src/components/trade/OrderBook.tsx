@@ -248,7 +248,7 @@ export default function OrderBook() {
             <div className="relative" ref={groupingRef}>
               <button
                 onClick={() => setShowGrouping((v) => !v)}
-                aria-label="Price grouping"
+                aria-label={`Price grouping: ${fmtGroup(grouping)}`}
                 aria-expanded={showGrouping}
                 className="bg-surface-2 text-foreground text-[11px] px-2 py-0.5 rounded border border-border hover:border-primary/40 transition-colors font-mono flex items-center gap-1"
               >
@@ -323,7 +323,7 @@ export default function OrderBook() {
                     key={`a-${i}`}
                     role="button"
                     tabIndex={0}
-                    aria-label={`Fill price ${formatPrice(level.price)} (buy)`}
+                    aria-label={`${formatPrice(level.price)} ${sizeUnit === 'usd' ? formatNumber(level.size * level.price, 0) : formatNumber(level.size, 0)} ${sizeUnit === 'usd' ? formatNumber(level.total * level.price, 0) : formatNumber(level.total, 0)} — set price ${formatPrice(level.price)} (buy side)`}
                     className="relative grid grid-cols-3 px-3 py-[4px] text-xs cursor-pointer hover:bg-red/8 font-mono transition-colors outline-none focus-visible:bg-red/12"
                     onMouseEnter={(e) => previewFor(asks, i, 'buy', e.currentTarget as HTMLElement)}
                     onMouseLeave={() => setHoverPreview(null)}
@@ -361,7 +361,7 @@ export default function OrderBook() {
                     key={`b-${i}`}
                     role="button"
                     tabIndex={0}
-                    aria-label={`Fill price ${formatPrice(level.price)} (sell)`}
+                    aria-label={`${formatPrice(level.price)} ${sizeUnit === 'usd' ? formatNumber(level.size * level.price, 0) : formatNumber(level.size, 0)} ${sizeUnit === 'usd' ? formatNumber(level.total * level.price, 0) : formatNumber(level.total, 0)} — set price ${formatPrice(level.price)} (sell side)`}
                     className="relative grid grid-cols-3 px-3 py-[4px] text-xs cursor-pointer hover:bg-green/8 font-mono transition-colors outline-none focus-visible:bg-green/12"
                     onMouseEnter={(e) => previewFor(bids, i, 'sell', e.currentTarget as HTMLElement)}
                     onMouseLeave={() => setHoverPreview(null)}
