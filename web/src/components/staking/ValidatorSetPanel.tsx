@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useWallet } from '@/hooks/useWallet';
 import { useToast } from '@/components/shared/Toast';
-import { api, type VerifiedNode, type NodeBuild, type ProtocolSwitches } from '@/lib/api';
+import { api, type VerifiedNode, type NodeBuild, type ProtocolSwitches, type ProtocolUpgrades } from '@/lib/api';
 import UpgradeBadge from '@/components/shared/UpgradeBadge';
 import TelegramAlerts from '@/components/shared/TelegramAlerts';
 import { cn, shortenAddress } from '@/lib/utils';
@@ -52,6 +52,7 @@ export default function ValidatorSetPanel({ ownNodesSlot }: { ownNodesSlot?: HTM
   const { toast } = useToast();
   const [view, setView] = useState<ValidatorSetView | null>(null);
   const [switches, setSwitches] = useState<ProtocolSwitches | null>(null);
+  const [upgrades, setUpgrades] = useState<ProtocolUpgrades | null>(null);
   const [mine, setMine] = useState<VerifiedNode[]>([]);
   const [selected, setSelected] = useState<string>('');
   const [stake, setStake] = useState('1000');
@@ -71,6 +72,7 @@ export default function ValidatorSetPanel({ ownNodesSlot }: { ownNodesSlot?: HTM
     try { setView(await getValidatorSet()); } catch { /* rpc hiccup */ }
     api.getNodeBuilds().then((r) => setBuilds({ latest: r.latest, byId: Object.fromEntries((r.nodes || []).map((n) => [n.identity.toLowerCase(), n])) })).catch(() => {});
     api.getProtocolSwitches().then(setSwitches).catch(() => {});
+    api.getProtocolUpgrades().then(setUpgrades).catch(() => {});
     if (address) api.getMyNodes(address).then((r) => { setMine(r.nodes); setLatestSha(r.latest_sha || null); }).catch(() => {});
     if (address) {
       // Native balance straight from the Mersennet RPC (the wallet provider
@@ -263,6 +265,25 @@ export default function ValidatorSetPanel({ ownNodesSlot }: { ownNodesSlot?: HTM
       })}
     </div>
   ) : null;
+  // Actual − estimate for a completed upgrade: "+2 min 14 s", "−40 s", "on time".
+  const fmtDelta = (sec: number | null) => {
+    if (sec == null || !Number.isFinite(sec)) return '—';
+    const a = Math.abs(sec);
+    if (a < 5) return 'on time';
+    const sign = sec > 0 ? '+' : '−';
+    if (a < 60) return `${sign}${a} s`;
+    if (a < 3600) return `${sign}${Math.floor(a / 60)} min${a % 60 ? ` ${a % 60} s` : ''}`;
+    return `${sign}${Math.floor(a / 3600)} h${Math.round((a % 3600) / 60) ? ` ${Math.round((a % 3600) / 60)} min` : ''}`;
+  };
+  const utc = (iso: string, secs = false) => new Date(iso).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', ...(secs ? { second: '2-digit' as const } : {}), timeZone: 'UTC' }) + ' UTC';
+  // Most recent completed upgrade height (several switches can share one block).
+  const lastDone = useMemo(() => {
+    const done = (upgrades?.completed || []).filter((c) => c.activatedAt);
+    if (!done.length) return null;
+    const top = done[0].height;
+    const items = done.filter((c) => c.height === top);
+    return { height: top, activatedAt: items[0].activatedAt as string, estimate: items[0].estimate, finalEstimate: items[0].finalEstimate, labels: items.map((c) => c.label) };
+  }, [upgrades]);
   const fmtEta = (etaSec: number, etaAt: string) => {
     const h = etaSec / 3600;
     const when = new Date(etaAt).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
@@ -292,19 +313,41 @@ export default function ValidatorSetPanel({ ownNodesSlot }: { ownNodesSlot?: HTM
           Miss more than {view ? view.params.jailMissBps / 100 : 20}% of your leader slots in an epoch and you sit out the next one{view?.params.benchHeight ? (view.height >= view.params.benchHeight ? '; three missed slots bench you for the rest of the epoch' : ` (from block ${view.params.benchHeight.toLocaleString()}, three missed slots bench you for the rest of the epoch)`) : ''}. Unregister any time; your stake unbonds over ~{view ? Math.round(view.params.unbondingBlocks * 2 / 3600) : 3} hours.
         </p>
 
-        {schedule.length > 0 && (
+        {(schedule.length > 0 || lastDone) && (
           <div className="border border-border rounded-lg p-3 space-y-1.5" data-testid="switch-schedule">
-            <p className="text-[10px] font-semibold text-dim uppercase tracking-wider">
-              Protocol switches ahead <span className="font-normal normal-case">· blocks run at {switches?.blockTimeSec?.toFixed(2)} s, so times are estimates</span>
-            </p>
-            {schedule.map((g) => (
-              <div key={g.height} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[12px]">
-                <span className="font-mono text-foreground">block {g.height.toLocaleString()}</span>
-                <span className="font-mono text-yellow-400">{fmtEta(g.etaSec, g.etaAt)}</span>
-                <span className="text-dim">{g.labels.join(' · ')}</span>
+            {schedule.length > 0 ? (
+              <>
+                <p className="text-[10px] font-semibold text-dim uppercase tracking-wider">
+                  Upcoming protocol upgrades <span className="font-normal normal-case">· estimated at {switches?.blockTimeSec?.toFixed(2)} s per block</span>
+                </p>
+                {schedule.map((g) => (
+                  <div key={g.height} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[12px]">
+                    <span className="font-mono text-foreground">block {g.height.toLocaleString()}</span>
+                    <span className="font-mono text-yellow-400">{fmtEta(g.etaSec, g.etaAt)}</span>
+                    <span className="text-dim">{g.labels.join(' · ')}</span>
+                  </div>
+                ))}
+              </>
+            ) : (
+              <p className="text-[10px] font-semibold text-dim uppercase tracking-wider">Protocol upgrades <span className="font-normal normal-case">· none scheduled</span></p>
+            )}
+            {lastDone && (
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[12px] pt-1 border-t border-border/60" data-testid="last-upgrade">
+                <span className="text-dim">Last completed:</span>
+                <span className="font-mono text-foreground">block {lastDone.height.toLocaleString()}</span>
+                <span className="font-mono text-green-400">{utc(lastDone.activatedAt, true)}</span>
+                {lastDone.estimate && (
+                  <span className="text-dim" title={`Estimated ${utc(lastDone.estimate.etaAt)} (${lastDone.estimate.source === 'announced' ? 'announced' : 'estimate recorded'} ${utc(lastDone.estimate.recordedAt)})${lastDone.finalEstimate ? `; last estimate shown before activation ${utc(lastDone.finalEstimate.etaAt, true)} → ${fmtDelta(lastDone.finalEstimate.deltaSec)}` : ''}`}>
+                    {fmtDelta(lastDone.estimate.deltaSec)} vs the {lastDone.estimate.source === 'announced' ? 'announced' : 'estimated'} {utc(lastDone.estimate.etaAt)}
+                  </span>
+                )}
+                <span className="text-dim">{lastDone.labels.join(' · ')}</span>
               </div>
-            ))}
-            <p className="text-[11px] text-dim">Validators must run the current release{builds.latest ? <> (<code className="font-mono text-foreground">{builds.latest}</code>)</> : null} before each height. Nothing to do for traders.</p>
+            )}
+            <p className="text-[11px] text-dim">
+              Validators must run the current release{builds.latest ? <> (<code className="font-mono text-foreground">{builds.latest}</code>)</> : null} before each height. Nothing to do for traders.{' '}
+              <a href="https://explorer.mersennet.com/upgrades" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">All upgrades, actual times and how close the estimates were ↗</a>
+            </p>
           </div>
         )}
 

@@ -122,6 +122,7 @@ export const api = {
   /** Live CLOB parameters (margin, switches) straight from the node via the API. */
   getProtocol: () => memo('protocol', 30_000, () => apiFetch<ClobProtocol>('/protocol')),
   getProtocolSwitches: () => memo('protocol-switches', 30_000, () => apiFetch<ProtocolSwitches>('/protocol/switches')),
+  getProtocolUpgrades: () => memo('protocol-upgrades', 30_000, () => apiFetch<ProtocolUpgrades>('/protocol/upgrades')),
   getVaultUser: (addr: string) => apiFetch<VaultUserState>(`/vault/user/${addr}`),
   getStakingState: () => apiFetch<StakingState>('/staking/state'),
   getStakingUser: (addr: string) => apiFetch<StakingUserState>(`/staking/user/${addr}`),
@@ -362,6 +363,10 @@ export interface VerifiedNode { identity: string; operator?: string; host: strin
 export interface ClobProtocol { height: number; settlementActive: boolean; agentDelegationActive: boolean; frameCallerActive: boolean; initialMarginBps: number; maintenanceMarginBps: number; settlementInitialMarginBps: number; settlementMaintenanceMarginBps: number; weiPerCollateralUnit: string; switches: { agentDelegationHeight: number; frameCallerHeight: number; priceScaleHeight: number; settlementHeight: number }; }
 export interface ProtocolSwitch { key: string; label: string; height: number; blocksLeft: number; etaSec: number; etaAt: string; }
 export interface ProtocolSwitches { blockTimeSec: number; height: number | null; switches: ProtocolSwitch[]; }
+export interface UpgradeEstimate { source: 'announced' | 'live'; recordedAt: string; etaAt: string; deltaSec: number | null; }
+export interface CompletedUpgrade { key: string; label: string; detail: string; height: number; activatedAt: string | null; estimate: UpgradeEstimate | null; finalEstimate: UpgradeEstimate | null; }
+export interface UpcomingUpgrade extends ProtocolSwitch { detail: string; announcedAt: string | null; }
+export interface ProtocolUpgrades { blockTimeSec: number; height: number | null; upcoming: UpcomingUpgrade[]; completed: CompletedUpgrade[]; }
 export interface VaultInfo { address: string; activeFromBlock: number | null; active: boolean; height: number | null; symbol: string; asset: string; minDepositMrsn: number; reserveBps: number; lpPointsPerMrsnDay: number; }
 export interface VaultState { totalShares: number; totalTvl: number; totalPnl: number; apy7d: number; apy30d: number; depositors: number; }
 export interface VaultUserState { address: string; shares: number; value: number; shareOfVault: string; lpPoints?: number; history: unknown[]; }

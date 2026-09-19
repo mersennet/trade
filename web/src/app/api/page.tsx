@@ -23,6 +23,7 @@ const ENDPOINTS = [
   { method: 'GET', path: '/stats', desc: 'Protocol statistics' },
   { method: 'GET', path: '/protocol', desc: 'Live CLOB parameters: margin bps, wei per collateral unit, armed switch heights, per-market price scale' },
   { method: 'GET', path: '/protocol/switches', desc: 'Upcoming protocol switches with ETAs from the observed block time' },
+  { method: 'GET', path: '/protocol/upgrades', desc: 'Protocol upgrades: upcoming (live + announced estimate) and completed (actual activation time vs the estimate on record)' },
   { method: 'GET', path: '/nodes/builds', desc: 'Build/version of every reachable node vs the current release' },
   { method: 'GET', path: '/spot', desc: 'List spot markets' },
   { method: 'POST', path: '/spot/order', desc: 'Place spot order (preview — writes disabled)' },
