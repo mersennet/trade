@@ -30,7 +30,7 @@ export const ANNOUNCEMENTS: Announcement[] = [
   {
     // Between the two switches (Sat evening → Sun afternoon).
     id: 'ticks-live-2026-09-19',
-    text: 'One-click trading now runs on agent keys and MRSN, SOL and ARB trade on $0.01 ticks. Next: Sun 20 Sep ~16:00 UTC (block 1,605,600) collateral becomes real MRSN with 10% initial / 5% maintenance margin — positions larger than 20× your collateral at that block are closed by the keeper.',
+    text: 'One-click trading now runs on agent keys and MRSN, SOL and ARB trade on $0.01 ticks. Next upgrade {eta:1605600}: collateral becomes real MRSN with 10% initial / 5% maintenance margin — positions larger than 20× your collateral at that block are closed by the keeper.',
     link: { href: '/staking', label: 'See the schedule' },
     showWhen: (p) => !!p?.agentDelegationActive && !p?.settlementActive,
   },
@@ -42,7 +42,7 @@ export const ANNOUNCEMENTS: Announcement[] = [
   },
   {
     id: 'vault-oneclick-2026-09-17',
-    text: 'The Maker Vault opens Sun 20 Sep (block 1,605,600): pool MRSN behind the market maker, shares track its PnL, deposits earn LP points.',
+    text: 'The Maker Vault opens at the next upgrade, {eta:1605600}: pool MRSN behind the market maker, shares track its PnL, deposits earn LP points.',
     link: { href: '/vault', label: 'See the vault' },
     showWhen: (p) => !!p && !p.settlementActive,
   },
