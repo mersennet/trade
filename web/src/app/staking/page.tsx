@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useWallet } from '@/hooks/useWallet';
 import { useToast } from '@/components/shared/Toast';
 import { cn, shortenAddress } from '@/lib/utils';
@@ -12,6 +12,8 @@ import {
   getDelegation,
   getUnbonding,
   getValidatorsFull,
+  getValidatorSet,
+  stakingErrorMessage,
   undelegate,
   weiToMrsn,
   withdrawUnbonded,
@@ -50,6 +52,22 @@ export default function StakingPage() {
   // wallet popup (a 50,000 MRSN delegation from a 5,500 MRSN wallet reached
   // the signer on 17 Sep and would only have failed on-chain).
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  // Where the operator's "Your node" card renders (portal from the validator
+  // set panel), so an operator sees self-stake and its actions first.
+  const [ownSlot, setOwnSlot] = useState<HTMLDivElement | null>(null);
+  // Validators this wallet operates → the matching rows are labelled "your node".
+  const [myIdentities, setMyIdentities] = useState<Set<string>>(new Set());
+  const amountRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  useEffect(() => {
+    if (!address) { setMyIdentities(new Set()); return; }
+    let alive = true;
+    const load = () => getValidatorSet().then((v) => {
+      if (alive) setMyIdentities(new Set(v.validators.filter((x) => x.operator.toLowerCase() === address.toLowerCase()).map((x) => x.identity.toLowerCase())));
+    }).catch(() => {});
+    load();
+    const stop = startPoll(load, 60_000);
+    return () => { alive = false; stop(); };
+  }, [address]);
   useEffect(() => {
     if (!address) { setWalletBalance(null); return; }
     let alive = true;
@@ -109,8 +127,7 @@ export default function StakingPage() {
       toast(okMsg, 'success');
       await refresh();
     } catch (e) {
-      const msg = (e as Error).message || 'Transaction failed';
-      toast(msg.length > 140 ? `${msg.slice(0, 140)}…` : msg, 'error');
+      toast(stakingErrorMessage(e), 'error');
     } finally {
       setBusy(null);
     }
@@ -129,8 +146,11 @@ export default function StakingPage() {
           proposes, minus the validator&apos;s commission. Undelegating starts a
           ~4 hour unbonding period before the principal is withdrawable.
           Delegation is native to the chain — no contracts, no custodians.
+          {!isConnected && <> Run a node? Connect its operator wallet to see your node, add self-stake or unregister.</>}
         </p>
       </div>
+
+      <div ref={setOwnSlot} data-testid="your-node-slot" />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         <StatTile label="Network stake" value={`${weiToMrsn(totalNetwork, 0)} MRSN`} />
@@ -167,7 +187,7 @@ export default function StakingPage() {
               <th className="text-right font-medium px-4 py-3">Self-stake</th>
               <th className="text-right font-medium px-4 py-3">Delegated</th>
               <th className="text-right font-medium px-4 py-3">Commission</th>
-              <th className="text-right font-medium px-4 py-3">Your stake</th>
+              <th className="text-right font-medium px-4 py-3" title="MRSN this wallet has delegated to the validator">Your delegation</th>
               <th className="text-right font-medium px-4 py-3">Rewards</th>
               <th className="text-right font-medium px-4 py-3 w-[300px]">Actions</th>
             </tr>
@@ -186,9 +206,10 @@ export default function StakingPage() {
             {!loading && rows.map((r) => {
               const m = mode[r.address] ?? 'delegate';
               const amt = amounts[r.address] ?? '';
+              const own = myIdentities.has(r.address.toLowerCase());
               return (
-                <tr key={r.address} className="border-b border-border/50 last:border-0">
-                  <td className="px-4 py-3 font-mono text-foreground">{shortenAddress(r.address)}</td>
+                <tr key={r.address} id={`delegate-${r.address.toLowerCase()}`} className={cn('border-b border-border/50 last:border-0', own && 'bg-primary/5')}>
+                  <td className="px-4 py-3 font-mono text-foreground">{shortenAddress(r.address)}{own && <span className="text-primary"> · your node</span>}</td>
                   <td className="px-4 py-3 text-right font-mono tabular-nums">{weiToMrsn(r.selfStake, 0)}</td>
                   <td className="px-4 py-3 text-right font-mono tabular-nums">{weiToMrsn(r.delegatedTotal)}</td>
                   <td className="px-4 py-3 text-right font-mono tabular-nums">{(r.commissionBps / 100).toFixed(1)}%</td>
@@ -211,14 +232,24 @@ export default function StakingPage() {
                         >Unstake</button>
                       </div>
                       <input
+                        ref={(el) => { amountRefs.current[r.address] = el; }}
                         value={amt}
                         onChange={(e) => setAmounts((s) => ({ ...s, [r.address]: e.target.value }))}
                         placeholder="MRSN"
                         inputMode="decimal"
+                        aria-label={`Amount in MRSN to ${m} with ${shortenAddress(r.address)}`}
                         className="w-20 bg-surface-2 border border-border rounded-lg px-2 py-1 text-xs font-mono text-right focus:outline-none focus:border-primary"
                       />
                       <button
                         onClick={() => {
+                          if (!isConnected) { toast('Connect your wallet first', 'error'); return; }
+                          // An empty amount used to leave this button faded, which read
+                          // as "not available"; ask for the amount instead.
+                          if (!amt || Number(amt) <= 0) {
+                            toast(`Enter the amount of MRSN to ${m === 'delegate' ? 'delegate' : 'undelegate'} first`, 'error');
+                            amountRefs.current[r.address]?.focus();
+                            return;
+                          }
                           const n = Number(amt);
                           if (m === 'delegate' && walletBalance !== null && n + 0.001 > walletBalance) {
                             toast(`You have ${walletBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })} MRSN in this wallet — you can delegate at most ${Math.max(0, Math.floor(walletBalance - 0.001)).toLocaleString()} (keep a little for gas; the faucet gives 1,001 an hour)`, 'error');
@@ -234,7 +265,7 @@ export default function StakingPage() {
                             m === 'delegate' ? `Delegated ${amt} MRSN` : `Unbonding ${amt} MRSN started (~4h)`,
                           );
                         }}
-                        disabled={busy !== null || !amt || Number(amt) <= 0}
+                        disabled={busy !== null}
                         className={cn(
                           'px-3 py-1 rounded-lg text-[11px] font-semibold transition-all disabled:opacity-40',
                           m === 'delegate' ? 'premium-gradient text-black hover:brightness-110' : 'bg-red/15 text-red hover:bg-red/25',
@@ -267,7 +298,7 @@ export default function StakingPage() {
       </p>
 
       <div className="mt-4">
-        <ValidatorSetPanel />
+        <ValidatorSetPanel ownNodesSlot={ownSlot} />
       </div>
     </div>
   );
