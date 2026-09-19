@@ -400,14 +400,20 @@ router.get('/builds', async (_req, res) => {
   res.json({ latest, nodes: out, checked_at: new Date().toISOString() });
 });
 
-setTimeout(() => refreshKnownBuilds().catch(() => {}), 20 * 1000);
-setInterval(() => refreshKnownBuilds().catch(() => {}), 5 * 60 * 1000);
+// Background probes write verified_nodes and the build registry. A standby
+// API (API_ROLE=standby, read-only Postgres replica) serves the routes from
+// replicated data and must not probe: it cannot write, and two probers would
+// double the load on every operator's node.
+if (process.env.API_ROLE !== 'standby') {
+  setTimeout(() => refreshKnownBuilds().catch(() => {}), 20 * 1000);
+  setInterval(() => refreshKnownBuilds().catch(() => {}), 5 * 60 * 1000);
 
-setTimeout(() => recheckAll().catch(() => {}), 60 * 1000);
-setInterval(() => recheckAll().catch(() => {}), RECHECK_MS);
-const DISCOVER_MS = Number(process.env.NODE_DISCOVERY_MS || 10 * 60 * 1000);
-setTimeout(() => discoverFromPeers().catch(() => {}), 90 * 1000);
-setInterval(() => discoverFromPeers().catch(() => {}), DISCOVER_MS);
+  setTimeout(() => recheckAll().catch(() => {}), 60 * 1000);
+  setInterval(() => recheckAll().catch(() => {}), RECHECK_MS);
+  const DISCOVER_MS = Number(process.env.NODE_DISCOVERY_MS || 10 * 60 * 1000);
+  setTimeout(() => discoverFromPeers().catch(() => {}), 90 * 1000);
+  setInterval(() => discoverFromPeers().catch(() => {}), DISCOVER_MS);
+}
 
 module.exports = router;
 // Shared with the health endpoints in server.js.

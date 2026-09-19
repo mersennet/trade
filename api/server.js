@@ -405,7 +405,18 @@ async function initAllTables() {
   await pool.query(`ALTER TABLE paper_trades ADD COLUMN IF NOT EXISTS leverage INT DEFAULT 1`).catch(() => {});
   console.log('[api] All tables initialized');
 }
-initAllTables().catch(err => console.error('[api] Init error:', err.message));
+// API_ROLE=standby: this instance runs on the warm standby against a
+// read-only streaming replica. It serves every GET and the WebSocket feed
+// from replicated data; DDL, seeds and the background writers (TWAP,
+// conditional monitor, node probes) stay on the primary. Writes that reach it
+// are forwarded to the primary by Caddy while the primary is up.
+const STANDBY = process.env.API_ROLE === 'standby';
+if (STANDBY) {
+  console.log('[api] standby role: read-only replica, background writers off');
+  try { require('./src/services/openInterest').start(); } catch (e) { console.log('[api] OI start:', e.message); }
+} else {
+  initAllTables().catch(err => console.error('[api] Init error:', err.message));
+}
 
 // Unknown /api/v1 route → JSON 404 (not the HTML default); anything thrown
 // outside a route's own try/catch → sendError (400 for bad input, 500 sans
