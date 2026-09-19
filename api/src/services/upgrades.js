@@ -62,6 +62,13 @@ async function ensureSchema() {
     UNIQUE (key, height, recorded_at, source)
   )`);
   await pool.query('CREATE INDEX IF NOT EXISTS protocol_upgrade_estimates_kh ON protocol_upgrade_estimates (key, height, recorded_at)');
+  await pool.query(`CREATE TABLE IF NOT EXISTS protocol_upgrade_activations (
+    height bigint PRIMARY KEY,
+    activated_at timestamptz NOT NULL,
+    block_hash text,
+    source text NOT NULL DEFAULT 'rpc',
+    recorded_at timestamptz NOT NULL DEFAULT now()
+  )`);
 }
 
 /** One live snapshot per upcoming switch per hour (the first one immediately). */
@@ -103,14 +110,67 @@ async function estimatesFor(key, height) {
 
 // ---- actual activation time ------------------------------------------------
 
-const blockTimeCache = new Map(); // height → ISO timestamp (finalized blocks never change)
+// Activation times are kept in protocol_upgrade_activations: the public RPC
+// only serves the last ~1,000 blocks until the history release ships, so the
+// block at an upgrade height must be read while it is in that window (the
+// snapshot job does this every 5 min) — or from the explorer indexer, which
+// holds every block since genesis in the sibling database.
+const { Pool } = require('pg');
+let explorerPool = null;
+function explorerDb() {
+  if (explorerPool) return explorerPool;
+  const url = process.env.EXPLORER_DATABASE_URL
+    || (process.env.DATABASE_URL || '').replace(/\/[^/?]+(\?.*)?$/, '/mersennet_explorer$1');
+  if (!url) return null;
+  explorerPool = new Pool({ connectionString: url, max: 2, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 4000 });
+  explorerPool.on('error', (e) => console.log('[upgrades] explorer db:', e.message));
+  return explorerPool;
+}
+
+const blockTimeCache = new Map(); // height → { at, hash } (finalized blocks never change)
 async function activatedAt(height) {
-  if (blockTimeCache.has(height)) return blockTimeCache.get(height);
+  if (blockTimeCache.has(height)) return blockTimeCache.get(height).at;
+  // 1. our own record
+  try {
+    const { rows } = await pool.query('SELECT activated_at, block_hash FROM protocol_upgrade_activations WHERE height = $1', [height]);
+    if (rows[0]) { const v = { at: new Date(rows[0].activated_at).toISOString(), hash: rows[0].block_hash }; blockTimeCache.set(height, v); return v.at; }
+  } catch { /* table may not exist yet on a fresh standby */ }
+  let found = null;
+  // 2. the node, while the block is inside its served window
   const b = await chain.rpcCall('eth_getBlockByNumber', ['0x' + height.toString(16), false]).catch(() => null);
-  if (!b || !b.timestamp) return null;
-  const iso = new Date(parseInt(b.timestamp, 16) * 1000).toISOString();
-  blockTimeCache.set(height, iso);
-  return iso;
+  if (b && b.timestamp) found = { at: new Date(parseInt(b.timestamp, 16) * 1000).toISOString(), hash: b.hash || null, source: 'rpc' };
+  // 3. the explorer indexer (every block since genesis)
+  if (!found) {
+    const db = explorerDb();
+    if (db) {
+      try {
+        const { rows } = await db.query('SELECT timestamp, hash FROM blocks WHERE number = $1', [height]);
+        if (rows[0]) found = { at: new Date(Number(rows[0].timestamp) * 1000).toISOString(), hash: rows[0].hash || null, source: 'indexer' };
+      } catch (e) { console.log('[upgrades] explorer db lookup:', e.message); }
+    }
+  }
+  if (!found) return null;
+  blockTimeCache.set(height, found);
+  if (!STANDBY) {
+    await pool.query(
+      `INSERT INTO protocol_upgrade_activations (height, activated_at, block_hash, source) VALUES ($1, $2, $3, $4) ON CONFLICT (height) DO NOTHING`,
+      [height, found.at, found.hash, found.source],
+    ).catch((e) => console.log('[upgrades] store activation:', e.message));
+  }
+  return found.at;
+}
+
+/** Resolve and store activation times for every switch whose height has passed. */
+async function recordActivations() {
+  const sw = await allSwitches();
+  if (!sw) return 0;
+  let n = 0;
+  for (const height of new Set(Object.values(sw.all))) {
+    if (height > sw.height) continue;
+    if (blockTimeCache.has(height)) continue;
+    if (await activatedAt(height)) n++;
+  }
+  return n;
 }
 
 /**
@@ -172,11 +232,16 @@ async function report() {
 
 function start() {
   if (STANDBY) return;
+  const tick = async () => {
+    const n = await snapshot();
+    const a = await recordActivations();
+    if (n || a) console.log(`[upgrades] ${n} new estimate snapshot(s), ${a} activation(s) recorded`);
+  };
   ensureSchema()
-    .then(() => snapshot())
-    .then((n) => console.log(`[upgrades] estimates on record; ${n} new snapshot(s)`))
+    .then(tick)
+    .then(() => console.log('[upgrades] estimates and activations on record'))
     .catch((e) => console.log('[upgrades] init:', e.message));
-  setInterval(() => snapshot().catch((e) => console.log('[upgrades] snapshot:', e.message)), 5 * 60_000).unref();
+  setInterval(() => tick().catch((e) => console.log('[upgrades] tick:', e.message)), 5 * 60_000).unref();
 }
 
-module.exports = { start, report, snapshot, labelOf, detailOf, META };
+module.exports = { start, report, snapshot, recordActivations, labelOf, detailOf, META };
