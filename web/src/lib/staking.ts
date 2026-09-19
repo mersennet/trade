@@ -177,12 +177,20 @@ export async function getValidatorsFull(): Promise<ValidatorFull[]> {
   const body = await res.json();
   if (body.error) throw new Error(body.error.message || 'staking RPC error');
   type Raw = { address: string; selfStake: string; delegatedTotal: string; commissionBps: number };
-  return ((body.result || []) as Raw[]).map((v) => ({
-    address: v.address,
-    selfStake: BigInt(v.selfStake ?? '0').toString(),
-    delegatedTotal: BigInt(v.delegatedTotal ?? '0').toString(),
-    commissionBps: Number(v.commissionBps ?? 0),
-  }));
+  return ((body.result || []) as Raw[]).map((v) => {
+    // The node reports the consensus weight (self-stake + delegations) under
+    // `selfStake`; the registry's real self-stake is that minus the pool. An
+    // operator with 40,000 bonded and 5,000 delegated saw "45,000 self-stake"
+    // here and 40,000 in the validator set on the same page.
+    const weight = BigInt(v.selfStake ?? '0');
+    const delegated = BigInt(v.delegatedTotal ?? '0');
+    return {
+      address: v.address,
+      selfStake: (weight > delegated ? weight - delegated : weight).toString(),
+      delegatedTotal: delegated.toString(),
+      commissionBps: Number(v.commissionBps ?? 0),
+    };
+  });
 }
 
 // ─── Open validator set ─────────────────────────────────────────────────────

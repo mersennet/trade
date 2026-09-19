@@ -1,5 +1,6 @@
 'use client';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useWallet } from '@/hooks/useWallet';
 import { useToast } from '@/components/shared/Toast';
 import { api, type VerifiedNode, type NodeBuild, type ProtocolSwitches } from '@/lib/api';
@@ -29,7 +30,23 @@ const STATUS_TONE: Record<string, string> = {
 
 function fmtMrsn(wei: string) { return Number(weiToMrsn(wei, 0)).toLocaleString(); }
 
-export default function ValidatorSetPanel() {
+function Stat({ label, value, hint, tone }: { label: string; value: React.ReactNode; hint?: string; tone?: string }) {
+  return (
+    <div title={hint}>
+      <p className="text-[10px] text-dim uppercase tracking-wider">{label}</p>
+      <p className={cn('text-[13px] font-mono font-semibold tabular-nums mt-0.5', tone ?? 'text-foreground')}>{value}</p>
+    </div>
+  );
+}
+
+/**
+ * `ownNodesSlot`: an element at the top of the page. When set, the operator's
+ * "Your node" card(s) render there (through a portal) so an operator sees
+ * self-stake and the actions first, instead of a one-line strip under the
+ * validator table at the bottom of the page — which is where the first
+ * outside validator lost them.
+ */
+export default function ValidatorSetPanel({ ownNodesSlot }: { ownNodesSlot?: HTMLElement | null } = {}) {
   const { address, provider, isConnected } = useWallet();
   const { toast } = useToast();
   const [view, setView] = useState<ValidatorSetView | null>(null);
@@ -112,6 +129,125 @@ export default function ValidatorSetPanel() {
     }
     return [...byHeight.values()].sort((a, b) => a.height - b.height);
   }, [switches]);
+  const maxValidators = view?.params.maxValidators ?? 12;
+  const scrollToDelegateRow = (identity: string) => {
+    const row = document.getElementById(`delegate-${identity.toLowerCase()}`);
+    row?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const input = row?.querySelector('input') as HTMLInputElement | null;
+    setTimeout(() => input?.focus(), 400);
+  };
+  const ownNodeCards = myEntries.length > 0 ? (
+    <div className="space-y-3" data-testid="your-node-cards">
+      {myEntries.map((v) => {
+        const node = nodeByIdentity[v.identity.toLowerCase()];
+        const probe = live[v.identity.toLowerCase()];
+        // Only a live reading may drive a warning; the stored height is shown as information.
+        const behind = probe ? Math.max(0, probe.head - probe.height) : null;
+        const proposing = v.proposedSlots > 0 && v.missedSlots === 0;
+        const silent = v.status === 'active' && v.proposedSlots === 0 && v.missedSlots >= 2;
+        const lagging = behind !== null && behind > 100 && !proposing;
+        const rank = sorted.findIndex((x) => x.identity.toLowerCase() === v.identity.toLowerCase()) + 1;
+        const inSet = !!view?.activeSet.some((a) => a.toLowerCase() === v.identity.toLowerCase());
+        const b = builds.byId[v.identity.toLowerCase()];
+        const amt = Number(topUp[v.identity] || 0);
+        const overBalance = balance !== null && amt + 0.001 > balance;
+        return (
+          <div key={v.identity} data-testid="your-node-card" className={cn('bg-surface border rounded-xl overflow-hidden', silent || lagging ? 'border-down/50' : 'border-primary/40')}>
+            <div className="px-4 py-2.5 border-b border-border flex flex-wrap items-center gap-x-3 gap-y-1">
+              <h3 className="text-[11px] font-semibold text-primary uppercase tracking-wider">Your node</h3>
+              <span className="font-mono text-[12px] text-foreground" title="Node identity (its signing key). Your wallet is the operator.">{shortenAddress(v.identity)}</span>
+              <span className={cn('font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded', STATUS_TONE[v.status] || 'text-dim')}>{v.status}{v.status === 'jailed' ? ` until epoch ${v.jailedUntilEpoch}` : ''}</span>
+              {v.benched && <span title="Missed 3 leader slots this epoch: out of the leader rotation until the epoch boundary (still voting)" className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded text-yellow-400 bg-yellow-400/10">benched</span>}
+              <span className="text-[11px] text-dim font-mono" title={inSet ? 'In the active set this epoch' : 'Not in the active set this epoch'}>{rank > 0 ? `rank #${rank} of ${maxValidators}` : ''}{inSet ? '' : ' · waiting for the next epoch'}</span>
+              {b?.build && (b.outdated ? <UpgradeBadge build={b.build} latest={builds.latest} /> : <span className="text-[11px] text-dim font-mono" title="Build reported by the node">build {b.build}</span>)}
+              <span className="flex-1" />
+              {probe ? (
+                <span className={cn('font-mono text-[11px]', lagging ? 'text-down' : 'text-dim')} title="Your node's height, probed live through the API and compared with the head at the same moment">
+                  node at {probe.height.toLocaleString()}{behind !== null && behind > 100 ? ` · ${behind.toLocaleString()} blocks behind` : ' · in sync'}
+                </span>
+              ) : node ? (
+                <span className="font-mono text-[11px] text-dim" title="Height at the network's last periodic check (up to 30 minutes old); a live reading follows shortly">last seen at {node.height.toLocaleString()}</span>
+              ) : null}
+            </div>
+
+            <div className="px-4 py-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              <Stat label="Self-stake" value={`${fmtMrsn(v.selfStake)} MRSN`} hint="Bonded by you, the operator" />
+              <Stat label="Delegated to you" value={`${fmtMrsn(v.delegated)} MRSN`} hint="Staked behind your node by other wallets" />
+              <Stat label="Voting stake" value={`${fmtMrsn(v.votingStake)} MRSN`} hint="Self-stake + delegated: this ranks you in the set" tone="text-primary" />
+              <Stat label="Commission" value={`${v.commissionBps / 100}%`} hint="Share of your delegators' rewards you keep" />
+              <Stat label="This epoch" value={<>{v.proposedSlots} proposed <span className="text-dim">· {v.missedSlots} missed</span></>} hint="Leader slots this epoch: blocks proposed vs. missed" tone={v.missedSlots > 0 && v.proposedSlots === 0 ? 'text-down' : undefined} />
+              <Stat label="Operator" value={<>{shortenAddress(v.operator)} <span className="text-primary">· this wallet</span></>} hint="Receives the rewards and signs stake changes" />
+            </div>
+
+            <div className="px-4 pb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="border border-border rounded-lg p-3">
+                <p className="text-[10px] font-semibold text-foreground uppercase tracking-wider mb-2">Add self-stake</p>
+                {v.genesis || v.exiting ? (
+                  <p className="text-[12px] text-dim">{v.exiting ? 'This node is leaving the set; its stake unbonds after the epoch boundary.' : 'Genesis validators hold a fixed bond.'}</p>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={topUp[v.identity] || ''}
+                        onChange={(e) => setTopUp({ ...topUp, [v.identity]: e.target.value })}
+                        placeholder="Amount in MRSN"
+                        inputMode="decimal"
+                        aria-label="Self-stake to add, in MRSN"
+                        className={cn('flex-1 min-w-0 bg-surface-2 border rounded-lg px-3 py-2 text-[12px] font-mono text-foreground focus:outline-none focus:border-primary', overBalance ? 'border-down/60 text-down' : 'border-border')}
+                      />
+                      <button
+                        disabled={!!busy}
+                        onClick={() => {
+                          if (!(amt > 0)) { toast('Enter the amount of MRSN to add', 'error'); return; }
+                          // The bond is taken from the wallet balance after gas: refuse
+                          // before the wallet popup instead of letting the transaction fail.
+                          if (overBalance) {
+                            toast(`You have ${balance!.toLocaleString(undefined, { maximumFractionDigits: 2 })} MRSN in this wallet — enter at most ${Math.max(0, Math.floor(balance! - 0.001)).toLocaleString()} (the faucet gives 1,001 an hour)`, 'error');
+                            return;
+                          }
+                          act('top', () => addSelfStake(provider, v.identity, String(amt)), `Added ${amt.toLocaleString()} MRSN to the self-stake of ${shortenAddress(v.identity)}`);
+                        }}
+                        className="premium-gradient px-4 py-2 rounded-lg text-[10px] font-extrabold uppercase tracking-[0.14em] text-black disabled:opacity-50 whitespace-nowrap"
+                      >{busy === 'top' ? 'Confirm in wallet…' : 'Add stake'}</button>
+                    </div>
+                    <p className="text-[11px] text-dim mt-2">
+                      Bonded from this wallet{balance !== null ? <> · <span className={cn(overBalance && 'text-down')}>{balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} MRSN available</span></> : null}. Counts toward your rank from the next epoch; unbonds over ~{view ? Math.round(view.params.unbondingBlocks * 2 / 3600) : 4} h if you unregister.
+                    </p>
+                  </>
+                )}
+              </div>
+              <div className="border border-border rounded-lg p-3">
+                <p className="text-[10px] font-semibold text-foreground uppercase tracking-wider mb-2">Delegate to this node</p>
+                <p className="text-[12px] text-dim leading-relaxed">
+                  Any wallet — this one included — delegates from the staking table {ownNodesSlot ? 'below' : 'above'}: in the row marked <span className="text-primary">your node</span>, enter an amount and press <span className="text-foreground">Delegate</span>. Delegators earn your block rewards minus the {v.commissionBps / 100}% commission; delegated stake counts toward your rank.
+                </p>
+                <button onClick={() => scrollToDelegateRow(v.identity)} className="mt-2 text-[10px] font-semibold uppercase tracking-wider text-primary hover:underline">Go to the row {ownNodesSlot ? '↓' : '↑'}</button>
+              </div>
+            </div>
+
+            {(silent || lagging) && (
+              <p className="px-4 pb-3 text-[11px] text-down">
+                {lagging
+                  ? `Your node is ${behind!.toLocaleString()} blocks behind the chain, so it cannot propose. `
+                  : 'Your node is in the active set but has not proposed any of its slots this epoch. '}
+                {v.benched
+                  ? 'It is benched: out of the leader rotation until the epoch boundary (it still votes), and the boundary will jail it for the next epoch. '
+                  : 'Each missed slot delays the network by a failover round; missing more than 20% of your slots jails the validator for the next epoch. '}
+                Check the server: <code className="font-mono">systemctl status mersennet</code>, <code className="font-mono">mersennet-check</code>, and <code className="font-mono">journalctl -u mersennet -n 100</code>. If the node is stuck, re-run the installer with <code className="font-mono">--reset-state</code>; if you cannot fix it now, unregister so the network does not wait on it.
+              </p>
+            )}
+
+            <div className="px-4 py-2 border-t border-border flex flex-wrap items-center justify-between gap-2 text-[11px] text-dim">
+              <span>Another node? Install it with <code className="font-mono text-foreground">--operator {address?.toLowerCase()}</code>; it appears here within ~10 minutes of being online.</span>
+              {!v.genesis && !v.exiting && (
+                <button disabled={!!busy} onClick={() => { if (confirm('Leave the validator set at the next epoch? Your self-stake unbonds afterwards.')) act('exit', () => unregisterValidator(provider, v.identity), 'Exit scheduled for the next epoch'); }} className="text-[10px] font-semibold uppercase tracking-wider text-down hover:underline">Unregister</button>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  ) : null;
   const fmtEta = (etaSec: number, etaAt: string) => {
     const h = etaSec / 3600;
     const when = new Date(etaAt).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
@@ -119,6 +255,8 @@ export default function ValidatorSetPanel() {
   };
 
   return (
+    <>
+    {ownNodesSlot && ownNodeCards ? createPortal(<div className="mb-6">{ownNodeCards}</div>, ownNodesSlot) : null}
     <div className="bg-surface border border-border rounded-xl overflow-hidden" data-testid="validator-set-panel">
       <div className="px-4 py-2.5 border-b border-border flex items-center justify-between gap-3">
         <h3 className="text-[11px] font-semibold text-foreground uppercase tracking-wider">Validator set</h3>
@@ -171,19 +309,18 @@ export default function ValidatorSetPanel() {
           </div>
         )}
 
-        {isConnected && (
+        {!ownNodesSlot && ownNodeCards}
+
+        {/* Registered operators get the "Your node" card instead (it carries the
+            add-another-node hint); this box is for a wallet with nothing
+            registered yet or with a verified node waiting to be registered. */}
+        {isConnected && (candidates.length > 0 || myEntries.length === 0) && (
           <div className="border border-border rounded-lg p-3 space-y-2">
             <p className="text-[11px] font-semibold text-foreground uppercase tracking-wider">Register a node</p>
             {candidates.length === 0 ? (
-              myEntries.length > 0 ? (
-                <p className="text-[12px] text-dim">
-                  Your node{myEntries.length > 1 ? 's are' : ' is'} registered: {myEntries.map((v) => shortenAddress(v.identity)).join(', ')} — status and slots in the table below. To add another node, install it with <code className="font-mono text-[11px] text-foreground">--operator {address?.toLowerCase()}</code>; it appears here within ~10 minutes of being online.
-                </p>
-              ) : (
-                <p className="text-[12px] text-dim">
-                  No verified node for this wallet yet. Install one with <code className="font-mono text-[11px] text-foreground">--operator {address?.toLowerCase()}</code> (see <a className="text-primary hover:underline" href="https://docs.mersennet.com/validators/run-a-node/" target="_blank" rel="noopener">the guide</a>); it shows up here within ~10 minutes of being online.
-                </p>
-              )
+              <p className="text-[12px] text-dim">
+                No verified node for this wallet yet. Install one with <code className="font-mono text-[11px] text-foreground">--operator {address?.toLowerCase()}</code> (see <a className="text-primary hover:underline" href="https://docs.mersennet.com/validators/run-a-node/" target="_blank" rel="noopener">the guide</a>); it shows up here within ~10 minutes of being online.
+              </p>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
                 <label className="text-[10px] text-dim uppercase tracking-wider md:col-span-2">Node
@@ -274,62 +411,8 @@ export default function ValidatorSetPanel() {
           </table>
         </div>
 
-        {myEntries.map((v) => {
-          const node = nodeByIdentity[v.identity.toLowerCase()];
-          const probe = live[v.identity.toLowerCase()];
-          // Only a live reading may drive a warning; the stored height is shown as information.
-          const behind = probe ? Math.max(0, probe.head - probe.height) : null;
-          const proposing = v.proposedSlots > 0 && v.missedSlots === 0;
-          const silent = v.status === 'active' && v.proposedSlots === 0 && v.missedSlots >= 2;
-          const lagging = behind !== null && behind > 100 && !proposing;
-          return (
-          <div key={v.identity} className={cn('border rounded-lg px-3 py-2 text-[12px] space-y-1', silent || lagging ? 'border-down/50 bg-down/5' : 'border-border')}>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-foreground">{shortenAddress(v.identity)}</span>
-            <span className="text-dim">self-stake {fmtMrsn(v.selfStake)} MRSN · {v.commissionBps / 100}% commission · {v.status}{v.status === 'jailed' ? ` until epoch ${v.jailedUntilEpoch}` : ''}</span>
-            {probe ? (
-              <span className={cn('font-mono text-[11px]', lagging ? 'text-down' : 'text-dim')} title="Your node's height, probed live through the API and compared with the head at the same moment">
-                node at {probe.height.toLocaleString()}{behind !== null && behind > 100 ? ` · ${behind.toLocaleString()} blocks behind` : ' · in sync'}
-              </span>
-            ) : node ? (
-              <span className="font-mono text-[11px] text-dim" title="Height at the network's last periodic check (up to 30 minutes old); a live reading follows shortly">
-                last seen at {node.height.toLocaleString()}
-              </span>
-            ) : null}
-            <span className="flex-1" />
-            {!v.genesis && !v.exiting && (
-              <>
-                <input value={topUp[v.identity] || ''} onChange={(e) => setTopUp({ ...topUp, [v.identity]: e.target.value })} placeholder="MRSN" title={balance !== null ? `Wallet balance ${balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} MRSN` : undefined} className={cn('w-24 bg-surface-2 border rounded-lg px-2 py-1 text-[11px] font-mono', balance !== null && Number(topUp[v.identity] || 0) + 0.001 > balance ? 'border-down/60 text-down' : 'border-border')} />
-                <button disabled={!!busy} onClick={() => {
-                  const amt = Number(topUp[v.identity] || 0);
-                  if (!(amt > 0)) { toast('Enter the amount of MRSN to add', 'error'); return; }
-                  // The bond is taken from the wallet balance after gas: refuse
-                  // before the wallet popup instead of letting the transaction fail.
-                  if (balance !== null && amt + 0.001 > balance) {
-                    toast(`You have ${balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} MRSN in this wallet — enter at most ${Math.max(0, Math.floor(balance - 0.001)).toLocaleString()} (the faucet gives 1,001 an hour)`, 'error');
-                    return;
-                  }
-                  act('top', () => addSelfStake(provider, v.identity, String(amt)), `Added ${amt.toLocaleString()} MRSN to the self-stake of ${shortenAddress(v.identity)}`);
-                }} className="text-[10px] uppercase tracking-wider text-primary hover:underline">Add stake</button>
-                <button disabled={!!busy} onClick={() => { if (confirm('Leave the validator set at the next epoch? Your self-stake unbonds afterwards.')) act('exit', () => unregisterValidator(provider, v.identity), 'Exit scheduled for the next epoch'); }} className="text-[10px] uppercase tracking-wider text-down hover:underline">Unregister</button>
-              </>
-            )}
-          </div>
-          {(silent || lagging) && (
-            <p className="text-[11px] text-down">
-              {lagging
-                ? `Your node is ${behind!.toLocaleString()} blocks behind the chain, so it cannot propose. `
-                : 'Your node is in the active set but has not proposed any of its slots this epoch. '}
-              {v.benched
-                ? 'It is benched: out of the leader rotation until the epoch boundary (it still votes), and the boundary will jail it for the next epoch. '
-                : 'Each missed slot delays the network by a failover round; missing more than 20% of your slots jails the validator for the next epoch. '}
-              Check the server: <code className="font-mono">systemctl status mersennet</code>, <code className="font-mono">mersennet-check</code>, and <code className="font-mono">journalctl -u mersennet -n 100</code>. If the node is stuck, re-run the installer with <code className="font-mono">--reset-state</code>; if you cannot fix it now, <span className="underline">Unregister</span> so the network does not wait on it.
-            </p>
-          )}
-          </div>
-          );
-        })}
       </div>
     </div>
+    </>
   );
 }
