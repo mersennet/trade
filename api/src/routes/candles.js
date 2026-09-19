@@ -49,10 +49,13 @@ router.get('/:marketId', async (req, res) => {
       `SELECT open_time, open, high, low, close, volume, trade_count
        FROM candles
        WHERE market_id = $1 AND resolution = $2 AND open_time >= $3 AND open_time <= $4
-       ORDER BY open_time ASC
+       ORDER BY open_time DESC
        LIMIT $5`,
       [marketId, resolution, from, to, limit]
     );
+    // `limit` keeps the *latest* candles in the window (a chart wants the bars
+    // leading up to `to`); the response is still oldest → newest.
+    result.rows.reverse();
 
     // Candles are aggregated from trades: prices in chain units (human ×
     // the market's priceScale), volume in plain integer size units.
