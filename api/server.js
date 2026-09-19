@@ -95,6 +95,29 @@ app.get('/api/v1/metrics', (req, res) => {
 
 app.get('/api/v1/stats', require('./src/routes/stats').handleStats);
 
+// ── Write gates (registered before the routers so they win) ─────────────────
+// Retired unsigned writers: nothing live calls them and each accepted an
+// arbitrary owner/address. Reads on the same routers keep working.
+const { retired, previewWrites } = require('./src/middleware/writeGates');
+const ON_CHAIN = 'Retired: staking is on-chain — call the staking precompile (0x…0400) from your wallet or use trade.mersennet.com/staking.';
+app.post('/api/v1/staking/stake', retired(ON_CHAIN));
+app.post('/api/v1/staking/unstake', retired(ON_CHAIN));
+app.post('/api/v1/staking/claim', retired(ON_CHAIN));
+const CLIENT_SIDE = 'Retired: stop, trailing and TWAP orders are armed and executed in the terminal (browser-side, with your one-click key); the API no longer stores them. Limit and market orders are wallet-signed placeOrder transactions to the CLOB precompile (0x…0100).';
+app.post('/api/v1/orders', retired(CLIENT_SIDE));
+app.post('/api/v1/orders/twap', retired(CLIENT_SIDE));
+app.delete('/api/v1/orders/twap/:id', retired(CLIENT_SIDE));
+app.post('/api/v1/orders/:orderId/cancel-conditional', retired(CLIENT_SIDE));
+app.post('/api/v1/orders/cancel-all/:address', retired(CLIENT_SIDE));
+app.delete('/api/v1/orders/:orderId', retired(CLIENT_SIDE));
+const NO_KEYS = 'Retired: no API key is needed — every read is public (600 req/min per IP) and every write is a wallet-signed transaction to the chain.';
+app.post('/api/v1/api-keys', retired(NO_KEYS));
+app.delete('/api/v1/api-keys/:id', retired(NO_KEYS));
+// Roadmap previews: reads stay, unsigned writes answer 410 unless PREVIEW_WRITES=1.
+for (const p of ['governance', 'market-listing', 'competitions', 'whales', 'otc', 'options', 'spot', 'prelaunch', 'bridge', 'agents', 'paper']) {
+  app.use(`/api/v1/${p}`, previewWrites);
+}
+
 app.use('/api/v1/markets', marketsRouter);
 app.use('/api/v1/candles', candlesRouter);
 app.use('/api/v1/trades', tradesRouter);
