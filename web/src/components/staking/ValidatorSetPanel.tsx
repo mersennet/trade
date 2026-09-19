@@ -5,6 +5,7 @@ import { useWallet } from '@/hooks/useWallet';
 import { useToast } from '@/components/shared/Toast';
 import { api, type VerifiedNode, type NodeBuild, type ProtocolSwitches } from '@/lib/api';
 import UpgradeBadge from '@/components/shared/UpgradeBadge';
+import TelegramAlerts from '@/components/shared/TelegramAlerts';
 import { cn, shortenAddress } from '@/lib/utils';
 import { getDefaultChain } from '@/lib/chain';
 import { startPoll } from '@/lib/poll';
@@ -236,6 +237,8 @@ export default function ValidatorSetPanel({ ownNodesSlot }: { ownNodesSlot?: HTM
                 <button onClick={() => scrollToDelegateRow(v.identity)} className="mt-2 text-[10px] font-semibold uppercase tracking-wider text-primary hover:underline">Go to the row {ownNodesSlot ? '↓' : '↑'}</button>
               </div>
             </div>
+
+            <div className="px-4 pb-4"><TelegramAlerts kind="operator" /></div>
 
             {(silent || lagging) && (
               <p className="px-4 pb-3 text-[11px] text-down">

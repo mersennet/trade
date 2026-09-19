@@ -170,6 +170,7 @@ app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/feedback', require('./src/routes/feedback'));
 app.use('/api/v1/client-errors', require('./src/routes/clientErrors'));
 app.use('/api/v1/nodes', require('./src/routes/nodes'));
+app.use('/api/v1/alerts', require('./src/routes/alerts'));
 
 app.get('/api/v1/health', async (req, res) => {
   const pool = require('./src/db/pool');
@@ -439,6 +440,8 @@ if (STANDBY) {
   try { require('./src/services/openInterest').start(); } catch (e) { console.log('[api] OI start:', e.message); }
 } else {
   initAllTables().catch(err => console.error('[api] Init error:', err.message));
+  // Telegram alerts: bot poller + rule engine — one instance only (the primary).
+  try { require('./src/services/alerts').start(); } catch (e) { console.log('[api] alerts start:', e.message); }
 }
 
 // Unknown /api/v1 route → JSON 404 (not the HTML default); anything thrown

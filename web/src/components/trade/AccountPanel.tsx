@@ -15,6 +15,8 @@ import {
   type CollateralAsset,
 } from '@/lib/collateral';
 import { startPoll } from '@/lib/poll';
+import TelegramAlerts from '@/components/shared/TelegramAlerts';
+import type { ClobProtocol } from '@/lib/api';
 
 export default function AccountPanel() {
   const { positions, marginMode } = useStore();
@@ -114,6 +116,18 @@ export default function AccountPanel() {
     return startPoll(refreshBalances, 12_000);
   }, [address, refreshBalances]);
 
+  // Maintenance margin from the chain (0 until the settlement switch): drives
+  // the liquidation-risk banner below. Refreshed every minute.
+  const [protocol, setProtocol] = useState<ClobProtocol | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const load = () => api.getProtocol().then((p) => { if (alive) setProtocol(p); }).catch(() => {});
+    load();
+    const stop = startPoll(load, 60_000);
+    return () => { alive = false; stop(); };
+  }, []);
+  const warnedRef = useRef(false);
+
   const stats = useMemo(() => {
     const totalUnrealizedPnl = positions.reduce((sum, p) => sum + (p.unrealizedPnl || 0), 0);
     const totalNotional = positions.reduce((sum, p) => {
@@ -127,15 +141,29 @@ export default function AccountPanel() {
     // provider.getBalance returns the wallet's native MRSN balance (18 decimals).
     const nativeBalance = Number(balance || '0') / 1e18;
 
-    return { accountEquity, totalUnrealizedPnl, totalNotional, marginRatio, availableMargin, nativeBalance };
-  }, [positions, collateral, balance]);
+    // Liquidation math (settlement era): equity vs maintenance margin.
+    const mmBps = protocol?.settlementActive ? Number(protocol.maintenanceMarginBps || 0) : 0;
+    const maintenance = totalNotional * mmBps / 10_000;
+    const liqRatio = maintenance > 0 ? accountEquity / maintenance : Infinity;
+    const liqRisk = maintenance > 0 && liqRatio < 1.6;
+    const liquidatable = maintenance > 0 && accountEquity <= maintenance;
+
+    return { accountEquity, totalUnrealizedPnl, totalNotional, marginRatio, availableMargin, nativeBalance, maintenance, liqRatio, liqRisk, liquidatable, mmBps };
+  }, [positions, collateral, balance, protocol]);
+  useEffect(() => {
+    if (stats.liqRisk && !warnedRef.current) {
+      warnedRef.current = true;
+      toast(stats.liquidatable ? 'Your account is liquidatable — the keeper can close positions now. Deposit collateral or reduce size.' : `Liquidation risk: equity is ${stats.liqRatio.toFixed(2)}× maintenance margin. Deposit collateral or reduce size.`, 'warning');
+    }
+    if (!stats.liqRisk) warnedRef.current = false;
+  }, [stats.liqRisk, stats.liquidatable, stats.liqRatio, toast]);
 
   if (!isConnected) {
     // A preview of what the panel holds, and the three steps to get there,
     // instead of a blank prompt.
     return (
       <div className="bg-surface border border-border rounded-xl md:border-0 md:rounded-none p-3 shrink-0">
-        <h3 className="text-[11px] text-dim font-medium uppercase tracking-wider mb-2">Account</h3>
+        <h2 className="text-[11px] text-dim font-medium uppercase tracking-wider mb-2">Account</h2>
         <div className="space-y-1.5 opacity-60 select-none" aria-hidden>
           {[['Equity', '— MRSN'], ['Unrealized PnL', '—'], ['Margin used', '—'], ['Available', '—']].map(([k, v]) => (
             <div key={k} className="flex items-center justify-between"><span className="text-[11px] text-dim">{k}</span><span className="text-xs font-mono text-foreground/60">{v}</span></div>
@@ -203,6 +231,20 @@ export default function AccountPanel() {
           <span className="text-[11px] text-dim">Open Notional</span>
           <span className="text-xs font-mono font-medium text-foreground/70">{formatNumber(stats.totalNotional, 2)} MRSN</span>
         </div>
+        {stats.mmBps > 0 && stats.totalNotional > 0 && (
+          <div className="flex items-center justify-between" title={`Maintenance margin is ${stats.mmBps / 100}% of open notional; below it the keeper liquidates.`}>
+            <span className="text-[11px] text-dim">Maintenance margin</span>
+            <span className={cn('text-xs font-mono font-medium', stats.liqRisk ? 'text-red' : 'text-foreground/70')}>{formatNumber(stats.maintenance, 2)} MRSN · equity {Number.isFinite(stats.liqRatio) ? `${stats.liqRatio.toFixed(2)}×` : '—'}</span>
+          </div>
+        )}
+        {stats.liqRisk && (
+          <div className="rounded-lg border border-red/50 bg-red/10 px-3 py-2 text-[11px] text-red leading-relaxed" role="alert">
+            {stats.liquidatable
+              ? <>Your account is <b>liquidatable</b>: equity {formatNumber(stats.accountEquity, 2)} MRSN is at or below maintenance {formatNumber(stats.maintenance, 2)} MRSN. The keeper can close positions any moment — deposit collateral or reduce size now.</>
+              : <><b>Liquidation risk.</b> Equity {formatNumber(stats.accountEquity, 2)} MRSN is {stats.liqRatio.toFixed(2)}× maintenance ({formatNumber(stats.maintenance, 2)} MRSN); liquidation at 1.0×. Deposit collateral or reduce size.</>}
+          </div>
+        )}
+        <TelegramAlerts kind="trader" compact className="pt-1" />
         <div className="h-px bg-border" />
         {/* Native MRSN is both the gas asset and the depositable balance —
             one row, not two rows disagreeing about the same number. */}
