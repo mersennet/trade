@@ -364,7 +364,7 @@ export interface ClobProtocol { height: number; settlementActive: boolean; agent
 export interface ProtocolSwitch { key: string; label: string; height: number; blocksLeft: number; etaSec: number; etaAt: string; }
 export interface ProtocolSwitches { blockTimeSec: number; height: number | null; switches: ProtocolSwitch[]; }
 export interface UpgradeEstimate { source: 'announced' | 'live'; recordedAt: string; etaAt: string; deltaSec: number | null; }
-export interface CompletedUpgrade { key: string; label: string; detail: string; height: number; activatedAt: string | null; estimate: UpgradeEstimate | null; finalEstimate: UpgradeEstimate | null; }
+export interface CompletedUpgrade { key: string; label: string; detail: string; height: number; activatedAt: string | null; estimate: UpgradeEstimate | null; dayBeforeEstimate: UpgradeEstimate | null; finalEstimate: UpgradeEstimate | null; }
 export interface UpcomingUpgrade extends ProtocolSwitch { detail: string; announcedAt: string | null; }
 export interface ProtocolUpgrades { blockTimeSec: number; height: number | null; upcoming: UpcomingUpgrade[]; completed: CompletedUpgrade[]; }
 export interface VaultInfo { address: string; activeFromBlock: number | null; active: boolean; height: number | null; symbol: string; asset: string; minDepositMrsn: number; reserveBps: number; lpPointsPerMrsnDay: number; }

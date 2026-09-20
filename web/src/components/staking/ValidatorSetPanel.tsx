@@ -282,7 +282,7 @@ export default function ValidatorSetPanel({ ownNodesSlot }: { ownNodesSlot?: HTM
     if (!done.length) return null;
     const top = done[0].height;
     const items = done.filter((c) => c.height === top);
-    return { height: top, activatedAt: items[0].activatedAt as string, estimate: items[0].estimate, finalEstimate: items[0].finalEstimate, labels: items.map((c) => c.label) };
+    return { height: top, activatedAt: items[0].activatedAt as string, estimate: items[0].estimate, dayBefore: items[0].dayBeforeEstimate, finalEstimate: items[0].finalEstimate, labels: items.map((c) => c.label) };
   }, [upgrades]);
   const fmtEta = (etaSec: number, etaAt: string) => {
     const h = etaSec / 3600;
@@ -337,7 +337,7 @@ export default function ValidatorSetPanel({ ownNodesSlot }: { ownNodesSlot?: HTM
                 <span className="font-mono text-foreground">block {lastDone.height.toLocaleString()}</span>
                 <span className="font-mono text-green-400">{utc(lastDone.activatedAt, true)}</span>
                 {lastDone.estimate && (
-                  <span className="text-dim" title={`Estimated ${utc(lastDone.estimate.etaAt)} (${lastDone.estimate.source === 'announced' ? 'announced' : 'estimate recorded'} ${utc(lastDone.estimate.recordedAt)})${lastDone.finalEstimate ? `; last estimate shown before activation ${utc(lastDone.finalEstimate.etaAt, true)} → ${fmtDelta(lastDone.finalEstimate.deltaSec)}` : ''}`}>
+                  <span className="text-dim" title={`Estimated ${utc(lastDone.estimate.etaAt)} (${lastDone.estimate.source === 'announced' ? 'announced' : 'estimate recorded'} ${utc(lastDone.estimate.recordedAt)})${lastDone.dayBefore ? `; live estimate a day out ${utc(lastDone.dayBefore.etaAt, true)} → ${fmtDelta(lastDone.dayBefore.deltaSec)}` : ''}${lastDone.finalEstimate ? `; last estimate shown before activation ${utc(lastDone.finalEstimate.etaAt, true)} → ${fmtDelta(lastDone.finalEstimate.deltaSec)}` : ''}`}>
                     {fmtDelta(lastDone.estimate.deltaSec)} vs the {lastDone.estimate.source === 'announced' ? 'announced' : 'estimated'} {utc(lastDone.estimate.etaAt)}
                   </span>
                 )}

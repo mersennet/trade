@@ -179,14 +179,23 @@ async function recordActivations() {
  * otherwise the earliest snapshot at all. `final` is the last one shown.
  */
 function pick(estimates, actualMs) {
-  if (!estimates.length) return { record: null, final: null };
+  if (!estimates.length) return { record: null, dayBefore: null, final: null };
   const announced = estimates.find((e) => e.source === 'announced');
   const live = estimates.filter((e) => e.source === 'live');
-  const early = live.find((e) => actualMs - new Date(e.recordedAt).getTime() >= 6 * 3600_000);
+  const lead = (e) => actualMs - new Date(e.recordedAt).getTime();
+  const early = live.find((e) => lead(e) >= 6 * 3600_000);
   const record = announced || early || estimates[0];
-  const before = live.filter((e) => new Date(e.recordedAt).getTime() <= actualMs);
+  // The live estimate closest to one day out (within 18–30 h), when there is one.
+  const dayBefore = live
+    .filter((e) => lead(e) >= 18 * 3600_000 && lead(e) <= 30 * 3600_000)
+    .sort((a, b) => Math.abs(lead(a) - 24 * 3600_000) - Math.abs(lead(b) - 24 * 3600_000))[0] || null;
+  const before = live.filter((e) => lead(e) >= 0);
   const final = before.length ? before[before.length - 1] : null;
-  return { record, final: final && final !== record ? final : null };
+  return {
+    record,
+    dayBefore: dayBefore && dayBefore !== record ? dayBefore : null,
+    final: final && final !== record && final !== dayBefore ? final : null,
+  };
 }
 
 const deltaSec = (actualIso, etaIso) => Math.round((new Date(actualIso).getTime() - new Date(etaIso).getTime()) / 1000);
@@ -215,12 +224,14 @@ async function report() {
     if (height > sw.height) continue;
     const actual = await activatedAt(height);
     const estimates = await estimatesFor(key, height);
-    const { record, final } = pick(estimates, actual ? new Date(actual).getTime() : Date.now());
+    const { record, dayBefore, final } = pick(estimates, actual ? new Date(actual).getTime() : Date.now());
+    const withDelta = (e) => (e ? { ...e, deltaSec: actual ? deltaSec(actual, e.etaAt) : null } : null);
     completed.push({
       key, label: labelOf(key), detail: detailOf(key), height,
       activatedAt: actual,
-      estimate: record ? { ...record, deltaSec: actual ? deltaSec(actual, record.etaAt) : null } : null,
-      finalEstimate: final ? { ...final, deltaSec: actual ? deltaSec(actual, final.etaAt) : null } : null,
+      estimate: withDelta(record),
+      dayBeforeEstimate: withDelta(dayBefore),
+      finalEstimate: withDelta(final),
       estimates,
     });
   }
