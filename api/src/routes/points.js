@@ -7,7 +7,7 @@ const router = Router();
 
 /**
  * GET /api/v1/points/sprint — the weekly sprint: current standings (this
- * week's taker volume, Monday 00:00 UTC to now, real traders only), prizes,
+ * week's traded volume on both sides of each fill, Monday 00:00 UTC to now, real traders only), prizes,
  * time to the next award, and the last week's winners.
  */
 router.get('/sprint', async (req, res) => {
@@ -18,12 +18,17 @@ router.get('/sprint', async (req, res) => {
     const end = new Date(start.getTime() + 7 * 86_400_000);
     const [standings, last] = await Promise.all([
       pool.query(
-        `SELECT LOWER(taker) AS address, SUM(price * size / ${chain.priceScaleSql('market_id')})::float8 AS volume, COUNT(*)::int AS trades
-           FROM trades
-          WHERE taker IS NOT NULL AND block_timestamp >= $1
-            AND LOWER(taker) NOT LIKE '0x00000000000000000000000000000000000000%'
-            AND LOWER(taker) NOT IN (SELECT address FROM excluded_addresses)
-          GROUP BY LOWER(taker) ORDER BY volume DESC LIMIT 10`,
+        `SELECT address, SUM(volume)::float8 AS volume, COUNT(*)::int AS trades
+           FROM (
+             SELECT LOWER(taker) AS address, price * size / ${chain.priceScaleSql('market_id')} AS volume
+               FROM trades WHERE taker IS NOT NULL AND block_timestamp >= $1
+             UNION ALL
+             SELECT LOWER(maker) AS address, price * size / ${chain.priceScaleSql('market_id')} AS volume
+               FROM trades WHERE maker IS NOT NULL AND block_timestamp >= $1
+           ) sides
+          WHERE address NOT LIKE '0x00000000000000000000000000000000000000%'
+            AND address NOT IN (SELECT address FROM excluded_addresses)
+          GROUP BY address ORDER BY volume DESC LIMIT 10`,
         [start.toISOString()]
       ).catch(() => ({ rows: [] })),
       pool.query(`SELECT week_start, address, rank, volume::float8 AS volume, points::float8 AS points FROM weekly_sprint_awards WHERE address <> 'none' ORDER BY week_start DESC, rank ASC LIMIT 3`).catch(() => ({ rows: [] })),

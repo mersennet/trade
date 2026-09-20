@@ -679,11 +679,12 @@ async function updateLeaderboard() {
   }
 }
 
-// Loyalty points from cumulative taker volume. Idempotent: trading_points is
+// Loyalty points from cumulative traded volume — both sides of every fill
+// (taker and resting maker each earn the fill's notional). Idempotent: trading_points is
 // recomputed from all-time volume each run and upserted, so re-runs never
 // double-count. A `points` history row is written only for the positive delta
 // since the last run, so the points page shows recent activity.
-const POINTS_PER_USD = 1; // 1 point per $1 of taker notional volume
+const POINTS_PER_USD = 1; // 1 point per $1 of notional volume, credited to the taker and to the maker of each fill
 function pointsTier(total) {
   if (total >= 1_000_000) return 'Diamond';
   if (total >= 100_000) return 'Platinum';
@@ -720,14 +721,19 @@ async function awardPoints() {
       [BOT_ADDRESSES]
     ).catch((e) => console.error('[points] bot purge (empty rows):', e.message));
     const vol = await pool.query(
-      `SELECT LOWER(taker) AS address, SUM(price * size / ${priceScaleSql('market_id')})::numeric AS volume
-       FROM trades
-       WHERE taker IS NOT NULL AND block_timestamp IS NOT NULL
-         -- Exclude legacy zero-prefixed accounts AND configured bot wallets
-         -- so points reflect real traders only, matching the leaderboard.
-         AND LOWER(taker) NOT LIKE '0x00000000000000000000000000000000000000%'
-         AND LOWER(taker) <> ALL($1::text[])
-       GROUP BY LOWER(taker)`,
+      `SELECT address, SUM(volume)::numeric AS volume
+       FROM (
+         SELECT LOWER(taker) AS address, price * size / ${priceScaleSql('market_id')} AS volume
+           FROM trades WHERE taker IS NOT NULL AND block_timestamp IS NOT NULL
+         UNION ALL
+         SELECT LOWER(maker) AS address, price * size / ${priceScaleSql('market_id')} AS volume
+           FROM trades WHERE maker IS NOT NULL AND block_timestamp IS NOT NULL
+       ) sides
+       -- Exclude legacy zero-prefixed accounts AND configured bot wallets
+       -- so points reflect real traders only, matching the leaderboard.
+       WHERE address NOT LIKE '0x00000000000000000000000000000000000000%'
+         AND address <> ALL($1::text[])
+       GROUP BY address`,
       [BOT_ADDRESSES]
     );
     let updated = 0;
@@ -879,12 +885,17 @@ async function awardWeeklySprint(season) {
     const done = await pool.query(`SELECT 1 FROM weekly_sprint_awards WHERE week_start = $1 LIMIT 1`, [iso]);
     if (done.rowCount > 0) return;
     const top = await pool.query(
-      `SELECT LOWER(taker) AS address, SUM(price * size / ${priceScaleSql('market_id')})::numeric AS volume
-         FROM trades
-        WHERE taker IS NOT NULL AND block_timestamp >= $1 AND block_timestamp < $2
-          AND LOWER(taker) NOT LIKE '0x00000000000000000000000000000000000000%'
-          AND LOWER(taker) <> ALL($3::text[])
-        GROUP BY LOWER(taker)
+      `SELECT address, SUM(volume)::numeric AS volume
+         FROM (
+           SELECT LOWER(taker) AS address, price * size / ${priceScaleSql('market_id')} AS volume
+             FROM trades WHERE taker IS NOT NULL AND block_timestamp >= $1 AND block_timestamp < $2
+           UNION ALL
+           SELECT LOWER(maker) AS address, price * size / ${priceScaleSql('market_id')} AS volume
+             FROM trades WHERE maker IS NOT NULL AND block_timestamp >= $1 AND block_timestamp < $2
+         ) sides
+        WHERE address NOT LIKE '0x00000000000000000000000000000000000000%'
+          AND address <> ALL($3::text[])
+        GROUP BY address
         ORDER BY volume DESC
         LIMIT 3`,
       [weekStart.toISOString(), weekEnd.toISOString(), BOT_ADDRESSES]
