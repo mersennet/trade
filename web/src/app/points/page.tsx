@@ -130,7 +130,7 @@ export default function PointsPage() {
         </div>
         <div className="divide-y divide-border">
           {[
-            { action: 'Trading',     desc: '1 point per $1 of volume traded',       mult: 'Live',   tone: 'text-primary', live: true  },
+            { action: 'Trading',     desc: '1 point per $1 traded — both sides of a fill, maker and taker',       mult: 'Live',   tone: 'text-primary', live: true  },
             { action: 'Node runner', desc: '500 points per day for a verified, online full node', mult: 'Live', tone: 'text-primary', live: true },
             { action: 'Vault LP',    desc: '0.1 point per MRSN per day deposited in the maker vault (1,000 MRSN for a day = 100 points), credited every few minutes. Deposits open Sun 20 Sep (block 1,605,600).', mult: 'From Sun 20 Sep', tone: 'text-yellow', live: false },
             { action: 'Referrals',   desc: '10% of referee trading points — share your code from the Referrals page; the referee confirms with one signature', mult: 'Live', tone: 'text-primary', live: true },
