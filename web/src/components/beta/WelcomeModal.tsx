@@ -106,7 +106,7 @@ export default function WelcomeModal() {
               <Link href="/staking" className="underline text-primary hover:text-primary-hover">register as a validator</Link>.
             </Bullet>
             <Bullet tone="yellow">
-              Two protocol switches land this weekend (Sat 19 and Sun 20 Sep); the announcement bar and the staking page show the live schedule.
+              Protocol upgrades land at announced block heights; the announcement bar and the staking page show the live schedule, and the explorer keeps the record of past ones.
             </Bullet>
             <Bullet tone="yellow">
               Something off? Use the <Link href="/feedback" className="underline text-primary hover:text-primary-hover">feedback form</Link> or the Telegram chat.
