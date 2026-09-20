@@ -6,7 +6,7 @@
  *   2. they sign a short message with that wallet in the terminal;
  *   3. we ask the node (host:30303, `whoami`) for its signed attestation and
  *      check that the node names that same wallet as operator.
- * Node identity, operator and host are stored; every 6 hours each node is
+ * Node identity, operator and host are stored; every 30 minutes each node is
  * probed again (active = answered within the last 24 h), and once a day each
  * operator with an active node earns NODE_POINTS_PER_DAY (one node counts).
  */
