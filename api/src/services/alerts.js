@@ -120,9 +120,15 @@ async function pollOnce() {
     offset = u.update_id + 1;
     const msg = u.message;
     if (!msg || !msg.text || !msg.chat) continue;
+    // Groups, supergroups and channels: the bot only *posts* there (announcements);
+    // it never answers. Links are per private chat, so nothing it could say in a
+    // group is useful — and as a group admin it sees every message, so without this
+    // guard it replied with its help text to each one (community chat, 22 Sep).
+    if (msg.chat.type !== 'private') continue;
     const chatId = msg.chat.id;
     const username = msg.from && msg.from.username ? msg.from.username : null;
-    const [cmd, arg] = msg.text.trim().split(/\s+/);
+    const [rawCmd, arg] = msg.text.trim().split(/\s+/);
+    const cmd = rawCmd.replace(/@\w+$/, '').toLowerCase(); // "/status@MersennetAlertsBot" → "/status"
     try {
       if (cmd === '/start' && arg) {
         const r = await pool.query(
@@ -145,9 +151,10 @@ async function pollOnce() {
         await send(chatId, 'Unlinked. Nothing more will be sent here; relink any time from the terminal.');
       } else if (cmd === '/start') {
         await send(chatId, `This bot sends Mersennet validator and position alerts. Link it from <a href="https://trade.mersennet.com/staking">trade.mersennet.com/staking</a> (operators) or the account panel on <a href="https://trade.mersennet.com/trade">/trade</a> (traders) — press <b>Telegram alerts</b> there.`);
-      } else {
+      } else if (cmd.startsWith('/')) {
         await send(chatId, '/status — current state of your linked addresses\n/stop — unlink');
       }
+      // Plain text in a private chat gets no reply: the bot is not a conversation.
     } catch (e) { console.error('[alerts] update:', e.message); }
   }
 }
