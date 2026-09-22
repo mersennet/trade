@@ -458,7 +458,7 @@ export default function ValidatorSetPanel({ ownNodesSlot }: { ownNodesSlot?: HTM
                     <td className="py-1.5 pr-3 font-mono text-dim">{shortenAddress(v.operator)}{own && <span className="text-primary"> · you</span>}</td>
                     <td className="py-1.5 pr-3 text-right font-mono">{fmtMrsn(v.selfStake)}</td>
                     <td className="py-1.5 pr-3 text-right font-mono">{fmtMrsn(v.delegated)}</td>
-                    <td className={cn('py-1.5 pr-3 text-right font-mono', v.missedSlots > 0 && v.proposedSlots === 0 ? 'text-down' : '')} title="Leader slots this epoch: blocks your node proposed vs. slots it missed. Missing more than 20% of at least 5 slots jails the node for the next epoch.">{v.proposedSlots} proposed<span className="text-dim"> · {v.missedSlots} missed</span></td>
+                    <td className={cn('py-1.5 pr-3 text-right font-mono', v.missedSlots > 0 && v.proposedSlots === 0 ? 'text-down' : '')} title={`Leader slots this epoch: blocks the node proposed vs. slots it missed. Missing more than 20% of at least 5 slots jails the node for the next epoch. All-time: ${v.totalProposed.toLocaleString()} blocks proposed since it registered.`}>{v.proposedSlots} proposed<span className="text-dim"> · {v.missedSlots} missed</span><div className="text-[10px] text-dim font-normal">{v.totalProposed.toLocaleString()} all-time</div></td>
                     <td className="py-1.5 pr-3 font-mono" title={b?.version || 'The node has not answered a build query yet'}>
                       {!b?.build && <span className="text-dim">—</span>}
                       {b?.build && !b.outdated && <span className="text-dim">{b.build}</span>}
@@ -476,7 +476,8 @@ export default function ValidatorSetPanel({ ownNodesSlot }: { ownNodesSlot?: HTM
                   <td className="py-1.5 pr-3 font-semibold text-foreground" colSpan={2}>Grand total <span className="text-dim font-normal">· {sorted.length} registered</span></td>
                   <td className="py-1.5 pr-3 text-right font-mono font-semibold" title="Grand total staked (MRSN)">{fmtMrsn(sorted.reduce((a, x) => (BigInt(a) + BigInt(x.selfStake)).toString(), '0'))}<div className="text-[10px] text-dim font-normal">staked (MRSN)</div></td>
                   <td className="py-1.5 pr-3 text-right font-mono font-semibold" title="Grand total delegated (MRSN)">{fmtMrsn(sorted.reduce((a, x) => (BigInt(a) + BigInt(x.delegated)).toString(), '0'))}<div className="text-[10px] text-dim font-normal">delegated (MRSN)</div></td>
-                  <td className="py-1.5 pr-3" colSpan={3} />
+                  <td className="py-1.5 pr-3 text-right font-mono font-semibold" title="Grand total of leader slots this epoch across the registered validators (the proposed count is the number of blocks in the epoch so far) and of blocks proposed all-time since each registered">{sorted.reduce((a, x) => a + x.proposedSlots, 0).toLocaleString()} proposed<span className="text-dim font-normal"> · {sorted.reduce((a, x) => a + x.missedSlots, 0).toLocaleString()} missed</span><div className="text-[10px] text-dim font-normal">this epoch · {sorted.reduce((a, x) => a + (x.totalProposed || 0), 0).toLocaleString()} all-time</div></td>
+                  <td className="py-1.5 pr-3" colSpan={2} />
                 </tr>
               </tfoot>
             )}
