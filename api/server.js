@@ -271,6 +271,19 @@ app.get('/api/v1/health/validator-set', async (req, res) => {
   }
 });
 
+// Exchange liveness — fills, order-book revert ratio, maker quoting, vault
+// collateral pushed, indexer lag (src/services/exchangeHealth.js). The
+// 20–25 Sep outage (every maker order reverting, zero fills for five days)
+// passed every other probe here. Kuma keys on `"ok":true`.
+app.get('/api/v1/health/exchange', async (req, res) => {
+  try {
+    const r = await require('./src/services/exchangeHealth').exchangeHealth();
+    res.status(r.status).json(r.body);
+  } catch (e) {
+    res.status(503).json({ ok: false, error: e.message });
+  }
+});
+
 /**
  * Are the ACTIVE validators on the current node release? Red (503) only when
  * it matters: an active validator is on an older build and a consensus switch
