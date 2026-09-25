@@ -91,7 +91,11 @@ async function pushDeposits() {
   const [nav, free] = await Promise.all([vault.nav(), vault.freeBalance()]);
   const reserve = nav * BigInt(RESERVE_BPS) / 10_000n;
   if (free <= reserve) return;
-  const amount = free - reserve;
+  // The contract takes whole MRSN only (`amount % 1e18 == 0`): floor, or a
+  // fractional NAV makes every push revert and depositors' MRSN sits idle in
+  // the contract (1,891.97 MRSN did, from the 20 Sep switch to 25 Sep).
+  const UNIT = 10n ** 18n;
+  const amount = (free - reserve) / UNIT * UNIT;
   if (amount < MIN_PUSH) return;
   const tx = await vault.pushCollateral(amount, { gasLimit: 250_000 });
   await tx.wait(1);

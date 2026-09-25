@@ -6,7 +6,7 @@
 // number of MRSN after it (the migration divides balances by 1e18). That is
 // why the bots pre-fund now instead of racing the liquidation keeper at the
 // switch block.
-let cache = { at: 0, active: false, height: 0, weiPerUnit: 1n };
+let cache = { at: 0, active: false, height: 0, weiPerUnit: 1n, initialMarginBps: 0, maintenanceMarginBps: 0 };
 const WEI = 10n ** 18n;
 
 async function refreshProtocol(rpcCall) {
@@ -14,7 +14,11 @@ async function refreshProtocol(rpcCall) {
   try {
     const p = await rpcCall('mersennet_orders_getProtocol', []);
     let wpu = 1n; try { wpu = BigInt(p?.weiPerCollateralUnit ?? 1); } catch { wpu = 1n; }
-    cache = { at: Date.now(), active: !!p?.settlementActive, height: Number(p?.switches?.settlementHeight || 0), weiPerUnit: wpu > 0n ? wpu : 1n };
+    cache = {
+      at: Date.now(), active: !!p?.settlementActive, height: Number(p?.switches?.settlementHeight || 0), weiPerUnit: wpu > 0n ? wpu : 1n,
+      // Margin the CLOB enforces right now (0 before the settlement switch).
+      initialMarginBps: Number(p?.initialMarginBps || 0), maintenanceMarginBps: Number(p?.maintenanceMarginBps || 0),
+    };
   } catch { /* keep the last answer */ }
   return cache;
 }
@@ -23,6 +27,8 @@ async function settlementActive(rpcCall) { return (await refreshProtocol(rpcCall
 function settlementHeight() { return cache.height; }
 /** Collateral units per MRSN in the current era (1e18 before the switch, 1 after). */
 function unitsPerMrsn() { return WEI / cache.weiPerUnit; }
+/** Initial / maintenance margin in bps as the chain enforces them now (0 = no margin check). */
+function marginBps() { return { initialMarginBps: cache.initialMarginBps, maintenanceMarginBps: cache.maintenanceMarginBps }; }
 
 /**
  * Deposit until `wallet` holds `targetMrsn` MRSN of collateral (in whatever
@@ -50,4 +56,4 @@ async function ensureUnits(wallet, targetMrsn, label) {
   return amountMrsn;
 }
 
-module.exports = { settlementActive, settlementHeight, unitsPerMrsn, refreshProtocol, ensureUnits };
+module.exports = { settlementActive, settlementHeight, unitsPerMrsn, marginBps, refreshProtocol, ensureUnits };

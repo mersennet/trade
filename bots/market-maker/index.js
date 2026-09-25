@@ -34,7 +34,7 @@ const maker = new BotWallet(RPC_URL, 'maker', process.env.MM_PRIVATE_KEY);
 // with the market's live priceScale (a $0.05 tick is 1 unit at scale 1 and
 // 5 units once the market trades on $0.01 ticks).
 const { refreshScales, scaleOf, toChain, chainTick, quietForSwitch, quietReason } = require('./scale');
-const { refreshProtocol, ensureUnits } = require('./settlement');
+const { refreshProtocol, ensureUnits, marginBps } = require('./settlement');
 const { deriveKey } = require('./signer');
 const { ethers: ethersLib } = require('ethers');
 const MARKETS = {
@@ -216,17 +216,98 @@ async function refreshPositions() {
   }
 }
 
+// ---- Collateral-aware sizing -----------------------------------------------
+// From the settlement switch the CLOB refuses any order whose initial margin
+// (notional × initialMarginBps) exceeds the owner's collateral, and a refused
+// order is a reverted tx that still burns its gas. The owner is the vault
+// when the agent grant is live, so the capacity is the vault's deposits, not
+// the maker's own wallet: with 450 MRSN on the precompile after the 20 Sep
+// switch the maker kept quoting sizes designed for 2.5M and every order of
+// five days reverted (530k failed txs a day, 91% of the chain's traffic,
+// zero fills). Quote what the collateral can margin, nothing more.
+const ORDER_MARGIN_USE = 0.9;     // one order may use at most this share of the collateral
+const INVENTORY_EQUITY_USE = 0.4; // total |position| notional kept at ≤ 40% of the liquidation threshold
+let ownerCollateral = null;        // collateral units of CONFIG.owner (MRSN from the switch)
+let collateralAt = 0;
+const capLogAt = {};               // marketId -> last "sizing to collateral" log
+async function refreshCollateral() {
+  if (Date.now() - collateralAt < 30_000) return;
+  collateralAt = Date.now();
+  try {
+    const acct = await rpcCall('mersennet_orders_getAccount', [CONFIG.owner]);
+    if (acct && acct.collateral != null) ownerCollateral = Number(BigInt(acct.collateral));
+  } catch { /* keep the last reading */ }
+}
+/** Largest notional (collateral units) a single order may carry right now; Infinity without margin checks. */
+function perOrderNotionalCap() {
+  const { initialMarginBps } = marginBps();
+  if (!initialMarginBps || ownerCollateral == null) return Infinity;
+  return ownerCollateral * 10_000 / initialMarginBps * ORDER_MARGIN_USE;
+}
+/** Inventory cap per market: MM_MAX_NOTIONAL, or less when the collateral could not survive it. */
+function inventoryCap() {
+  const { maintenanceMarginBps } = marginBps();
+  if (!maintenanceMarginBps || ownerCollateral == null) return MAX_NOTIONAL;
+  return Math.min(MAX_NOTIONAL, ownerCollateral * 10_000 / maintenanceMarginBps * INVENTORY_EQUITY_USE / CONFIG.markets.length);
+}
+
+// ---- On-chain revert detection -----------------------------------------------
+// `place=N/N` only says the node accepted the tx; whether it executed is in
+// the receipt. Sample a few of the previous cycles' hashes each cycle; when
+// every sampled order reverted for three cycles running, stop placing for a
+// while instead of feeding the chain reverts at 6/s (5 days of it: 25 Sep).
+const REVERT_PAUSE_MS = Number(process.env.MM_REVERT_PAUSE_MS || 60_000);
+const pendingChecks = [];          // { hash, at }
+let revertStreak = 0;
+let pausedUntil = 0;
+let lastRevertStats = { reverted: 0, sampled: 0 };
+async function checkReverts() {
+  const now = Date.now();
+  const due = pendingChecks.filter((p) => now - p.at > 12_000).slice(0, 4);
+  if (!due.length) return;
+  let reverted = 0; let sampled = 0;
+  for (const p of due) {
+    const idx = pendingChecks.indexOf(p);
+    if (idx >= 0) pendingChecks.splice(idx, 1);
+    try {
+      const r = await rpcCall('eth_getTransactionReceipt', [p.hash]);
+      if (!r) continue;               // not mined (yet): no signal
+      sampled++;
+      if (r.status === '0x0') reverted++;
+    } catch { /* rpc hiccup: no signal */ }
+  }
+  if (!sampled) return;
+  lastRevertStats = { reverted, sampled };
+  revertStreak = reverted === sampled ? revertStreak + 1 : 0;
+  if (revertStreak >= 3 && now >= pausedUntil) {
+    pausedUntil = now + REVERT_PAUSE_MS;
+    console.warn(`[mm] every sampled order reverted on chain for ${revertStreak} cycles (owner ${CONFIG.owner}, collateral ${ownerCollateral ?? '?'} units, per-order cap ${Math.round(perOrderNotionalCap()).toLocaleString()}) — not placing for ${REVERT_PAUSE_MS / 1000}s`);
+  }
+}
+
 function buildOrders(marketId, mid) {
   const m = MARKETS[marketId];
   const tick = chainTick(m.tick, marketId);
   const levels = m.levels;
   const orders = [];
-  // Inventory cap: past MAX_NOTIONAL quote only the reducing side.
+  const scale = scaleOf(marketId);
+  // Inventory cap: past the cap quote only the reducing side.
   const pos = positions[marketId] || 0;
-  const notional = Math.abs(pos) * (mid / scaleOf(marketId));
-  const capLong = notional >= MAX_NOTIONAL && pos > 0;   // long: stop bidding
-  const capShort = notional >= MAX_NOTIONAL && pos < 0;  // short: stop asking
-  if (capLong || capShort) console.log(`[mm] ${m.symbol}: inventory ${pos} (~${Math.round(notional).toLocaleString()} notional) at cap — quoting ${capLong ? 'asks' : 'bids'} only`);
+  const notional = Math.abs(pos) * (mid / scale);
+  const maxNotional = inventoryCap();
+  const capLong = notional >= maxNotional && pos > 0;   // long: stop bidding
+  const capShort = notional >= maxNotional && pos < 0;  // short: stop asking
+  if (capLong || capShort) console.log(`[mm] ${m.symbol}: inventory ${pos} (~${Math.round(notional).toLocaleString()} notional) at cap ${Math.round(maxNotional).toLocaleString()} — quoting ${capLong ? 'asks' : 'bids'} only`);
+  const orderCap = perOrderNotionalCap();
+  let shrunk = 0; let dropped = 0;
+  // Size an order so its notional fits the collateral; 0 = the level cannot be quoted at all.
+  const fit = (size, price) => {
+    const unit = price / scale;
+    if (size * unit <= orderCap) return size;
+    const s = Math.floor(orderCap / unit);
+    if (s >= 1) shrunk++; else dropped++;
+    return s;
+  };
 
   for (let i = 0; i < levels; i++) {
     const depth = i + 1;
@@ -255,13 +336,19 @@ function buildOrders(marketId, mid) {
     const skipBids = top.ask > 0 && top.ask < mid * (1 - STALE_BAND);
 
     if (bidPrice >= 1 && !skipBids && !capLong) {
-      orders.push({ marketId, side: 'buy',  price: bidPrice, size });
+      const s = fit(size, bidPrice);
+      if (s >= 1) orders.push({ marketId, side: 'buy',  price: bidPrice, size: s });
     }
     if (askPrice >= 2) {
-      if (!skipAsks && !capShort) orders.push({ marketId, side: 'sell', price: askPrice, size });
+      const s = fit(size, askPrice);
+      if (!skipAsks && !capShort && s >= 1) orders.push({ marketId, side: 'sell', price: askPrice, size: s });
     }
   }
 
+  if ((shrunk || dropped) && Date.now() - (capLogAt[marketId] || 0) > 300_000) {
+    capLogAt[marketId] = Date.now();
+    console.log(`[mm] ${m.symbol}: collateral ${ownerCollateral} units caps one order at ~${Math.round(orderCap).toLocaleString()} notional — ${shrunk} level(s) shrunk, ${dropped} dropped`);
+  }
   return orders;
 }
 
@@ -350,6 +437,7 @@ async function resolveOwner() {
         ? `[mm] agent grant live — quoting for ${OWNER}`
         : `[mm] no live agent grant from ${OWNER} (delegation ${view?.active ? 'active' : 'inactive'}) — quoting for own account`);
       CONFIG.owner = next;
+      collateralAt = 0; // re-read the collateral of the new owner on this cycle
     }
   } catch (e) {
     /* keep the current owner on rpc hiccups */
@@ -409,6 +497,8 @@ async function refreshQuotes() {
   await resolveOwner();
   await ensureSettlementCollateral();
   await refreshPositions();
+  await refreshCollateral();
+  await checkReverts();
   cycleCount++;
   submitErrLogged = false;
   marketMissing = false;
@@ -464,7 +554,9 @@ async function refreshQuotes() {
     }
     const quoted = new Set(keeper.keys());
     if (jumped.size) for (const k of [...quoted]) { if (jumped.has(Number(k.split(':')[0]))) quoted.delete(k); }
-    const allOrders = ladder.filter((o) => !quoted.has(quoteKey(o)));
+    // While paused after a revert streak, keep maintaining (cancels) but place nothing.
+    const paused = Date.now() < pausedUntil;
+    const allOrders = paused ? [] : ladder.filter((o) => !quoted.has(quoteKey(o)));
     const stale = resting
       .filter((o) => keeper.get(quoteKey(o)) !== o || jumped.has(o.marketId))
       .sort((a, b) => (a.id < b.id ? -1 : 1));
@@ -477,6 +569,9 @@ async function refreshQuotes() {
     const placeTime = Date.now() - placeStart;
 
     const placed = results.filter(r => r.status === 'fulfilled' && r.value).length;
+    for (const r of results) {
+      if (r.status === 'fulfilled' && r.value?.txHash && pendingChecks.length < 24) pendingChecks.push({ hash: r.value.txHash, at: Date.now() });
+    }
     let fills = 0;
     for (const r of results) {
       if (r.status === 'fulfilled' && r.value?.trades?.length > 0) {
@@ -504,7 +599,7 @@ async function refreshQuotes() {
     // Account nonce is the ground truth for "orders actually mined": if it
     // stops advancing while place>0, the wallet is wedged (signer.js resyncs).
     const w = maker.stats();
-    console.log(`[mm] #${cycleCount}: resting=${resting.length} quoted=${ladder.length - allOrders.length}/${ladder.length} place=${placed}/${allOrders.length} cancel=${cancelled}/${stale.length} fills=${fills} nonce=${w.mined}/${w.local} skipped=${w.skipped} ${opsPerSec}ops/s ${totalTime}ms | ${midStr}`);
+    console.log(`[mm] #${cycleCount}: resting=${resting.length} quoted=${ladder.length - allOrders.length}/${ladder.length} place=${placed}/${allOrders.length} cancel=${cancelled}/${stale.length} fills=${fills} reverted=${lastRevertStats.reverted}/${lastRevertStats.sampled}${paused ? ' PAUSED' : ''} collateral=${ownerCollateral ?? '?'} nonce=${w.mined}/${w.local} skipped=${w.skipped} ${opsPerSec}ops/s ${totalTime}ms | ${midStr}`);
 
     // Self-heal: if the chain lost its markets (e.g. a state reset/re-seed),
     // every submit fails with "unknown market" and the book goes empty. Re-seed
