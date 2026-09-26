@@ -1202,19 +1202,14 @@ async function indexVault() {
     // 7d / 30d APY from the share price trajectory (first event in the window vs now).
     const apy = async (days) => {
       // Share price at the first event at least `days` ago vs now, annualised.
-      // A vault younger than the window uses its oldest event and the real
-      // age (≥ 1 day) instead of showing 0% until the window fills.
-      let r = await pool.query(`SELECT shares, amount, created_at FROM vault_deposits WHERE tx_hash IS NOT NULL AND created_at <= NOW() - ($1 || ' days')::interval AND shares > 0 ORDER BY created_at DESC LIMIT 1`, [String(days)]);
-      let span = days;
-      if (!r.rows[0]) {
-        r = await pool.query(`SELECT shares, amount, created_at FROM vault_deposits WHERE tx_hash IS NOT NULL AND shares > 0 ORDER BY created_at ASC LIMIT 1`);
-        if (!r.rows[0]) return 0;
-        span = Math.max(1, (Date.now() - new Date(r.rows[0].created_at).getTime()) / 86_400_000);
-      }
-      if (Number(shares) === 0) return 0;
+      // 0 until the vault is older than the window (a six-day-old vault
+      // annualised to seven figures is noise, not a rate); the page shows the
+      // plain return since launch from the on-chain share price meanwhile.
+      const r = await pool.query(`SELECT shares, amount FROM vault_deposits WHERE tx_hash IS NOT NULL AND created_at <= NOW() - ($1 || ' days')::interval AND shares > 0 ORDER BY created_at DESC LIMIT 1`, [String(days)]);
+      if (!r.rows[0] || Number(shares) === 0) return 0;
       const oldPx = Number(r.rows[0].amount) / Number(r.rows[0].shares);
       const nowPx = navH / (Number(shares) / WEI);
-      return oldPx > 0 ? ((nowPx / oldPx) ** (365 / span) - 1) * 100 : 0;
+      return oldPx > 0 ? ((nowPx / oldPx) ** (365 / days) - 1) * 100 : 0;
     };
     await pool.query(
       `INSERT INTO vault_state (id, total_shares, total_tvl, total_pnl, apy_7d, apy_30d, depositors, updated_at)
