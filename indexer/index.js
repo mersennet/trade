@@ -1201,6 +1201,10 @@ async function indexVault() {
     const pnl = navH - Number(net.rows[0].net || 0);
     // 7d / 30d APY from the share price trajectory (first event in the window vs now).
     const apy = async (days) => {
+      // Share price at the first event at least `days` ago vs now, annualised.
+      // 0 until the vault is older than the window (a six-day-old vault
+      // annualised to seven figures is noise, not a rate); the page shows the
+      // plain return since launch from the on-chain share price meanwhile.
       const r = await pool.query(`SELECT shares, amount FROM vault_deposits WHERE tx_hash IS NOT NULL AND created_at <= NOW() - ($1 || ' days')::interval AND shares > 0 ORDER BY created_at DESC LIMIT 1`, [String(days)]);
       if (!r.rows[0] || Number(shares) === 0) return 0;
       const oldPx = Number(r.rows[0].amount) / Number(r.rows[0].shares);
