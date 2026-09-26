@@ -118,7 +118,7 @@ export default function VaultPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatTile label="Vault NAV" value={chain ? `${formatNumber(chain.nav, 2)} MRSN` : '—'} hint="Free MRSN + collateral on the precompile + unrealized PnL at book mid" />
         <StatTile label="Share price" value={chain ? `${chain.sharePrice.toFixed(6)} MRSN` : '—'} valueClass={chain && chain.sharePrice >= 1 ? 'text-green' : 'text-red'} hint="MRSN per mvMRSN share (starts at 1.000000)" />
-        <StatTile label="APY (7d)" value={indexed ? formatPct(indexed.apy7d) : '—'} valueClass="text-green" hint="Share-price change over the last 7 days, annualised" />
+        <StatTile label="APY (7d)" value={indexed ? formatPct(indexed.apy7d) : '—'} valueClass="text-green" hint="Share-price change over the last 7 days, annualised (since launch while the vault is younger than 7 days)" />
         <StatTile label="Depositors" value={chain ? String(chain.depositors) : '—'} hint={chain && chain.seedShares > 0 ? 'Including the protocol\'s seed deposit' : undefined} />
       </div>
 
