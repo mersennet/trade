@@ -21,6 +21,20 @@ export interface Announcement {
 // never rotates (motion on a trading screen costs attention). Newest first.
 export const ANNOUNCEMENTS: Announcement[] = [
   {
+    // After the 29 Sep switch: the two changes, past tense. Hides itself until then.
+    id: 'fees-reasons-live-2026-09-29',
+    text: 'Live since block 1,969,200: a refused order now tells you why (on chain and in eth_call) and costs 20k gas instead of the whole limit; the base fee has a 1 gwei floor — a trade costs about 0.00007 MRSN, half of every block\'s fees fund the protocol treasury, a quarter pays the block proposer, a quarter is burned.',
+    link: { href: 'https://docs.mersennet.com/architecture/tokenomics/#transaction-fees', label: 'How fees work' },
+    showWhen: (p) => !!p?.revertReasonsActive && !!p?.fees?.active,
+  },
+  {
+    // Until the 29 Sep switch.
+    id: 'switch-2026-09-29',
+    text: 'Next upgrade {eta:1969200}: refused orders return their reason and charge 20k gas instead of the whole limit, and the base fee gets a 1 gwei floor (about 0.00007 MRSN per trade; 50% treasury / 25% proposer / 25% burned). Validators: upgrade to release 9be4f83 before that block.',
+    link: { href: 'https://explorer.mersennet.com/upgrades', label: 'Upgrade schedule' },
+    showWhen: (p) => !!p && !!p.switches?.feeFloorHeight && !(p.fees?.active),
+  },
+  {
     // Appears by itself once the settlement switch has passed.
     id: 'settlement-live-2026-09-20',
     text: 'Settlement is live: collateral is real MRSN, realized PnL settles into your balance at every fill, 10% initial / 5% maintenance margin, and the Maker Vault is open for deposits.',
