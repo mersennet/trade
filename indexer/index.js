@@ -6,7 +6,8 @@ const WebSocket = require('ws');
 
 const RPC_URL = process.env.RPC_URL || 'https://rpc.mersennet.com';
 const WS_URL = process.env.WS_URL || 'wss://rpc.mersennet.com';
-const DB_URL = process.env.DATABASE_URL || 'postgresql://mersennet:m3rs3nn3t_db_2026@127.0.0.1:5432/mersennet_trade';
+const DB_URL = process.env.DATABASE_URL;
+if (!DB_URL) { console.error('[indexer] DATABASE_URL is not set'); process.exit(1); }
 const REPORT_PORT = process.env.REPORT_PORT || 4010;
 
 // Shared secret required to POST trades to the internal report endpoint. The
