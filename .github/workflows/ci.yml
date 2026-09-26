@@ -1,23 +1,63 @@
 name: CI
 
+# Private repository: every minute here is paid past the free tier (September
+# 2026 ran out on the 19th). Each component's job runs only when that component
+# — or this workflow — changed; a Monday full run catches dependency and audit
+# drift on the parts that did not.
 on:
   push:
     branches: [develop, main]
   pull_request:
+  schedule:
+    - cron: '17 6 * * 1'   # Mondays 06:17 UTC: everything, regardless of changes
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: what changed
+    runs-on: ubuntu-latest
+    outputs:
+      web: ${{ steps.f.outputs.web == 'true' || github.event_name != 'push' && github.event_name != 'pull_request' }}
+      api: ${{ steps.f.outputs.api == 'true' || github.event_name != 'push' && github.event_name != 'pull_request' }}
+      bots: ${{ steps.f.outputs.bots == 'true' || github.event_name != 'push' && github.event_name != 'pull_request' }}
+      indexer: ${{ steps.f.outputs.indexer == 'true' || github.event_name != 'push' && github.event_name != 'pull_request' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dorny/paths-filter@v3
+        id: f
+        with:
+          # A push compares against the previous commit on the branch (the
+          # merge commit's first parent on main); a PR against its base.
+          filters: |
+            shared: &shared
+              - '.github/workflows/ci.yml'
+            web:
+              - *shared
+              - 'web/**'
+            api:
+              - *shared
+              - 'api/**'
+            bots:
+              - *shared
+              - 'bots/**'
+            indexer:
+              - *shared
+              - 'indexer/**'
+
   web:
     name: web (Next.js) — lint, build, audit
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
     defaults:
       run: { working-directory: web }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with: { node-version: 22, cache: npm, cache-dependency-path: web/package-lock.json }
       - run: npm ci
       - run: npm run lint
@@ -26,28 +66,32 @@ jobs:
 
   api:
     name: api — syntax, load, audit
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
     runs-on: ubuntu-latest
     defaults:
       run: { working-directory: api }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with: { node-version: 22, cache: npm, cache-dependency-path: api/package-lock.json }
       - run: npm ci
       - name: Syntax-check every source file
         run: find src -name '*.js' -print0 | xargs -0 -n1 node --check
       - name: Modules load (no DB needed at require time)
-        run: node -e "require('./src/services/chain.js'); require('./src/routes/feedback.js'); console.log('ok')"
+        run: node -e "require('./src/services/chain.js'); require('./src/routes/feedback.js'); require('./src/services/exchangeHealth.js'); console.log('ok')"
       - run: npm audit --audit-level=high
 
   bots:
     name: bots — syntax, address derivation, audit
+    needs: changes
+    if: needs.changes.outputs.bots == 'true'
     runs-on: ubuntu-latest
     defaults:
       run: { working-directory: bots/market-maker }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with: { node-version: 22, cache: npm, cache-dependency-path: bots/market-maker/package-lock.json }
       - run: npm ci
       - run: find . -maxdepth 1 -name '*.js' -print0 | xargs -0 -n1 node --check
@@ -58,13 +102,29 @@ jobs:
 
   indexer:
     name: indexer — syntax, audit
+    needs: changes
+    if: needs.changes.outputs.indexer == 'true'
     runs-on: ubuntu-latest
     defaults:
       run: { working-directory: indexer }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with: { node-version: 22, cache: npm, cache-dependency-path: indexer/package-lock.json }
       - run: npm ci
       - run: find . -maxdepth 2 -name '*.js' -not -path './node_modules/*' -print0 | xargs -0 -n1 node --check
       - run: npm audit --audit-level=high
+
+  # One status for branch rules and badges, green when every job that ran
+  # passed and the rest were skipped by the path filter.
+  ci:
+    name: CI
+    needs: [changes, web, api, bots, indexer]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "web=${{ needs.web.result }} api=${{ needs.api.result }} bots=${{ needs.bots.result }} indexer=${{ needs.indexer.result }}"
+          for r in "${{ needs.web.result }}" "${{ needs.api.result }}" "${{ needs.bots.result }}" "${{ needs.indexer.result }}"; do
+            case "$r" in success|skipped) ;; *) echo "a job failed or was cancelled"; exit 1 ;; esac
+          done
