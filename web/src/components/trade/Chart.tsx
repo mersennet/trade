@@ -475,9 +475,10 @@ export default function Chart() {
     });
 
     const ro = new ResizeObserver(() => {
-      if (containerRef.current) {
+      if (!containerRef.current || chartRef.current !== chart) return; // resize delivered after this chart was replaced/removed
+      try {
         chart.applyOptions({ width: containerRef.current.clientWidth, height: containerRef.current.clientHeight });
-      }
+      } catch { /* chart already disposed */ }
     });
     ro.observe(containerRef.current);
 
@@ -505,7 +506,13 @@ export default function Chart() {
       });
     }
 
-    return () => { ro.disconnect(); chart.remove(); };
+    return () => {
+      ro.disconnect();
+      // lightweight-charts throws "Object is disposed" if a queued resize or
+      // paint lands after the chart is gone, and if remove() runs twice.
+      try { chart.remove(); } catch { /* already disposed */ }
+      if (chartRef.current === chart) chartRef.current = null;
+    };
   }, [theme, chartType, showMA, showRSI, showBB, showMACD, showVWAP, showStoch, showATR, showIchi, isDark, drawingTool]);
 
   useEffect(() => {
