@@ -19,6 +19,7 @@ const ABI = [
   'function sharePrice() view returns (uint256)',
   'function totalShares() view returns (uint256)',
   'function sharesOf(address) view returns (uint256)',
+  'function manager() view returns (address)',
   'function freeBalance() view returns (uint256)',
   'function collateral() view returns (uint256)',
   'function unrealizedPnl() view returns (int256)',
@@ -43,6 +44,10 @@ export interface VaultOnChain {
   agent: string;
   myShares: number;
   myValue: number;
+  /** The protocol's own stake: shares held by the vault manager (the market-making treasury). Excluded from LP points. */
+  seedShares: number;
+  seedValue: number;
+  seedPct: number;
 }
 
 async function contract(readonly = true, provider?: unknown) {
@@ -59,15 +64,20 @@ const f = (v: bigint) => Number(v) / 1e18;
 
 export async function readVault(account?: string | null): Promise<VaultOnChain> {
   const { c } = await contract(true);
-  const [nav, sharePrice, totalShares, freeBalance, collateral, pnl, depositors, cap, minDep, paused, agent, mine] = await Promise.all([
+  const manager: string = await c.manager().catch(() => '0x0000000000000000000000000000000000000000');
+  const [nav, sharePrice, totalShares, freeBalance, collateral, pnl, depositors, cap, minDep, paused, agent, mine, seed] = await Promise.all([
     c.nav(), c.sharePrice(), c.totalShares(), c.freeBalance(), c.collateral(), c.unrealizedPnl(), c.depositors(), c.depositCap(), c.minDeposit(), c.paused(), c.agent(),
     account ? c.sharesOf(account) : Promise.resolve(0n),
+    manager !== '0x0000000000000000000000000000000000000000' ? c.sharesOf(manager) : Promise.resolve(0n),
   ]);
   const myShares = f(mine as bigint);
+  const seedShares = f(seed as bigint);
+  const total = f(totalShares);
   return {
-    nav: f(nav), sharePrice: f(sharePrice), totalShares: f(totalShares), freeBalance: f(freeBalance), collateral: f(collateral),
+    nav: f(nav), sharePrice: f(sharePrice), totalShares: total, freeBalance: f(freeBalance), collateral: f(collateral),
     unrealizedPnl: Number(pnl as bigint) / 1e18, depositors: Number(depositors), depositCap: f(cap), minDeposit: f(minDep),
     paused: Boolean(paused), agent: String(agent), myShares, myValue: myShares * f(sharePrice),
+    seedShares, seedValue: seedShares * f(sharePrice), seedPct: total > 0 ? (seedShares / total) * 100 : 0,
   };
 }
 
