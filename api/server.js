@@ -295,17 +295,23 @@ app.get('/api/v1/health/validators-current', async (req, res) => {
   const nodes = require('./src/routes/nodes');
   const SWITCH_WARN_HOURS = Number(process.env.SWITCH_WARN_HOURS || 48);
   try {
-    const [v, latest, agents] = await Promise.all([
+    const [v, latest, agents, proto] = await Promise.all([
       rpcCall('mersennet_validatorSet', []),
       nodes.latestReleaseSha(),
       rpcCall('mersennet_orders_getAgents', ['0x0000000000000000000000000000000000000000']).catch(() => null),
+      rpcCall('mersennet_orders_getProtocol', []).catch(() => null),
     ]);
     const height = Number(v?.height || 0);
     const p = v?.params || {};
-    // Every consensus switch the node exposes; the CLOB switches share the
-    // agent-delegation height (see networks/testnet/config.json).
-    const switches = [p.rewardsToOperatorHeight, p.jailEscalationHeight, p.benchHeight, agents?.agentDelegationHeight, agents?.frameCallerHeight]
-      .map(Number).filter((h) => h > height);
+    // Every consensus switch the node exposes: validator-set params, the
+    // agent/frame-caller heights, and everything getProtocol lists under
+    // `switches` (settlement, revert reasons, fee floor, …) — a switch missing
+    // here is a switch this monitor stays green through.
+    const switches = [
+      p.rewardsToOperatorHeight, p.jailEscalationHeight, p.benchHeight,
+      agents?.agentDelegationHeight, agents?.frameCallerHeight,
+      ...Object.values(proto?.switches || {}),
+    ].map(Number).filter((h) => h > height);
     const nextSwitch = switches.length ? Math.min(...switches) : null;
     const hoursToSwitch = nextSwitch ? ((nextSwitch - height) * 2.1) / 3600 : null;
     const activeIds = (v?.validators || []).filter((x) => x.status === 'active').map((x) => ({ identity: String(x.identity).toLowerCase(), operator: x.operator }));
