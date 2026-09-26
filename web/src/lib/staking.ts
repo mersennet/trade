@@ -77,11 +77,16 @@ export function weiToMrsn(wei: string | bigint, decimals = 4): string {
   return frac ? `${whole}.${frac}` : whole.toString();
 }
 
-/** weiToMrsn with thousands separators: 1,000,000 · 65,000 · 1,234.5678. */
-export function fmtMrsnWei(wei: string | bigint, decimals = 4): string {
-  const [whole, frac] = weiToMrsn(wei, decimals).split('.');
+/**
+ * weiToMrsn with thousands separators: 1,000,000 · 65,000 · 1,234.5678.
+ * With `fixed`, always exactly `decimals` fraction digits (0.00 · 41,002.00 ·
+ * 1,004.91) so a column of amounts lines up; digits beyond are truncated.
+ */
+export function fmtMrsnWei(wei: string | bigint, decimals = 4, fixed = false): string {
+  const [whole, frac = ''] = weiToMrsn(wei, decimals).split('.');
   const w = BigInt(whole).toLocaleString('en-US');
-  return frac ? `${w}.${frac}` : w;
+  const f = fixed ? frac.padEnd(decimals, '0') : frac;
+  return f ? `${w}.${f}` : w;
 }
 
 /**
