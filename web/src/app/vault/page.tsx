@@ -119,7 +119,7 @@ export default function VaultPage() {
         <StatTile label="Vault NAV" value={chain ? `${formatNumber(chain.nav, 2)} MRSN` : '—'} hint="Free MRSN + collateral on the precompile + unrealized PnL at book mid" />
         <StatTile label="Share price" value={chain ? `${chain.sharePrice.toFixed(6)} MRSN` : '—'} valueClass={chain && chain.sharePrice >= 1 ? 'text-green' : 'text-red'} hint="MRSN per mvMRSN share (starts at 1.000000)" />
         <StatTile label="APY (7d)" value={indexed ? formatPct(indexed.apy7d) : '—'} valueClass="text-green" hint="Share-price change over the last 7 days, annualised" />
-        <StatTile label="Depositors" value={chain ? String(chain.depositors) : '—'} />
+        <StatTile label="Depositors" value={chain ? String(chain.depositors) : '—'} hint={chain && chain.seedShares > 0 ? 'Including the protocol\'s seed deposit' : undefined} />
       </div>
 
       {/* How the pool is deployed right now */}
@@ -140,6 +140,12 @@ export default function VaultPage() {
             <span className={chain.unrealizedPnl >= 0 ? 'text-green' : 'text-red'}>unrealized {chain.unrealizedPnl >= 0 ? '+' : ''}{formatNumber(chain.unrealizedPnl, 2)} MRSN</span>
             {capLeft !== null && <span>cap left {formatNumber(capLeft, 0)} MRSN</span>}
           </div>
+          {chain.seedShares > 0 && (
+            <p className="text-[11px] text-dim mt-2">
+              <span className="text-foreground">Protocol seed liquidity:</span> {formatNumber(chain.seedValue, 0)} MRSN ({chain.seedPct.toFixed(1)}% of shares) is the
+              market-making treasury&apos;s own stake, deposited so the books are deep from day one. It earns no LP points; every other depositor does.
+            </p>
+          )}
           {!agentLive && (
             <p className="text-[11px] text-dim mt-2">
               The maker bot trades for the vault through <span className="text-foreground">agent delegation</span>, which activates at the next consensus switch. Until then deposits sit as free MRSN (withdrawable any time) and earn LP points.

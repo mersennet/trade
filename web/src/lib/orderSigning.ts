@@ -176,6 +176,17 @@ export async function placeOrderOnChain(
         TIF_CODE[tif],
       ]);
 
+  // Preflight: run the exact call as eth_call first. A refused order is a
+  // reverted transaction that still burns its gas and, on this chain, comes
+  // back with no reason (a precompile error returns empty output — a user hit
+  // four of those on 25 Sep with nothing to go on). Simulate, and if the book
+  // would refuse it, say why in words instead of sending it.
+  const from = await signer.getAddress();
+  const refusal = await simulateRefusal(from, data, {
+    marketId: params.marketId, price: BigInt(price), size: BigInt(size), tif, postOnly: !!params.maker?.postOnly, isBuy: params.isBuy,
+  });
+  if (refusal) throw new Error(refusal);
+
   // Explicit gas: the precompile call would otherwise rely on eth_estimateGas,
   // which reverts (and fails the order) when the account has no collateral yet.
   // placeOrder needs ~50k precompile gas + intrinsic; 300k is a safe ceiling.
@@ -184,7 +195,10 @@ export async function placeOrderOnChain(
     data,
     gasLimit: 300_000,
   });
-  await tx.wait(1);
+  const receipt = await tx.wait(1);
+  if (receipt && receipt.status === 0) {
+    throw new Error('The order book refused this order after it was sent (the book moved between the check and the block). Nothing was placed; try again.');
+  }
 
   return {
     txHash: tx.hash,
@@ -194,6 +208,97 @@ export async function placeOrderOnChain(
     size,
     tif,
   };
+}
+
+/** Raw JSON-RPC against the default chain (no wallet involved). */
+async function rpc<T = unknown>(method: string, params: unknown[]): Promise<T> {
+  const res = await fetch(getDefaultChain().rpcUrls[0], {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+  });
+  const json = await res.json();
+  if (json.error) throw new Error(json.error.message || 'rpc error');
+  return json.result as T;
+}
+
+/**
+ * Simulate `data` from `from` against the order-book precompile. Returns null
+ * when the order would be accepted, otherwise a sentence explaining the most
+ * likely refusal. `placeOrder` answers 96 bytes on success; an empty answer
+ * (or a revert) means the book refused it. When the node returns a reason
+ * string (Error(string)) it is used verbatim; until then the reason is
+ * reconstructed from the account and market state.
+ */
+async function simulateRefusal(
+  from: string,
+  data: string,
+  order: { marketId: number; price: bigint; size: bigint; tif: Tif; postOnly: boolean; isBuy: boolean },
+): Promise<string | null> {
+  let out = '';
+  try {
+    out = await rpc<string>('eth_call', [{ from, to: MERSENNET_ORDERS_PRECOMPILE, data, gas: '0x493e0' }, 'latest']);
+  } catch (e) {
+    const msg = (e as Error).message || '';
+    const reason = /revert(?:ed)?(?::| with reason)?\s*"?([^"]+)"?/i.exec(msg)?.[1];
+    if (reason) return `The order book refused this order: ${reason.trim()}.`;
+    // RPC hiccup: do not block the order on a failed simulation.
+    return null;
+  }
+  if (out && out !== '0x' && out.length >= 2 + 64) return null; // accepted
+  if (typeof out === 'string' && out.startsWith('0x08c379a0')) {
+    try {
+      const len = parseInt(out.slice(10 + 64, 10 + 128), 16);
+      const hex = out.slice(10 + 128, 10 + 128 + len * 2);
+      const reason = decodeURIComponent(hex.replace(/(..)/g, '%$1'));
+      return `The order book refused this order: ${reason}.`;
+    } catch { /* fall through to the reconstruction */ }
+  }
+  return explainRefusal(from, order);
+}
+
+async function explainRefusal(
+  from: string,
+  order: { marketId: number; price: bigint; size: bigint; tif: Tif; postOnly: boolean; isBuy: boolean },
+): Promise<string> {
+  try {
+    // `from` may be an agent (one-click key): the account that pays margin is
+    // its owner — agentOf(address) -> (owner, expiresAtBlock) on the precompile.
+    let owner = from;
+    try {
+      const out = await rpc<string>('eth_call', [{ to: MERSENNET_ORDERS_PRECOMPILE, data: '0xac3c0e30' + from.toLowerCase().replace(/^0x/, '').padStart(64, '0') }, 'latest']);
+      const grantOwner = out && out.length >= 66 ? '0x' + out.slice(26, 66) : '';
+      if (grantOwner && !/^0x0{40}$/.test(grantOwner)) owner = grantOwner;
+    } catch { /* assume the signer is the owner */ }
+    const [acct, protocol, markets] = await Promise.all([
+      rpc<{ collateral: string }>('mersennet_orders_getAccount', [owner]),
+      rpc<{ initialMarginBps?: number; markets?: { id: number; priceScale?: number }[] }>('mersennet_orders_getProtocol', []),
+      rpc<{ id: number; symbol?: string; tickSize?: string; lotSize?: string; status?: string; priceScale?: number }[]>('mersennet_orders_getMarkets', []).catch(() => []),
+    ]);
+    const market = (markets || []).find((m) => Number(m.id) === order.marketId);
+    if (market && market.status && /halt|paused|closed/i.test(String(market.status))) {
+      return `This market is ${String(market.status).toLowerCase()} — orders are not being accepted right now.`;
+    }
+    const tick = market?.tickSize ? BigInt(market.tickSize) : 0n;
+    const lot = market?.lotSize ? BigInt(market.lotSize) : 0n;
+    if (tick > 0n && order.price % tick !== 0n) return 'The price is not on this market\'s tick — round it to the nearest tick and try again.';
+    if (lot > 0n && order.size % lot !== 0n) return 'The size is not a multiple of this market\'s lot — round it and try again.';
+    const imr = Number(protocol?.initialMarginBps || 0);
+    if (imr > 0) {
+      const scale = BigInt(market?.priceScale || protocol?.markets?.find((m) => Number(m.id) === order.marketId)?.priceScale || 1);
+      const notional = (order.price * order.size) / (scale > 0n ? scale : 1n);
+      const required = (notional * BigInt(imr) + 9_999n) / 10_000n;
+      const collateral = BigInt(acct?.collateral || '0x0');
+      if (collateral < required) {
+        return `Not enough collateral: this order needs ${required.toLocaleString()} MRSN of initial margin (${imr / 100}% of ${notional.toLocaleString()} notional) and the account holds ${collateral.toLocaleString()} MRSN. Deposit more or reduce the size.`;
+      }
+    }
+    if (order.postOnly) return 'Post-only: this price would cross the book and take liquidity — move the price or disable Post Only.';
+    if (order.tif === 'Fok') return 'Fill-or-kill: the book cannot fill the whole size at this price right now.';
+    return 'The order book would refuse this order (no reason available from the node yet). Check the size, price and your collateral, then try again.';
+  } catch {
+    return 'The order book would refuse this order. Check the size, price and your collateral, then try again.';
+  }
 }
 
 /**
