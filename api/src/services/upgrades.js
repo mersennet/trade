@@ -42,6 +42,7 @@ const META = {
   priceScaleHeight: ['$0.01 ticks on MRSN, SOL and ARB', 'Those markets move to priceScale 100; on-chain prices are human × 100 and the order books are rescaled in place.'],
   frameCallerHeight: ['Contracts own their CLOB accounts', 'Precompiles authorise the calling frame (msg.sender), not the transaction origin — contracts such as the Maker Vault act as themselves.'],
   settlementHeight: ['Settlement, margin and liquidations', 'One collateral unit = one MRSN, realized PnL settles into collateral at every fill, 10% initial / 5% maintenance margin, keeper liquidations, self-trade prevention.'],
+  revertReasonsHeight: ['Order-book errors as reverts', 'A refused order-book or staking call returns its reason (Error(string)) and charges only its base gas, instead of failing silently and burning the whole gas limit. Wallets and the terminal show why an order was refused.'],
 };
 const labelOf = (k) => (META[k] ? META[k][0] : k);
 const detailOf = (k) => (META[k] ? META[k][1] : '');
