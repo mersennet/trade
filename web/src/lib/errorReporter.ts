@@ -56,6 +56,16 @@ export function installErrorReporter() {
     const r = ev.reason;
     // Wallet rejections are user actions, not bugs.
     if (r && /user (rejected|denied)|ACTION_REJECTED/i.test(String((r as Error).message || r))) return;
+    // @walletconnect/ethereum-provider's setChainId() fires switchEthereumChain()
+    // without awaiting it; with a stale or half-restored session the request
+    // hits an undefined rpc provider ("Cannot read properties of undefined
+    // (reading 'request')"). Nothing of ours is on that stack and nothing is
+    // broken for the user — log locally, do not page the ops group.
+    const stack = String((r as Error)?.stack || '');
+    if (/switchEthereumChain/.test(stack) && /reading 'request'/.test(String((r as Error)?.message || ''))) {
+      console.warn('[walletconnect] internal switchEthereumChain rejection ignored', r);
+      return;
+    }
     reportClientError(r, 'unhandledrejection');
   });
 }

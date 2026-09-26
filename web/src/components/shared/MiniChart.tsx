@@ -15,6 +15,7 @@ export default function MiniChart({ marketId, height = 64 }: { marketId: number;
         const { candles } = await api.getCandles(marketId, '1h');
         if (disposed || !ref.current || !candles || candles.length < 2) return;
         const { createChart, LineSeries } = await import('lightweight-charts');
+        if (disposed || !ref.current) return;
         const data = candles.slice(-48).map((c) => ({
           time: Math.floor(Number(c.time) / (Number(c.time) > 1e12 ? 1000 : 1)),
           value: Number(c.close),
@@ -46,7 +47,7 @@ export default function MiniChart({ marketId, height = 64 }: { marketId: number;
         (c as { timeScale: () => { fitContent: () => void } }).timeScale().fitContent();
       } catch { /* sparkline is decorative */ }
     })();
-    return () => { disposed = true; chart?.remove(); };
+    return () => { disposed = true; try { chart?.remove(); } catch { /* already disposed */ } };
   }, [marketId, height]);
 
   return (
