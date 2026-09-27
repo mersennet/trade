@@ -15,8 +15,12 @@ router.post('/magic-link', strictLimiter, async (req, res) => {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'email is required' });
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    // Bounded, linear-time check (no backtracking regex on untrusted input):
+    // one '@', non-empty local part, a dot inside the domain, no whitespace.
+    const at = typeof email === 'string' && email.length <= 254 ? email.indexOf('@') : -1;
+    const domain = at > 0 ? email.slice(at + 1) : '';
+    const dot = domain.indexOf('.');
+    if (at < 1 || domain.includes('@') || dot < 1 || dot === domain.length - 1 || /\s/.test(email)) {
       return res.status(400).json({ error: 'Invalid email format' });
     }
 
