@@ -129,6 +129,12 @@ export default function PointsPage() {
 
       <NodeRunnerCard />
 
+      <p className="text-[11px] text-dim leading-relaxed">
+        Points record testnet participation. They have no monetary value and promise no token, allocation or
+        reward; totals may be recalculated, and points from wash trading, farming or exploits forfeited — see the{' '}
+        <Link href="/terms" className="text-primary hover:underline">terms</Link>.
+      </p>
+
       {/* How to earn */}
       <div className="bg-surface border border-border rounded-xl overflow-hidden">
         <div className="px-4 py-2.5 border-b border-border">
