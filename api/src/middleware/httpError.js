@@ -34,7 +34,9 @@ function sendError(res, e, where) {
   if (isBadInput(e)) {
     return res.status(400).json({ error: 'Invalid parameter', detail: publicDetail(e) });
   }
-  console.error(`[${where || 'api'}]`, e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e);
+  // Explicit format string: `where` carries the request path (see errorHandler),
+  // which must never be interpreted for %-directives.
+  console.error('[%s] %s', where || 'api', e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : String(e));
   return res.status(500).json({ error: 'Internal error' });
 }
 
