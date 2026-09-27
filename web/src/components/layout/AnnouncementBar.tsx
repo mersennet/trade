@@ -68,6 +68,9 @@ export default function AnnouncementBar() {
     // Terminal system-message line: left-aligned, prompt-prefixed, quiet.
     <div className="bg-surface border-b border-border px-3 md:px-4 py-1.5 flex items-center gap-2 text-[10.5px] relative">
       <span className="text-primary font-bold shrink-0 select-none">&gt;&gt;</span>
+      {current.lead && (
+        <span className="text-primary-bright font-bold uppercase tracking-[0.08em] text-[10px] shrink-0">{current.lead}</span>
+      )}
       <p className="text-muted truncate">{withEtas(current.text)}</p>
       {current.link && (
         <Link href={current.link.href} className="text-primary-bright font-semibold uppercase tracking-[0.08em] text-[10px] hover:underline shrink-0">

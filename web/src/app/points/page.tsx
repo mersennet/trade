@@ -4,7 +4,7 @@ import { useStore } from '@/stores/useStore';
 import { useEffect, useState } from 'react';
 import { useWallet } from '@/hooks/useWallet';
 import { api, type PointsResponse, type PointsEntry } from '@/lib/api';
-import { formatNumber, shortenAddress, cn } from '@/lib/utils';
+import { formatPoints, shortenAddress, cn } from '@/lib/utils';
 import AddressAvatar from '@/components/AddressAvatar';
 import NodeRunnerCard from '@/components/points/NodeRunnerCard';
 
@@ -31,11 +31,16 @@ export default function PointsPage() {
     api.getPointsLeaderboard().then((r) => setLeaderboard(r.leaderboard)).catch(() => {});
   }, [address]);
 
-  const currentTier = TIERS.slice().reverse().find((t) => (points?.totalPoints || 0) >= t.min) || TIERS[0];
+  const total = points?.totalPoints || 0;
+  const currentTier = TIERS.slice().reverse().find((t) => total >= t.min) || TIERS[0];
   const nextTier = TIERS[TIERS.indexOf(currentTier) + 1];
-  const progress = nextTier
-    ? ((points?.totalPoints || 0) - currentTier.min) / (nextTier.min - currentTier.min) * 100
-    : 100;
+  // Share of the next threshold already earned (5,500 / 10,000 = 55.0%), so the
+  // percentage agrees with the "total / threshold" line under the bar. It used to
+  // measure from the current tier's floor (50% of the way from 1,000 to 10,000),
+  // which read as wrong next to the total. Floored to one decimal so it never
+  // shows 100.0% before the tier is reached.
+  const progress = nextTier ? Math.min(1000, Math.floor(total * 1000 / nextTier.min)) / 10 : 100;
+  const pointsToNext = nextTier ? Math.max(0, nextTier.min - Math.floor(total)) : 0;
 
   return (
     <div className="page-shell space-y-5">
@@ -86,7 +91,7 @@ export default function PointsPage() {
                   <span className="text-[10px] text-dim font-mono">· Rank #{points.rank}</span>
                 </div>
                 <div className="text-[36px] md:text-[44px] font-mono font-bold text-foreground tabular-nums leading-none">
-                  {formatNumber(points.totalPoints, 0)}
+                  {formatPoints(total)}
                 </div>
                 <p className="text-[11px] text-dim mt-1.5 uppercase tracking-wider">Total Points</p>
               </div>
@@ -94,16 +99,17 @@ export default function PointsPage() {
                 <div className="w-full sm:w-auto sm:min-w-[260px]">
                   <div className="flex items-center justify-between text-[10.5px] text-dim mb-1.5 uppercase tracking-wider">
                     <span>Progress to {nextTier.name}</span>
-                    <span className="font-mono tabular-nums text-foreground">{Math.min(progress, 100).toFixed(1)}%</span>
+                    <span className="font-mono tabular-nums text-foreground">{progress.toFixed(1)}%</span>
                   </div>
                   <div className="h-1.5 bg-surface-2 rounded-full overflow-hidden">
                     <div
                       className={cn('h-full rounded-full transition-all duration-500', nextTier.dot)}
-                      style={{ width: `${Math.min(progress, 100)}%` }}
+                      style={{ width: `${progress}%` }}
                     />
                   </div>
+                  {/* total / threshold · remainder — the three numbers add up on sight. */}
                   <p className="text-[10.5px] text-dim mt-1.5 font-mono tabular-nums">
-                    {formatNumber(nextTier.min - (points.totalPoints || 0), 0)} more points
+                    <span className="text-foreground">{formatPoints(total)}</span> / {formatPoints(nextTier.min)} · {formatPoints(pointsToNext)} more points
                   </p>
                 </div>
               )}
@@ -132,7 +138,7 @@ export default function PointsPage() {
           {[
             { action: 'Trading',     desc: '1 point per $1 traded — both sides of a fill, maker and taker',       mult: 'Live',   tone: 'text-primary', live: true  },
             { action: 'Node runner', desc: '500 points per day for a verified, online full node', mult: 'Live', tone: 'text-primary', live: true },
-            { action: 'Vault LP',    desc: '0.1 point per MRSN per day deposited in the maker vault (1,000 MRSN for a day = 100 points), credited every few minutes. Deposits open Sun 20 Sep (block 1,605,600).', mult: 'From Sun 20 Sep', tone: 'text-yellow', live: false },
+            { action: 'Vault LP',    desc: '0.1 point per MRSN per day deposited in the maker vault (1,000 MRSN for a day = 100 points), credited every few minutes. Deposits opened September 20, 2026 (block 1,605,600).', mult: 'Live', tone: 'text-primary', live: true },
             { action: 'Referrals',   desc: '10% of referee trading points — share your code from the Referrals page; the referee confirms with one signature', mult: 'Live', tone: 'text-primary', live: true },
             { action: 'Weekly sprint', desc: 'Top 3 by volume each week (Monday 00:00 UTC): 3,000 / 2,000 / 1,000 bonus points', mult: 'Live', tone: 'text-primary', live: true },
           ].map((e) => (
@@ -181,7 +187,7 @@ export default function PointsPage() {
                     <span className="text-foreground font-mono text-[12.5px]">{shortenAddress(e.address, 6)}</span>
                   </div>
                 </td>
-                <td className="px-4 py-2.5 text-right text-foreground font-mono font-semibold tabular-nums">{formatNumber(e.totalPoints, 0)}</td>
+                <td className="px-4 py-2.5 text-right text-foreground font-mono font-semibold tabular-nums">{formatPoints(e.totalPoints)}</td>
                 <td className={cn('px-4 py-2.5 text-right text-[12px] font-semibold uppercase tracking-wider', tierTone(e.tier))}>{e.tier}</td>
               </tr>
             )) : (
@@ -198,7 +204,7 @@ function SourceTile({ label, value }: { label: string; value: number }) {
   return (
     <div className="bg-surface border border-border rounded-xl px-3.5 py-3 text-center sm:text-left">
       <p className="text-[10px] text-dim uppercase tracking-wider font-medium mb-1.5">{label}</p>
-      <p className="text-[18px] font-mono font-semibold text-foreground tabular-nums leading-none">{formatNumber(value, 0)}</p>
+      <p className="text-[18px] font-mono font-semibold text-foreground tabular-nums leading-none">{formatPoints(value)}</p>
     </div>
   );
 }

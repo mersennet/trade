@@ -14,6 +14,17 @@ export function formatNumber(n: number, decimals = 2): string {
   return n.toFixed(decimals);
 }
 
+/**
+ * Points are exact whole numbers with separators (5,500 · 182,523), never
+ * compacted: tier thresholds are round numbers, and a rounded "6K" next to a
+ * rounded "5K more" does not add up to 10,000. Floored, so a total never reads
+ * as the next tier's threshold before the tier is actually reached.
+ */
+export function formatPoints(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return '—';
+  return Math.floor(n).toLocaleString('en-US');
+}
+
 export function formatUsd(n: number): string {
   if (n == null || !Number.isFinite(n)) return '—';
   return '$' + formatNumber(n);

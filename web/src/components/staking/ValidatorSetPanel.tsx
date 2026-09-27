@@ -5,6 +5,7 @@ import { useWallet } from '@/hooks/useWallet';
 import { useToast } from '@/components/shared/Toast';
 import { api, type VerifiedNode, type NodeBuild, type ProtocolSwitches, type ProtocolUpgrades } from '@/lib/api';
 import UpgradeBadge from '@/components/shared/UpgradeBadge';
+import CopyCommand from '@/components/shared/CopyCommand';
 import TelegramAlerts from '@/components/shared/TelegramAlerts';
 import { cn, shortenAddress } from '@/lib/utils';
 import { getDefaultChain } from '@/lib/chain';
@@ -124,14 +125,17 @@ export default function ValidatorSetPanel({ ownNodesSlot }: { ownNodesSlot?: HTM
   const nextSwitch = view ? nextProtocolSwitch(view.params, view.height) : 0;
   // Live schedule: every armed switch, grouped by height, ETA from the observed block time.
   const schedule = useMemo(() => {
+    // /protocol/switches labels each entry with its config key; /protocol/upgrades
+    // carries the human title ("Gas-price floor and fee split") — prefer that.
+    const titles = new Map((upgrades?.upcoming || []).map((u) => [u.key, u.label]));
     const byHeight = new Map<number, { height: number; etaAt: string; etaSec: number; labels: string[] }>();
     for (const sw of switches?.switches || []) {
       const g = byHeight.get(sw.height) || { height: sw.height, etaAt: sw.etaAt, etaSec: sw.etaSec, labels: [] };
-      g.labels.push(sw.label);
+      g.labels.push(titles.get(sw.key) || sw.label);
       byHeight.set(sw.height, g);
     }
     return [...byHeight.values()].sort((a, b) => a.height - b.height);
-  }, [switches]);
+  }, [switches, upgrades]);
   const maxValidators = view?.params.maxValidators ?? 12;
   const scrollToDelegateRow = (identity: string) => {
     const row = document.getElementById(`delegate-${identity.toLowerCase()}`);
@@ -318,7 +322,8 @@ export default function ValidatorSetPanel({ ownNodesSlot }: { ownNodesSlot?: HTM
             {schedule.length > 0 ? (
               <>
                 <p className="text-[10px] font-semibold text-dim uppercase tracking-wider">
-                  Upcoming protocol upgrades <span className="font-normal normal-case">· estimated at {switches?.blockTimeSec?.toFixed(2)} s per block</span>
+                  Upcoming protocol upgrade{schedule.length > 1 ? 's' : ''}
+                  {switches?.blockTimeSec != null && <span className="font-normal normal-case"> · estimated at {switches.blockTimeSec.toFixed(2)}s/block</span>}
                 </p>
                 {schedule.map((g) => (
                   <div key={g.height} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[12px]">
@@ -363,7 +368,7 @@ export default function ValidatorSetPanel({ ownNodesSlot }: { ownNodesSlot?: HTM
               )}
               {' '}Upgrading is the install command again and keeps your keys and data:
             </p>
-            <code className="block font-mono text-[11px] text-foreground bg-surface-2 rounded px-2 py-1 overflow-x-auto">curl -fsSL https://mersennet.com/downloads/install.sh | sudo bash -s -- --operator {address?.toLowerCase()}</code>
+            <CopyCommand command={`curl -fsSL https://mersennet.com/downloads/install.sh | sudo bash -s -- --operator ${address?.toLowerCase() ?? '<operator-address>'}`} />
           </div>
         )}
 

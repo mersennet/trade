@@ -6,7 +6,7 @@ import { useStore } from '@/stores/useStore';
 import { useWallet } from '@/hooks/useWallet';
 import { useToast } from '@/components/shared/Toast';
 import { api } from '@/lib/api';
-import { formatNumber, cn } from '@/lib/utils';
+import { formatNumber, formatPoints, cn } from '@/lib/utils';
 import { explorerTx, MERSENNET_TESTNET } from '@/lib/chain';
 import {
   depositCollateral, withdrawCollateral,
@@ -289,7 +289,7 @@ export default function AccountPanel() {
           <div className="flex items-center justify-between" title="Mersennet points balance">
             <span className="text-[11px] text-dim">Points</span>
             <Link href="/points" className="text-xs font-mono font-medium text-yellow hover:underline">
-              {formatNumber(points.total, 0)} · {points.tier}
+              {formatPoints(points.total)} · {points.tier}
             </Link>
           </div>
         )}
