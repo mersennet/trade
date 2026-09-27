@@ -1,6 +1,7 @@
 {
   "name": "mersennet-trade-indexer",
   "version": "1.0.0",
+  "license": "BUSL-1.1",
   "description": "Mersennet Trade indexer — indexes chain events into PostgreSQL",
   "main": "index.js",
   "scripts": {

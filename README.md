@@ -14,14 +14,14 @@ web/      Next.js 16 trading terminal (charts, order entry, portfolio, leaderboa
 api/      REST + WebSocket API (Express + Postgres) — proxies chain reads, manages
           conditional/TWAP orders, candles, leaderboard, points
 indexer/  Tails chain events (eth_subscribe + mersennet_subscribe) into Postgres
-bots/     Market-maker bot
-scripts/  Postgres backup + health watchdog
+bots/     Market-maker, taker, liquidator and vault-manager bots
+smoke/    Pre-release browser smoke (Playwright) run against a preview build
 ```
 
 ### Chain integration
 
 - **Network**: Mersennet testnet — chain ID `131071`, native token `MRSN`
-- **RPC**: `http://46.225.30.187:8545` (WS `:8546`), overridable via `RPC_URL` / `WS_URL`
+- **RPC**: `https://rpc.mersennet.com` (WS `wss://rpc.mersennet.com`), overridable via `RPC_URL` / `WS_URL`
 - **Order book**: `mersennet_orders_*` JSON-RPC (`getOrderBook`, `getOpenOrders`,
   `submitOrder`, `cancelOrder`) + `eth_call` against the precompile for
   per-account reads (`getPosition`, `getCollateral`, `getBestBidAsk`)
@@ -70,12 +70,16 @@ layer (separate keys), not separate margin pools.
 ## Quick start
 
 ```bash
+cp api/.env.example .env      # set POSTGRES_PASSWORD, JWT_SECRET, ADMIN_API_KEY, REPORT_SECRET
 docker compose up -d --build
 ```
 
-Brings up Postgres, the API (`:4005`), the indexer, and the web app (`:3000`).
-In production, Caddy on `trade.mersennet.com` serves the web app and proxies
-`/api` + `/ws` to the API service.
+Brings up Postgres, the API (`:4005`), the indexer, and the web app (`:3000`)
+against the public testnet (`RPC_URL` defaults to `https://rpc.mersennet.com`).
+The bots under `bots/` start with `--profile bots` and each need a funded key
+(`MM_PRIVATE_KEY`). In production, Caddy on `trade.mersennet.com` serves the web
+app and proxies `/api` + `/ws` to the API service; the deployment tooling for the
+Mersennet-run instance (hosts, standby, release gate) is not part of this repository.
 
 ### Development
 
@@ -96,3 +100,17 @@ cd indexer && npm install && node index.js
 - [docs.mersennet.com](https://docs.mersennet.com) — protocol documentation
 - [explorer.mersennet.com](https://explorer.mersennet.com) — block explorer
 - [faucet.mersennet.com](https://faucet.mersennet.com) — testnet MRSN faucet
+
+## Contributing
+
+Pull requests are welcome. The first one asks you to sign the
+[Contributor License Agreement](CLA.md) (one comment on the PR). Security
+issues: see [SECURITY.md](SECURITY.md) — please do not open a public issue.
+
+## License
+
+[Business Source License 1.1](LICENSE). Production use is granted for
+interacting with a Mersennet network — including running your own terminal,
+API or indexer against it; use for other networks or as a competing hosted
+service needs a commercial license (licensing@mersennet.com). Converts to
+Apache 2.0 on 2030-09-30.
