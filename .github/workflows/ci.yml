@@ -1,9 +1,9 @@
 name: CI
 
-# Private repository: every minute here is paid past the free tier (September
-# 2026 ran out on the 19th). Each component's job runs only when that component
-# — or this workflow — changed; a Monday full run catches dependency and audit
-# drift on the parts that did not.
+# Each component's job runs only when that component — or this workflow —
+# changed (started as a cost measure while the repository was private; kept
+# because it keeps PR feedback fast). A Monday full run catches dependency and
+# audit drift on the parts that did not change.
 on:
   push:
     branches: [develop, main]

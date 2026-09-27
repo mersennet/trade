@@ -1,6 +1,7 @@
 {
   "name": "mersennet-trade-api",
   "version": "2.0.0",
+  "license": "BUSL-1.1",
   "description": "Mersennet Trade REST/WebSocket API server with PostgreSQL",
   "main": "server.js",
   "scripts": {

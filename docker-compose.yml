@@ -37,6 +37,8 @@ services:
       RPC_URL: ${RPC_URL:-https://rpc.mersennet.com}
       # Read feedback / validator registrations: GET /api/v1/feedback with X-Admin-Key
       ADMIN_API_KEY: ${ADMIN_API_KEY:-}
+      # Team-run hosts (public node, validators), comma-separated — see api/src/routes/nodes.js
+      FLEET_IPS: ${FLEET_IPS:-}
       # Forward feedback submissions to the Telegram ops group (contact field withheld)
       FEEDBACK_TELEGRAM_BOT_TOKEN: ${FEEDBACK_TELEGRAM_BOT_TOKEN:-}
       FEEDBACK_TELEGRAM_CHAT_ID: ${FEEDBACK_TELEGRAM_CHAT_ID:-}

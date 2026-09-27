@@ -250,7 +250,10 @@ router.get('/mine/:wallet', async (req, res) => {
  * earns for one node regardless of how many they run.
  */
 const RPC_URL = process.env.RPC_URL || 'https://rpc.mersennet.com';
-const FLEET_IPS = new Set((process.env.FLEET_IPS || '46.225.183.192,49.13.54.79,167.233.105.60,167.233.118.149,46.225.30.187').split(',').map((s) => s.trim()));
+// Hosts run by the team (public node, validators): excluded from community
+// discovery, always included in the build-parity poll. Deployment config, not
+// code: comma-separated in FLEET_IPS (see docker-compose.yml / .env.example).
+const FLEET_IPS = new Set((process.env.FLEET_IPS || '').split(',').map((s) => s.trim()).filter(Boolean));
 
 async function discoverFromPeers() {
   await ready;
