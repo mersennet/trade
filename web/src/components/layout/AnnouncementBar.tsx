@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { ANNOUNCEMENTS } from '@/config/announcements';
 import { api, type ClobProtocol } from '@/lib/api';
 import { startPoll } from '@/lib/poll';
+import { formatUtcShort } from '@/lib/utils';
 
 /**
  * Announcement line under the header. Shows the newest undismissed entry
@@ -47,11 +48,11 @@ export default function AnnouncementBar() {
   }, []);
 
   const active = ANNOUNCEMENTS.filter((a) => !dismissed.includes(a.id) && (a.showWhen ? a.showWhen(protocol) : true));
-  // "{eta:1605600}" → "Sun 20 Sep, 16:23 UTC (live estimate)"; falls back to "block 1,605,600" when no ETA is known.
+  // "{eta:1605600}" → "Sun 20 Sep, 16:23 UTC (live estimate, block 1,605,600)"; falls back to "block 1,605,600" when no ETA is known.
   const withEtas = (text: string) => text.replace(/\{eta:(\d+)\}/g, (_m, h: string) => {
     const iso = etas[Number(h)];
     if (!iso) return `block ${Number(h).toLocaleString()}`;
-    const when = new Date(iso).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+    const when = formatUtcShort(iso);
     return `${when} UTC (live estimate, block ${Number(h).toLocaleString()})`;
   });
 

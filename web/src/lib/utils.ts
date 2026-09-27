@@ -25,6 +25,23 @@ export function formatPoints(n: number | null | undefined): string {
   return Math.floor(n).toLocaleString('en-US');
 }
 
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * "Tue 29 Sep, 16:44" in UTC (no suffix; add " UTC" where it is shown).
+ * Fixed English abbreviations on purpose: Intl's en-GB writes "Sept" while
+ * every other date in the product says "Sep", and a hand-rolled string is
+ * identical on server and client (no hydration drift between locales).
+ */
+export function formatUtcShort(input: string | number | Date, seconds = false): string {
+  const d = new Date(input);
+  if (Number.isNaN(d.getTime())) return '—';
+  const p = (n: number) => String(n).padStart(2, '0');
+  const t = `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}${seconds ? `:${p(d.getUTCSeconds())}` : ''}`;
+  return `${DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}, ${t}`;
+}
+
 export function formatUsd(n: number): string {
   if (n == null || !Number.isFinite(n)) return '—';
   return '$' + formatNumber(n);
