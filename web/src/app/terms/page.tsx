@@ -11,7 +11,7 @@ export default function TermsPage() {
     <div className="flex-1 px-4 py-8 md:py-10">
       <div className="max-w-3xl mx-auto prose prose-invert prose-sm sm:prose-base">
         <h1 className="text-3xl font-bold text-white">Terms of Use</h1>
-        <p className="text-white/60 text-sm">Last updated: 2026-05-06 · Public Beta</p>
+        <p className="text-white/60 text-sm">Last updated: 2026-09-27 · Public Testnet</p>
 
         <h2 className="text-white mt-8">1. Eligibility</h2>
         <p className="text-white/75">
@@ -63,13 +63,30 @@ export default function TermsPage() {
           DAMAGES, INCLUDING LOST PROFITS, ARISING FROM USE OF OR INABILITY TO USE MERSENNET TRADE.
         </p>
 
-        <h2 className="text-white mt-8">8. Modifications</h2>
+        <h2 className="text-white mt-8">8. Testnet, points and rewards</h2>
+        <p className="text-white/75">
+          Mersennet Trade runs on a <strong>public testnet</strong>. Testnet MRSN, the mock tokens and every
+          balance, position or vault share on it have <strong>no monetary value</strong>, cannot be redeemed for
+          anything, and may be reset or wiped at any time when the network is reset.
+        </p>
+        <p className="text-white/75">
+          <strong>Points</strong> (trading, node-runner, referral, sprint and LP points) are a record of testnet
+          participation. They have no monetary value, are not a currency, security, token or claim of any kind,
+          and carry <strong>no promise, express or implied, of any future token, allocation, airdrop, payment
+          or reward</strong>. We may change how points accrue, pause a season, or recalculate totals at any time.
+          Points earned through wash trading, self-dealing across wallets, faucet or referral farming, exploits,
+          automation that misrepresents itself as human activity, or any other conduct that defeats the purpose
+          of the program may be <strong>forfeited or adjusted</strong>, and the wallets involved excluded, at our
+          sole discretion and without notice.
+        </p>
+
+        <h2 className="text-white mt-8">9. Modifications</h2>
         <p className="text-white/75">
           These terms may be updated. Material changes will be announced on the front end. Continued use
           after such announcement constitutes acceptance.
         </p>
 
-        <h2 className="text-white mt-8">9. Contact</h2>
+        <h2 className="text-white mt-8">10. Contact</h2>
         <p className="text-white/75">
           Questions? <a href="mailto:hello@trade.mersennet.com" className="text-primary underline">hello@trade.mersennet.com</a>
         </p>

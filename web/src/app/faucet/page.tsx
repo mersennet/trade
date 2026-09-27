@@ -37,7 +37,7 @@ export default function FaucetPage() {
         >
           Continue to faucet.mersennet.com
         </a>
-        <p className="text-[11px] text-dim mt-4">Chain ID 131071 · native MRSN · one claim per address per hour</p>
+        <p className="text-[11px] text-dim mt-4">Chain ID 131071 · native MRSN · one claim per address per hour, three per connection a day</p>
       </div>
     </main>
   );
