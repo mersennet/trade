@@ -16,10 +16,18 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Least privilege for GITHUB_TOKEN: every job only reads the checkout; the
+# change detector additionally reads the pull request to list its files.
+permissions:
+  contents: read
+
 jobs:
   changes:
     name: what changed
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       web: ${{ steps.f.outputs.web == 'true' || github.event_name != 'push' && github.event_name != 'pull_request' }}
       api: ${{ steps.f.outputs.api == 'true' || github.event_name != 'push' && github.event_name != 'pull_request' }}
