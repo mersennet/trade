@@ -156,7 +156,7 @@ export default function StakingPage() {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         <StatTile label="Network stake" value={`${fmtMrsnWei(totalNetwork, 0)} MRSN`} />
-        <StatTile label="Your delegation" value={`${fmtMrsnWei(totalMine)} MRSN`} valueClass="text-primary" />
+        <StatTile label="Your delegation" value={`${fmtMrsnWei(totalMine, 2, true)} MRSN`} valueClass="text-primary" />
         <StatTile label="Claimable rewards" value={`${fmtMrsnWei(totalPending, 6)} MRSN`} valueClass={totalPending > 0n ? 'text-green' : undefined} />
         <StatTile
           label="Unbonding"
@@ -213,13 +213,17 @@ export default function StakingPage() {
                 <tr key={r.address} id={`delegate-${r.address.toLowerCase()}`} className={cn('border-b border-border/50 last:border-0', own && 'bg-primary/5')}>
                   <td className="px-4 py-3 font-mono text-foreground">{shortenAddress(r.address)}{own && <span className="text-primary"> · your node</span>}</td>
                   <td className="px-4 py-3 text-right font-mono tabular-nums">{fmtMrsnWei(r.selfStake, 0)}</td>
-                  <td className="px-4 py-3 text-right font-mono tabular-nums">{fmtMrsnWei(r.delegatedTotal)}</td>
+                  {/* Fixed decimals so the column reads as one unit: 0.00 · 1,004.91 ·
+                      41,002.00 (community feedback). Exact value on hover. */}
+                  <td className="px-4 py-3 text-right font-mono tabular-nums" title={`${fmtMrsnWei(r.delegatedTotal, 18)} MRSN`}>
+                    {fmtMrsnWei(r.delegatedTotal, 2, true)}
+                  </td>
                   <td className="px-4 py-3 text-right font-mono tabular-nums">{(r.commissionBps / 100).toFixed(1)}%</td>
-                  <td className={cn('px-4 py-3 text-right font-mono tabular-nums', BigInt(r.myDelegation) > 0n && 'text-primary')}>
-                    {fmtMrsnWei(r.myDelegation)}
+                  <td className={cn('px-4 py-3 text-right font-mono tabular-nums', BigInt(r.myDelegation) > 0n && 'text-primary')} title={`${fmtMrsnWei(r.myDelegation, 18)} MRSN`}>
+                    {fmtMrsnWei(r.myDelegation, 2, true)}
                   </td>
                   <td className={cn('px-4 py-3 text-right font-mono tabular-nums', BigInt(r.myPending) > 0n && 'text-green')}>
-                    {fmtMrsnWei(r.myPending, 6)}
+                    {fmtMrsnWei(r.myPending, 6, true)}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1.5">
@@ -312,16 +316,16 @@ export default function StakingPage() {
                   <div className="text-[10px] text-dim font-normal">staked (MRSN)</div>
                 </td>
                 <td className="px-4 py-3 text-right font-mono tabular-nums font-semibold" title="Grand total delegated (MRSN)">
-                  {fmtMrsnWei(rows.reduce((s, r) => s + BigInt(r.delegatedTotal), 0n), 0)}
+                  {fmtMrsnWei(rows.reduce((s, r) => s + BigInt(r.delegatedTotal), 0n), 2, true)}
                   <div className="text-[10px] text-dim font-normal">delegated (MRSN)</div>
                 </td>
                 <td className="px-4 py-3" />
                 <td className={cn('px-4 py-3 text-right font-mono tabular-nums font-semibold', totalMine > 0n && 'text-primary')} title="Your total delegation (MRSN)">
-                  {fmtMrsnWei(totalMine)}
+                  {fmtMrsnWei(totalMine, 2, true)}
                   <div className="text-[10px] text-dim font-normal">yours (MRSN)</div>
                 </td>
                 <td className={cn('px-4 py-3 text-right font-mono tabular-nums font-semibold', totalPending > 0n && 'text-green')} title="Your claimable rewards (MRSN)">
-                  {fmtMrsnWei(totalPending, 6)}
+                  {fmtMrsnWei(totalPending, 6, true)}
                   <div className="text-[10px] text-dim font-normal">claimable (MRSN)</div>
                 </td>
                 <td className="px-4 py-3" />

@@ -7,6 +7,8 @@ import type { ClobProtocol } from '@/lib/api';
 
 export interface Announcement {
   id: string;
+  /** Optional bold, upper-case lead-in before the text ("Next protocol upgrade:") so a time-critical line pops. */
+  lead?: string;
   text: string;
   link?: { href: string; label: string };
   /**
@@ -30,7 +32,8 @@ export const ANNOUNCEMENTS: Announcement[] = [
   {
     // Until the 29 Sep switch.
     id: 'switch-2026-09-29',
-    text: 'Next upgrade {eta:1969200}: refused orders return their reason and charge 20k gas instead of the whole limit, and the base fee gets a 1 gwei floor (about 0.00007 MRSN per trade; 50% treasury / 25% proposer / 25% burned). Validators: upgrade to release 9be4f83 before that block.',
+    lead: 'Next protocol upgrade:',
+    text: '{eta:1969200} — refused orders return their reason and charge 20k gas instead of the whole limit, and the base fee gets a 1 gwei floor (about 0.00007 MRSN per trade; 50% treasury / 25% proposer / 25% burned). Validators: upgrade to release 9be4f83 before that block.',
     link: { href: 'https://explorer.mersennet.com/upgrades', label: 'Upgrade schedule' },
     showWhen: (p) => !!p && !!p.switches?.feeFloorHeight && !(p.fees?.active),
   },
