@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { MERSENNET_TESTNET, ensureMersennetNetwork } from '@/lib/chain';
 import { useToast } from '@/components/shared/Toast';
+import CopyCommand from '@/components/shared/CopyCommand';
+import { UPGRADE_CMD } from '@/components/shared/UpgradeBadge';
 
 /**
  * Mersennet testnet network information. Trading collateral is native MRSN
@@ -165,11 +167,15 @@ export default function TestnetPage() {
 
       {/* Operate the network: node, validator, points, status */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <a href="https://docs.mersennet.com/validators/run-a-node/" target="_blank" rel="noopener noreferrer" className="bg-surface border border-border rounded-xl p-5 hover:border-primary/20 transition-colors duration-200">
+        {/* Not a link like its neighbours: the command carries its own COPY button
+            (a button inside an anchor is not valid), the title links to the guide. */}
+        <div className="bg-surface border border-border rounded-xl p-5 hover:border-primary/20 transition-colors duration-200">
           <p className="text-[10px] font-mono text-primary mb-2">one command · in sync in ~1 min</p>
-          <h3 className="text-sm font-semibold text-foreground mb-1">Run a node</h3>
-          <p className="text-xs text-dim leading-relaxed"><code className="font-mono text-[11px] text-foreground/80">curl -fsSL https://mersennet.com/downloads/install.sh | sudo bash</code></p>
-        </a>
+          <h3 className="text-sm font-semibold text-foreground mb-1">
+            <a href="https://docs.mersennet.com/validators/run-a-node/" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">Run a node ↗</a>
+          </h3>
+          <CopyCommand command={UPGRADE_CMD} className="mt-2 -mx-1" />
+        </div>
         <Link href="/staking" className="bg-surface border border-border rounded-xl p-5 hover:border-primary/20 transition-colors duration-200">
           <p className="text-[10px] font-mono text-primary mb-2">open set · 1,000 MRSN</p>
           <h3 className="text-sm font-semibold text-foreground mb-1">Become a validator</h3>

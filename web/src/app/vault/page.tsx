@@ -4,7 +4,7 @@ import { startPoll } from '@/lib/poll';
 import { useWallet } from '@/hooks/useWallet';
 import { useToast } from '@/components/shared/Toast';
 import { api, type VaultState, type VaultUserState, type VaultInfo } from '@/lib/api';
-import { formatNumber, formatPct, cn } from '@/lib/utils';
+import { formatNumber, formatPct, formatUtcShort, cn } from '@/lib/utils';
 import TokenLogo from '@/components/TokenLogo';
 import { MAKER_VAULT_ADDRESS, readVault, depositToMakerVault, withdrawFromMakerVault, vaultErrorMessage, type VaultOnChain } from '@/lib/makerVault';
 
@@ -90,7 +90,7 @@ export default function VaultPage() {
       const sw = s.switches.find((x) => x.height === info.activeFromBlock);
       if (!sw) return;
       const h = sw.etaSec / 3600;
-      const when = new Date(sw.etaAt).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+      const when = formatUtcShort(sw.etaAt);
       setOpenEta(`${h >= 48 ? `~${Math.round(h / 24)} d` : h >= 1 ? `~${Math.round(h)} h` : `~${Math.max(1, Math.round(sw.etaSec / 60))} min`} · ${when} UTC`);
     }).catch(() => {});
   }, [info]);

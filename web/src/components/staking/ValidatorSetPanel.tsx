@@ -7,11 +7,11 @@ import { api, type VerifiedNode, type NodeBuild, type ProtocolSwitches, type Pro
 import UpgradeBadge from '@/components/shared/UpgradeBadge';
 import CopyCommand from '@/components/shared/CopyCommand';
 import TelegramAlerts from '@/components/shared/TelegramAlerts';
-import { cn, shortenAddress } from '@/lib/utils';
+import { cn, formatUtcShort, shortenAddress } from '@/lib/utils';
 import { getDefaultChain } from '@/lib/chain';
 import { startPoll } from '@/lib/poll';
 import {
-  addSelfStake, getValidatorSet, maxSpendable, nextProtocolSwitch, registerValidator, stakingErrorMessage, unregisterValidator, weiToMrsn,
+  addSelfStake, fmtMrsnWei, getValidatorSet, maxSpendable, nextProtocolSwitch, registerValidator, stakingErrorMessage, unregisterValidator, weiToMrsn,
   type ValidatorSetEntry, type ValidatorSetView,
 } from '@/lib/staking';
 
@@ -30,7 +30,10 @@ const STATUS_TONE: Record<string, string> = {
   exiting: 'text-dim bg-surface-2',
 };
 
-function fmtMrsn(wei: string) { return Number(weiToMrsn(wei, 0)).toLocaleString(); }
+// Self-stake is bonded in whole MRSN; delegated totals carry fractions, shown with
+// the same two fixed decimals as the staking table above so the two agree.
+function fmtMrsn(wei: string) { return fmtMrsnWei(wei, 0); }
+function fmtDelegated(wei: string) { return fmtMrsnWei(wei, 2, true); }
 
 function Stat({ label, value, hint, tone }: { label: string; value: React.ReactNode; hint?: string; tone?: string }) {
   return (
@@ -179,7 +182,7 @@ export default function ValidatorSetPanel({ ownNodesSlot }: { ownNodesSlot?: HTM
 
             <div className="px-4 py-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
               <Stat label="Self-stake" value={`${fmtMrsn(v.selfStake)} MRSN`} hint="Bonded by you, the operator" />
-              <Stat label="Delegated to you" value={`${fmtMrsn(v.delegated)} MRSN`} hint="Staked behind your node by other wallets" />
+              <Stat label="Delegated to you" value={`${fmtDelegated(v.delegated)} MRSN`} hint="Staked behind your node by other wallets" />
               <Stat label="Voting stake" value={`${fmtMrsn(v.votingStake)} MRSN`} hint="Self-stake + delegated: this ranks you in the set" tone="text-primary" />
               <Stat label="Commission" value={`${v.commissionBps / 100}%`} hint="Share of your delegators' rewards you keep" />
               <Stat label="This epoch" value={<>{v.proposedSlots} proposed <span className="text-dim">· {v.missedSlots} missed</span></>} hint="Leader slots this epoch: blocks proposed vs. missed" tone={v.missedSlots > 0 && v.proposedSlots === 0 ? 'text-down' : undefined} />
@@ -279,7 +282,7 @@ export default function ValidatorSetPanel({ ownNodesSlot }: { ownNodesSlot?: HTM
     if (a < 3600) return `${sign}${Math.floor(a / 60)} min${a % 60 ? ` ${a % 60} s` : ''}`;
     return `${sign}${Math.floor(a / 3600)} h${Math.round((a % 3600) / 60) ? ` ${Math.round((a % 3600) / 60)} min` : ''}`;
   };
-  const utc = (iso: string, secs = false) => new Date(iso).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', ...(secs ? { second: '2-digit' as const } : {}), timeZone: 'UTC' }) + ' UTC';
+  const utc = (iso: string, secs = false) => formatUtcShort(iso, secs) + ' UTC';
   // Most recent completed upgrade height (several switches can share one block).
   const lastDone = useMemo(() => {
     const done = (upgrades?.completed || []).filter((c) => c.activatedAt);
@@ -290,7 +293,7 @@ export default function ValidatorSetPanel({ ownNodesSlot }: { ownNodesSlot?: HTM
   }, [upgrades]);
   const fmtEta = (etaSec: number, etaAt: string) => {
     const h = etaSec / 3600;
-    const when = new Date(etaAt).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+    const when = formatUtcShort(etaAt);
     return `${h >= 48 ? `~${Math.round(h / 24)} d` : h >= 1 ? `~${Math.round(h)} h` : `~${Math.max(1, Math.round(etaSec / 60))} min`} · ${when} UTC`;
   };
 
@@ -462,7 +465,7 @@ export default function ValidatorSetPanel({ ownNodesSlot }: { ownNodesSlot?: HTM
                     <td className="py-1.5 pr-3 font-mono text-foreground">{shortenAddress(v.identity)}{v.genesis && <span className="text-dim"> · genesis</span>}</td>
                     <td className="py-1.5 pr-3 font-mono text-dim">{shortenAddress(v.operator)}{own && <span className="text-primary"> · you</span>}</td>
                     <td className="py-1.5 pr-3 text-right font-mono">{fmtMrsn(v.selfStake)}</td>
-                    <td className="py-1.5 pr-3 text-right font-mono">{fmtMrsn(v.delegated)}</td>
+                    <td className="py-1.5 pr-3 text-right font-mono">{fmtDelegated(v.delegated)}</td>
                     <td className={cn('py-1.5 pr-3 text-right font-mono', v.missedSlots > 0 && v.proposedSlots === 0 ? 'text-down' : '')} title={`Leader slots this epoch: blocks the node proposed vs. slots it missed. Missing more than 20% of at least 5 slots jails the node for the next epoch. All-time: ${v.totalProposed.toLocaleString()} blocks proposed since it registered.`}>{v.proposedSlots} proposed<span className="text-dim"> · {v.missedSlots} missed</span><div className="text-[10px] text-dim font-normal">{v.totalProposed.toLocaleString()} all-time</div></td>
                     <td className="py-1.5 pr-3 font-mono" title={b?.version || 'The node has not answered a build query yet'}>
                       {!b?.build && <span className="text-dim">—</span>}
@@ -480,7 +483,7 @@ export default function ValidatorSetPanel({ ownNodesSlot }: { ownNodesSlot?: HTM
                   <td className="py-1.5 pr-3" />
                   <td className="py-1.5 pr-3 font-semibold text-foreground" colSpan={2}>Grand total <span className="text-dim font-normal">· {sorted.length} registered</span></td>
                   <td className="py-1.5 pr-3 text-right font-mono font-semibold" title="Grand total staked (MRSN)">{fmtMrsn(sorted.reduce((a, x) => (BigInt(a) + BigInt(x.selfStake)).toString(), '0'))}<div className="text-[10px] text-dim font-normal">staked (MRSN)</div></td>
-                  <td className="py-1.5 pr-3 text-right font-mono font-semibold" title="Grand total delegated (MRSN)">{fmtMrsn(sorted.reduce((a, x) => (BigInt(a) + BigInt(x.delegated)).toString(), '0'))}<div className="text-[10px] text-dim font-normal">delegated (MRSN)</div></td>
+                  <td className="py-1.5 pr-3 text-right font-mono font-semibold" title="Grand total delegated (MRSN)">{fmtDelegated(sorted.reduce((a, x) => (BigInt(a) + BigInt(x.delegated)).toString(), '0'))}<div className="text-[10px] text-dim font-normal">delegated (MRSN)</div></td>
                   <td className="py-1.5 pr-3 text-right font-mono font-semibold" title="Grand total of leader slots this epoch across the registered validators (the proposed count is the number of blocks in the epoch so far) and of blocks proposed all-time since each registered">{sorted.reduce((a, x) => a + x.proposedSlots, 0).toLocaleString()} proposed<span className="text-dim font-normal"> · {sorted.reduce((a, x) => a + x.missedSlots, 0).toLocaleString()} missed</span><div className="text-[10px] text-dim font-normal">this epoch · {sorted.reduce((a, x) => a + (x.totalProposed || 0), 0).toLocaleString()} all-time</div></td>
                   <td className="py-1.5 pr-3" colSpan={2} />
                 </tr>
