@@ -11,6 +11,7 @@ const PAGES = [
   { url: '/portfolio', priority: 0.8, changefreq: 'daily' },
   { url: '/vault', priority: 0.8, changefreq: 'daily' },
   { url: '/testnet', priority: 0.7, changefreq: 'weekly' },
+  { url: '/stats', priority: 0.7, changefreq: 'hourly' },
   { url: '/leaderboard', priority: 0.6, changefreq: 'daily' },
   { url: '/feedback', priority: 0.5, changefreq: 'monthly' },
   { url: '/risk', priority: 0.5, changefreq: 'monthly' },

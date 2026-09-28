@@ -46,7 +46,7 @@ export default function WalletButton() {
       .then((r) => {
         const val = Number(r.collateral) || 0;
         setCollateral(val);
-        setWallet({ collateral: val.toString() });
+        setWallet({ collateral: val.toString(), collateralNative: String(Number(r.native) || 0) });
       })
       .catch(() => {});
     refreshTokens();
@@ -56,7 +56,7 @@ export default function WalletButton() {
         .then((r) => {
           const val = Number(r.collateral) || 0;
           setCollateral(val);
-          setWallet({ collateral: val.toString() });
+          setWallet({ collateral: val.toString(), collateralNative: String(Number(r.native) || 0) });
         })
         .catch(() => {});
       refreshTokens();
@@ -110,7 +110,7 @@ export default function WalletButton() {
           {collateral > 0 && (
             <>
               <div className="w-px h-3.5 bg-border" />
-              <div className="flex items-center gap-1.5" title="MRSN deposited as trading collateral">
+              <div className="flex items-center gap-1.5" title="Margin the order book counts for you: deposited MRSN plus registered token collateral (USDC at 90%)">
                 <span className="text-dim">Margin</span>
                 <span className="font-mono font-medium text-green">{formatNumber(collateral, 2)} MRSN</span>
               </div>

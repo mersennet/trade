@@ -65,7 +65,7 @@ export function useWallet() {
     }
     eipRef.current = null;
     if (typeof window !== 'undefined') localStorage.removeItem(WALLET_TYPE_KEY);
-    setWallet({ address: null, provider: null, signer: null, balance: '0', collateral: '0' });
+    setWallet({ address: null, provider: null, signer: null, balance: '0', collateral: '0', collateralNative: '0' });
   }, [setWallet, removeListeners]);
 
   /**

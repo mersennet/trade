@@ -1,5 +1,6 @@
 'use client';
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { AGENT_GAS_TOPUP_MRSN } from '@/lib/agent';
 import { startPoll } from '@/lib/poll';
 import { faucetUrl } from '@/lib/links';
 import { useStore } from '@/stores/useStore';
@@ -29,6 +30,8 @@ const TIF_LABEL: Record<'gtc' | 'ioc' | 'fok', { short: string; long: string; he
 // the initial margin the chain enforces (10% → 10×); the old 25×/50× steps
 // were never enforceable.
 const LEVERAGE_PRESETS = [1, 2, 3, 5, 10, 25, 50];
+/** Slider positions per preset segment; the track is piecewise-linear between presets. */
+const LEV_STEPS = 100;
 const SIZE_PRESETS = [25, 50, 75, 100];
 
 const SPOT_ORDER_TYPES = [
@@ -133,6 +136,25 @@ export default function TradeForm() {
   useEffect(() => {
     if (trade.leverage > market.maxLeverage) setTrade({ leverage: market.maxLeverage });
   }, [trade.leverage, market.maxLeverage, setTrade]);
+  // Presets this market allows, and the piecewise map between leverage and
+  // slider position so the thumb lines up with the preset marks.
+  const levPresets = useMemo(() => {
+    const p = LEVERAGE_PRESETS.filter((l) => l <= market.maxLeverage);
+    return p.length >= 2 ? p : [1, Math.max(2, market.maxLeverage)];
+  }, [market.maxLeverage]);
+  const levToPos = (lev: number) => {
+    const l = Math.min(Math.max(lev, levPresets[0]), levPresets[levPresets.length - 1]);
+    for (let i = 0; i < levPresets.length - 1; i++) {
+      const a = levPresets[i], b = levPresets[i + 1];
+      if (l <= b) return Math.round((i + (l - a) / (b - a)) * LEV_STEPS);
+    }
+    return (levPresets.length - 1) * LEV_STEPS;
+  };
+  const posToLev = (pos: number) => {
+    const i = Math.min(levPresets.length - 2, Math.max(0, Math.floor(pos / LEV_STEPS)));
+    const f = (pos - i * LEV_STEPS) / LEV_STEPS;
+    return Math.max(1, Math.round(levPresets[i] + f * (levPresets[i + 1] - levPresets[i])));
+  };
 
   const [protocol, setProtocol] = useState<ClobProtocol | null>(null);
   useEffect(() => {
@@ -544,7 +566,7 @@ export default function TradeForm() {
     } catch (e) {
       const raw = (e as Error).message || '';
       const msg = useOneClick && /insufficient funds|insufficient balance for gas/i.test(raw)
-        ? 'Your one-click agent key is out of gas — top it up in Settings (3 MRSN lasts ~1,500 orders).'
+        ? `Your one-click agent key is out of gas — top it up in Settings (${AGENT_GAS_TOPUP_MRSN} MRSN lasts thousands of orders).`
         : raw;
       toast(`Order failed: ${msg}`, 'error');
       if (useStore.getState().soundEnabled) playSound('alert');
@@ -900,24 +922,35 @@ export default function TradeForm() {
             </label>
             <span className="text-xs font-mono font-bold text-primary-bright">{Math.min(trade.leverage, market.maxLeverage)}×</span>
           </div>
+          {/* The slider runs on the same scale as the marks below it: piecewise
+              between presets (1·2·3·5·10), so the thumb sits on the "3×" mark at
+              3× instead of a fifth of the way along a linear 1–10 track. */}
           <input
-            type="range" min={1} max={market.maxLeverage} value={Math.min(trade.leverage, market.maxLeverage)}
+            type="range" min={0} max={(levPresets.length - 1) * LEV_STEPS} step={1}
+            value={levToPos(Math.min(trade.leverage, market.maxLeverage))}
             aria-label="Leverage"
-            onChange={(e) => setTrade({ leverage: Number(e.target.value) })}
+            aria-valuetext={`${trade.leverage}×`}
+            onChange={(e) => setTrade({ leverage: posToLev(Number(e.target.value)) })}
             className="range-fill w-full"
-            style={{ ['--pct' as string]: `${((trade.leverage - 1) / Math.max(1, market.maxLeverage - 1)) * 100}%` }}
+            style={{ ['--pct' as string]: `${(levToPos(Math.min(trade.leverage, market.maxLeverage)) / ((levPresets.length - 1) * LEV_STEPS)) * 100}%` }}
           />
-          <div className="flex gap-px bg-background rounded-md border border-border overflow-hidden mt-1.5">
-            {LEVERAGE_PRESETS.filter(l => l <= market.maxLeverage).map((l) => (
-              <button key={l} onClick={() => setTrade({ leverage: l })}
-                className={cn(
-                  'flex-1 py-1 text-[10.5px] font-medium font-mono transition-colors',
-                  trade.leverage === l
-                    ? 'bg-foreground/[0.07] text-foreground'
-                    : 'bg-surface-2 text-dim hover:text-foreground'
-                )}
-              >{l}×</button>
-            ))}
+          <div className="relative h-5 mt-0.5">
+            {levPresets.map((l, i) => {
+              const last = i === levPresets.length - 1;
+              const pos = i === 0 ? { left: 0 } : last ? { right: 0 } : { left: `${(i / (levPresets.length - 1)) * 100}%` };
+              return (
+                <button key={l} type="button" onClick={() => setTrade({ leverage: l })}
+                  style={pos}
+                  className={cn(
+                    'absolute top-0 px-1.5 py-0.5 rounded text-[10.5px] font-medium font-mono transition-colors',
+                    i !== 0 && !last && '-translate-x-1/2',
+                    trade.leverage === l
+                      ? 'bg-foreground/[0.07] text-foreground'
+                      : 'text-dim hover:text-foreground'
+                  )}
+                >{l}×</button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -1082,7 +1115,7 @@ export default function TradeForm() {
       {isConnected && !isSpot && collateral <= 0 && !trade.reduceOnly && (
         <div className="rounded-lg border border-yellow/30 bg-yellow/5 px-3 py-2 text-[11px] leading-relaxed text-foreground/85" data-testid="no-collateral-hint">
           No collateral yet — an order needs margin escrowed on the order book first.{' '}
-          <button type="button" onClick={requestDeposit} className="underline text-primary hover:text-primary-hover font-medium">Deposit MRSN</button>
+          <button type="button" onClick={requestDeposit} className="underline text-primary hover:text-primary-hover font-medium">Deposit MRSN or USDC</button>
           {walletMrsn < 1 && (
             <> · <a href={faucetHref} target="_blank" rel="noopener noreferrer" className="underline text-primary hover:text-primary-hover font-medium">claim 1,001 MRSN</a></>
           )}
@@ -1090,8 +1123,10 @@ export default function TradeForm() {
       )}
       <button
         data-submit-order
-        onClick={handleSubmit}
-        disabled={loading || !isConnected || (!isSpot && collateral <= 0 && !trade.reduceOnly)}
+        // Without collateral the button is not dead: it opens the deposit panel
+        // (a disabled button with a not-allowed cursor explained nothing).
+        onClick={(!isSpot && collateral <= 0 && !trade.reduceOnly) ? () => requestDeposit() : handleSubmit}
+        disabled={loading || !isConnected}
         className={cn(
           // On phones the form lives in a bottom sheet: keep the action in view
           // while the fields above scroll (sticky within the sheet's scroller).

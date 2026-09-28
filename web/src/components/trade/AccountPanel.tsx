@@ -21,6 +21,8 @@ import type { ClobProtocol } from '@/lib/api';
 export default function AccountPanel() {
   const { positions, marginMode } = useStore();
   const collateral = useStore((s) => Number(s.wallet.collateral) || 0);
+  // Native part of the margin — the only part a native (MRSN) withdrawal can move.
+  const collateralNative = useStore((s) => Number(s.wallet.collateralNative) || 0);
   const setWallet = useStore((s) => s.setWallet);
   const { address, balance, provider, isConnected } = useWallet();
   const { toast } = useToast();
@@ -268,9 +270,11 @@ export default function AccountPanel() {
               className="flex items-center justify-between"
               title={`${a.symbol} margin collateral, counted at ${(a.weightBps / 100).toFixed(0)}% of value · wallet balance ${formatNumber(b.wallet, 2)}`}
             >
-              <span className="text-[11px] text-dim">{a.symbol} Collateral <span className="text-dim">({(a.weightBps / 100).toFixed(0)}%)</span></span>
-              <span className="text-xs font-mono font-medium text-foreground">
-                {formatNumber(b.deposited, 2)} <span className="text-dim">/ {formatNumber(b.wallet, 2)} wallet</span>
+              <span className="text-[11px] text-dim">{a.symbol} Collateral</span>
+              <span className="text-xs font-mono font-medium text-foreground text-right">
+                {formatNumber(b.deposited, 2)}
+                {b.deposited > 0 && <span className="text-dim"> → {formatNumber(b.deposited * a.weightBps / 10_000, 2)} MRSN margin</span>}
+                <span className="block text-[10px] text-dim font-normal">{formatNumber(b.wallet, 2)} in wallet · counts at {(a.weightBps / 100).toFixed(0)}%</span>
               </span>
             </div>
           );
@@ -319,8 +323,11 @@ export default function AccountPanel() {
               transferMode === 'withdraw' ? 'bg-red/10 text-red' : 'text-dim'
             )}>Withdraw</button>
           </div>
-          {/* Asset selector — native MRSN plus registered token collateral. */}
-          {tokenAssets.length > 0 && (
+          {/* Asset selector — native MRSN plus every token the chain accepts as
+              margin (mersennet_orders_getCollateralAssets; USDC at 90% today —
+              the faucet's USDT/DAI are not registered, so they are not offered).
+              Segmented up to three assets, a dropdown beyond that. */}
+          {tokenAssets.length > 0 && tokenAssets.length <= 2 && (
             <div className="flex gap-0.5 p-0.5 bg-surface rounded-md">
               {['MRSN', ...tokenAssets.map((a) => a.symbol)].map((sym) => (
                 <button
@@ -334,6 +341,17 @@ export default function AccountPanel() {
               ))}
             </div>
           )}
+          {tokenAssets.length > 2 && (
+            <select
+              value={transferAsset}
+              onChange={(e) => setTransferAsset(e.target.value)}
+              aria-label="Collateral asset"
+              className="w-full bg-surface border border-border rounded-md px-2 py-1.5 text-[11px] font-semibold text-foreground outline-none focus:border-primary/40"
+            >
+              <option value="MRSN">MRSN</option>
+              {tokenAssets.map((a) => <option key={a.token} value={a.symbol}>{a.symbol} · counts at {(a.weightBps / 100).toFixed(0)}%</option>)}
+            </select>
+          )}
           <div className="relative">
             <input
               type="number"
@@ -345,7 +363,7 @@ export default function AccountPanel() {
             <button
               onClick={() => {
                 if (transferAsset === 'MRSN') {
-                  setTransferAmount(transferMode === 'deposit' ? walletMrsn.toFixed(2) : collateral.toFixed(2));
+                  setTransferAmount(transferMode === 'deposit' ? Math.max(0, walletMrsn - 0.01).toFixed(2) : collateralNative.toFixed(2));
                 } else {
                   const b = tokenBalances[transferAsset];
                   setTransferAmount((transferMode === 'deposit' ? b?.wallet ?? 0 : b?.deposited ?? 0).toFixed(2));
@@ -360,11 +378,26 @@ export default function AccountPanel() {
                 toast('Connect wallet first', 'error');
                 return;
               }
+              // Refuse before the wallet asks for a signature when the amount cannot
+              // work: more than the wallet holds (deposit) or more than is deposited
+              // (withdraw) — the chain would revert after a pointless signing prompt.
+              const want = Number(transferAmount);
+              if (!Number.isFinite(want) || want <= 0) { toast('Enter a positive amount', 'error'); return; }
+              if (transferAsset !== 'MRSN') {
+                const b = tokenBalances[transferAsset];
+                if (transferMode === 'deposit' && b && want > b.wallet + 1e-9) {
+                  toast(`You have ${b.wallet.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${transferAsset} in this wallet — you can deposit at most that`, 'error'); return;
+                }
+                if (transferMode === 'withdraw' && b && want > b.deposited + 1e-9) {
+                  toast(`You have ${b.deposited.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${transferAsset} deposited — you can withdraw at most that`, 'error'); return;
+                }
+              } else if (transferMode === 'withdraw' && want > collateralNative + 1e-9) {
+                toast(`You have ${collateralNative.toLocaleString(undefined, { maximumFractionDigits: 2 })} MRSN deposited — you can withdraw at most that (USDC collateral is withdrawn as USDC)`, 'error'); return;
+              }
               // Native deposits move whole MRSN from the wallet: refuse before the
               // chain does when the wallet cannot cover the amount plus gas.
               if (transferMode === 'deposit' && transferAsset === 'MRSN') {
-                const want = Number(transferAmount);
-                if (!Number.isFinite(want) || want < 1) { toast('Deposit at least 1 MRSN (whole MRSN)', 'error'); return; }
+                if (want < 1) { toast('Deposit at least 1 MRSN (whole MRSN)', 'error'); return; }
                 if (want + 0.01 > walletMrsn) { toast(`You have ${walletMrsn.toLocaleString(undefined, { maximumFractionDigits: 2 })} MRSN in this wallet — keep a little for gas (the faucet gives 1,001 an hour)`, 'error'); return; }
               }
               setTransferring(true);
@@ -390,7 +423,7 @@ export default function AccountPanel() {
                 setTransferAmount('');
                 setShowTransfer(false);
                 const r = await api.getCollateral(address);
-                setWallet({ collateral: String(Number(r.collateral) || 0) });
+                setWallet({ collateral: String(Number(r.collateral) || 0), collateralNative: String(Number(r.native) || 0) });
                 refreshBalances();
               } catch (e) {
                 const msg = (e as Error).message || '';
