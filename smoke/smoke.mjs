@@ -19,6 +19,7 @@ const BASE = (process.argv[2] || 'http://127.0.0.1:8090').replace(/\/$/, '');
 const PAGES = [
   { path: '/trade', must: ['button:has-text("Connect Wallet")', 'text=/Long/i'], fixedDesktop: true },
   { path: '/markets', must: ['text=/MRSN/'] },
+  { path: '/stats', must: ['text=/Network stats/i', 'text=/Wallets funded/i'] },
   { path: '/portfolio', must: ['button:has-text("Connect")'] },
   { path: '/vault', must: ['text=/Maker Vault/i', 'text=/Deposit/i'] },
   { path: '/leaderboard', must: ['text=/Leaderboard/i'] },

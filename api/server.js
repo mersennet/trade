@@ -134,6 +134,7 @@ app.use('/api/v1/referrals', require('./src/routes/referrals'));
 app.use('/api/v1/api-keys', apiKeysRouter);
 app.use('/api/v1/governance', governanceRouter);
 app.use('/api/v1/stats/launch', require('./src/routes/launch'));
+app.use('/api/v1/stats/adoption', require('./src/routes/adoption'));
 // Live CLOB protocol parameters (switch heights, margin bps, wei per unit) —
 // the terminal and bots read this instead of hard-coding heights.
 app.get('/api/v1/protocol', async (_req, res) => {

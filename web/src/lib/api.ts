@@ -115,6 +115,7 @@ export const api = {
   getNodeBuilds: () => memo('nodes-builds', 30_000, () => apiFetch<{ latest: string | null; nodes: NodeBuild[] }>('/nodes/builds')),
   verifyNode: (body: { host: string; wallet: string; signature: string }) =>
     apiFetch<{ ok: boolean; identity: string; height: number; version: string; pointsPerDay: number }>('/nodes/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  getAdoption: () => memo('adoption', 60_000, () => apiFetch<AdoptionStats>('/stats/adoption')),
   getPointsLeaderboard: (season = 1) => apiFetch<{ leaderboard: PointsEntry[] }>(`/points/leaderboard/season/${season}?limit=100`),
   getSprint: () => memo('sprint', 15_000, () => apiFetch<SprintStatus>('/points/sprint')),
   getVaultState: () => apiFetch<VaultState>('/vault/state'),
@@ -354,6 +355,15 @@ export interface TraderStatRow {
   max_drawdown?: number | string;
 }
 export interface TraderProfile { address: string; stats: Record<string, TraderStatRow>; recentTrades: Trade[]; }
+export interface AdoptionStats {
+  generatedAt: string; note: string;
+  wallets: { fundedByFaucet: number | null; sendersTotal: number | null; activeSenders24h: number | null; activeSenders7d: number | null; activeSenders30d: number | null; humanTradersTotal: number | null; humanTraders24h: number | null; humanTraders7d: number | null; humanTraders30d: number | null; botWallets: number | null; vaultDepositors: number | null; pointsHolders: number | null; referrals: number | null; fundedPerDay: { day: string; wallets: number }[] };
+  trading: { trades24h: number | null; humanTrades24h: number | null; volume24h: number | null; humanVolume24h: number | null; trades7d: number | null; humanTrades7d: number | null; volume7d: number | null; humanVolume7d: number | null; tradesTotal: number | null; humanTradesTotal: number | null; volumeTotal: number | null; humanVolumeTotal: number | null; markets: number | null };
+  tvl: { orderBookCollateralMrsn: number | null; orderBookAccounts: number | null; makerVaultNavMrsn: number | null; stakedMrsn: number | null; totalMrsn: number | null };
+  network: { height: number | null; blockTimeSec: number | null; tx24h: number | null; txTotal: number | null; contractsDeployed: number | null; validators: { registered: number; active: number | null; community: number; jailed: number; networkStakeMrsn: number; delegatedMrsn: number; epoch: number | null; height: number | null } | null; verifiedNodes: number | null; verifiedNodesOnline: number | null; nodeOperators: number | null; uptime: { monitors: number; avg24h: number | null; avg30d: number | null } | null };
+  community: { telegramMembers: number | null; github: { repos: number; stars: number; forks: number } | null };
+  daily: { day: string; humanTrades: number; humanVolume: number; humanTraders: number; botTrades: number; botVolume: number; newTraders: number; faucetTxs: number | null; blocks: number | null; verifiedNodes: number | null; validators: number | null }[];
+}
 export interface PointsResponse { address: string; totalPoints: number; tradingPoints: number; lpPoints: number; referralPoints: number; nodePoints?: number; bonusPoints?: number; tier: string; rank: number; history: { point_type: string; amount: number; reason: string; created_at: string }[]; }
 export interface PointsEntry { rank: number; address: string; totalPoints: number; tier: string; tradingPoints?: number; nodePoints?: number; lpPoints?: number; referralPoints?: number; bonusPoints?: number; }
 export interface SprintStatus { weekStart: string; awardAt: string; prizes: number[]; standings: { rank: number; address: string; volume: number; trades: number }[]; lastWinners: { week_start: string; address: string; rank: number; volume: number; points: number }[]; }

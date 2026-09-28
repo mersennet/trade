@@ -54,6 +54,11 @@ const NAV_ITEMS = [
 ];
 
 const BOTTOM_ITEMS = [
+  { href: '/stats', label: 'Stats', tKey: 'nav.stats', icon: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 20h18M6 16V10M11 16V4M16 16v-7M21 16v-3" />
+    </svg>
+  )},
   { href: '/feedback', label: 'Feedback', icon: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />

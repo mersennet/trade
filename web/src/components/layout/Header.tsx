@@ -48,6 +48,7 @@ const PAGE_TITLE_KEYS: Record<string, { key: string; fallback: string }> = {
   '/paper-trading': { key: 'nav.paperTrading', fallback: 'Paper Trading' },
   '/funding-arb': { key: 'nav.fundingArb', fallback: 'Funding Arb' },
   '/testnet': { key: 'nav.testnet', fallback: 'Testnet' },
+  '/stats': { key: 'nav.stats', fallback: 'Stats' },
   '/staking': { key: 'nav.staking', fallback: 'Staking' },
   '/feedback': { key: 'nav.feedback', fallback: 'Feedback' },
 };
