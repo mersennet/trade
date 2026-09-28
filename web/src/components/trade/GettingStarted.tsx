@@ -7,9 +7,14 @@ import { cn } from '@/lib/utils';
 
 /**
  * First-trade checklist shown until the wallet has completed the onboarding
- * loop: fund → deposit → first order → enable one-click. Dismissal is
- * persisted per wallet. Hyperliquid prompts "Enable trading" after the first
- * deposit; this covers the whole ramp.
+ * loop: connect → fund → deposit → enable one-click → first order. Dismissal
+ * is persisted per wallet. Hyperliquid prompts "Enable trading" after the
+ * first deposit; this covers the whole ramp.
+ *
+ * Every step is a row — including the completed "Connect a wallet" — so the
+ * count and the list agree ("2 of 5 done" used to show four rows). Pending
+ * steps carry their number, not an empty circle: an empty circle reads as a
+ * radio button and invites a click that does nothing.
  */
 export default function GettingStarted() {
   const { address, isConnected } = useWallet();
@@ -34,10 +39,10 @@ export default function GettingStarted() {
     return (
       <div className="bg-surface border border-primary/20 rounded-xl md:rounded-none md:border-0 md:border-b p-3 shrink-0" data-testid="getting-started">
         <p className="text-[11px] font-semibold text-foreground mb-2">
-          Getting started <span className="text-dim font-normal">· step 1 of 5</span>
+          Getting started <span className="text-dim font-normal">· 0 of 5 done</span>
         </p>
         <div className="flex items-center gap-2">
-          <span className="w-3.5 h-3.5 rounded-full border border-primary/60 shrink-0" />
+          <StepMark n={1} done={false} current />
           <span className="text-[11px] flex-1 text-foreground">Connect a wallet <span className="block text-[10px] text-dim">MetaMask, Rabby or any injected wallet · testnet, nothing at stake</span></span>
           <button
             onClick={() => requestConnect()}
@@ -49,7 +54,13 @@ export default function GettingStarted() {
   }
   if (dismissed) return null;
 
+  const connected = isConnected && !!address;
   const steps = [
+    {
+      label: 'Connect a wallet',
+      done: connected,
+      action: null,
+    },
     {
       label: 'Get testnet MRSN',
       // Having collateral implies the faucet step happened — don't show
@@ -60,6 +71,9 @@ export default function GettingStarted() {
       ),
     },
     {
+      // `collateral` is the margin the chain counts: native MRSN plus
+      // registered token collateral (USDC at its weight), so a USDC-only
+      // deposit completes this step too.
       label: 'Deposit collateral',
       done: collateral > 0,
       action: (
@@ -70,7 +84,18 @@ export default function GettingStarted() {
       ),
     },
     {
-      label: 'Place your first order',
+      // Before the first order: with it enabled the order needs no wallet popup.
+      label: 'Enable one-click trading',
+      done: oneClickEnabled,
+      action: (
+        <button
+          onClick={() => setShowSettings(true)}
+          className="text-[10px] text-primary hover:underline font-medium"
+        >Settings</button>
+      ),
+    },
+    {
+      label: 'Place first order',
       done: positions.length > 0 || orders.length > 0,
       // Prefill the smallest real trade — a 1-unit market buy on the selected
       // market — and bring the ticket on screen; the user only presses Buy.
@@ -81,20 +106,11 @@ export default function GettingStarted() {
         >Try 1 {marketBase} market buy</button>
       ) : null,
     },
-    {
-      label: 'Enable one-click trading',
-      done: oneClickEnabled,
-      action: (
-        <button
-          onClick={() => setShowSettings(true)}
-          className="text-[10px] text-primary hover:underline font-medium"
-        >Settings</button>
-      ),
-    },
   ];
 
   const doneCount = steps.filter((s) => s.done).length;
   if (doneCount === steps.length) return null;
+  const currentIdx = steps.findIndex((s) => !s.done);
 
   const dismiss = () => {
     localStorage.setItem(`mersennet-trade_onboarding_done_${address.toLowerCase()}`, '1');
@@ -105,7 +121,7 @@ export default function GettingStarted() {
     <div className="bg-surface border border-primary/20 rounded-xl md:rounded-none md:border-0 md:border-b p-3 shrink-0">
       <div className="flex items-center justify-between mb-2">
         <p className="text-[11px] font-semibold text-foreground">
-          Getting started <span className="text-dim font-normal">· {doneCount + 1} of {steps.length + 1} done</span>
+          Getting started <span className="text-dim font-normal">· {doneCount} of {steps.length} done</span>
         </p>
         <button
           onClick={dismiss}
@@ -114,15 +130,10 @@ export default function GettingStarted() {
         >×</button>
       </div>
       <div className="space-y-1.5">
-        {steps.map((s) => (
+        {steps.map((s, i) => (
           <div key={s.label} className="flex items-center gap-2">
-            <span className={cn(
-              'w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 text-[8px]',
-              s.done ? 'bg-green/20 border-green/40 text-green' : 'border-border text-transparent'
-            )}>
-              {s.done ? '✓' : ''}
-            </span>
-            <span className={cn('text-[11px] flex-1', s.done ? 'text-dim line-through' : 'text-foreground')}>
+            <StepMark n={i + 1} done={s.done} current={i === currentIdx} />
+            <span className={cn('text-[11px] flex-1', s.done ? 'text-dim line-through' : i === currentIdx ? 'text-foreground' : 'text-dim')}>
               {s.label}
             </span>
             {!s.done && s.action}
@@ -130,5 +141,24 @@ export default function GettingStarted() {
         ))}
       </div>
     </div>
+  );
+}
+
+/** Green check when done; otherwise the step number — yellow for the next step, dim for the ones after. */
+function StepMark({ n, done, current }: { n: number; done: boolean; current: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        'w-3.5 h-3.5 rounded-sm flex items-center justify-center shrink-0 text-[8px] font-mono font-bold leading-none select-none',
+        done
+          ? 'bg-green/20 text-green'
+          : current
+            ? 'bg-yellow/15 text-yellow'
+            : 'bg-surface-2 text-dim',
+      )}
+    >
+      {done ? '✓' : n}
+    </span>
   );
 }

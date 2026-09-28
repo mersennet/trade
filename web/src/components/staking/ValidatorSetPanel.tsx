@@ -326,7 +326,7 @@ export default function ValidatorSetPanel({ ownNodesSlot }: { ownNodesSlot?: HTM
               <>
                 <p className="text-[10px] font-semibold text-dim uppercase tracking-wider">
                   Upcoming protocol upgrade{schedule.length > 1 ? 's' : ''}
-                  {switches?.blockTimeSec != null && <span className="font-normal normal-case"> · estimated at {switches.blockTimeSec.toFixed(2)}s/block</span>}
+                  {switches?.blockTimeSec != null && <span className="font-normal normal-case"> · estimated at {switches.blockTimeSec.toFixed(2)} s per block</span>}
                 </p>
                 {schedule.map((g) => (
                   <div key={g.height} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[12px]">

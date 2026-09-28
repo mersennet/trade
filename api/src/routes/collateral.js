@@ -29,16 +29,21 @@ router.get('/:address', async (req, res) => {
     if (!ETH_ADDR_RE.test(req.params.address)) {
       return res.status(400).json({ error: 'Invalid address' });
     }
-    // Returns human-readable MRSN values (e.g. 100.5), not raw 18-decimal units.
-    const [collateral, free] = await Promise.all([
-      chain.getCollateral(req.params.address),
-      chain.getFreeCollateral(req.params.address),
+    // Human-readable MRSN values (e.g. 100.5), not raw units. `collateral` is
+    // what the chain counts as margin: native MRSN plus registered token
+    // collateral at its weight (USDC at 90%); `native` is the MRSN part alone
+    // (the only part a native withdrawal can move).
+    const [margin, collateralRaw] = await Promise.all([
+      chain.getMarginCollateral(req.params.address),
+      chain.getCollateralRaw(req.params.address),
     ]);
-    const collateralRaw = await chain.getCollateralRaw(req.params.address);
     res.json({
-      collateral,        // human (e.g. 100.5 MRSN)
-      free,              // human
-      collateralRaw,     // raw string for callers that need exact precision
+      collateral: margin.collateral,   // human, total margin (native + weighted tokens)
+      native: margin.native,           // human, native MRSN collateral
+      tokenMarginValue: margin.tokenMarginValue,
+      tokens: margin.tokens,           // [{ token, symbol, amount, marginValue, weightBps }]
+      free: margin.native,             // legacy field: withdrawable native MRSN
+      collateralRaw,                   // raw native units for callers that need exact precision
       decimals: chain.collateralDecimals(),
       timestamp: Date.now(),
     });

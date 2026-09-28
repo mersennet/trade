@@ -8,7 +8,10 @@ interface WalletState {
   provider: unknown;
   signer: unknown;
   balance: string;
+  /** Margin collateral as the chain counts it: native MRSN + registered token collateral at its weight (MRSN). */
   collateral: string;
+  /** The native-MRSN part of `collateral` — what a native withdrawal can move (MRSN). */
+  collateralNative: string;
 }
 
 interface TradeState {
@@ -201,7 +204,7 @@ export const useStore = create<AppState>()(
       theme: 'dark',
       market: defaultMarket,
       tickers: {},
-      wallet: { address: null, provider: null, signer: null, balance: '0', collateral: '0' },
+      wallet: { address: null, provider: null, signer: null, balance: '0', collateral: '0', collateralNative: '0' },
       trade: {
         side: 'buy', orderType: 'limit', price: '', size: '', leverage: 2,
         tif: 'gtc', reduceOnly: false, tpEnabled: false, tpPrice: '', slPrice: '',

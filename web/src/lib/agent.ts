@@ -15,8 +15,15 @@
 import { MERSENNET_ORDERS_PRECOMPILE, getDefaultChain } from './chain';
 
 export const AGENT_GRANT_BLOCKS = 7 * 24 * 1800; // ~7 days at 2 s blocks
-export const AGENT_GAS_TOPUP_MRSN = '3';          // enough for ~1,500 orders at testnet gas prices
-export const AGENT_GAS_LOW_MRSN = 0.2;
+// Gas the owner sends to the agent key. An order costs ~70k gas; at the 1 gwei
+// floor that is 0.00007 MRSN, so 0.5 MRSN is roughly 7,000 orders — plenty for
+// a week, and small enough to mean something once MRSN has a price (the
+// earlier 3 MRSN was sized for the pre-floor era, when it bought ~40,000).
+// Leftover gas is never lost: Revoke sweeps it back, re-enabling reuses the key.
+export const AGENT_GAS_TOPUP_MRSN = '0.5';
+export const AGENT_GAS_LOW_MRSN = 0.05;
+/** Gas one order roughly costs; used only to estimate "orders left". */
+export const AGENT_GAS_PER_ORDER = 70_000n;
 
 const ABI = [
   'function setAgent(address agent, uint64 expiresAtBlock) returns (bool)',
@@ -32,6 +39,8 @@ export interface AgentStatus {
   granted: boolean;             // this browser's key is granted on-chain and not expired
   expiresAtBlock: number | null;
   gasMrsn: number | null;
+  /** Orders the current gas balance pays for at the current gas price (null = unknown). */
+  ordersLeft: number | null;
 }
 
 const storeKey = (owner: string) => `mersennet-trade_agent_${owner.toLowerCase()}`;
@@ -65,10 +74,17 @@ export async function agentStatus(owner: string): Promise<AgentStatus> {
   const rec = loadAgent(owner);
   const mine = rec ? view.agents.find((a) => a.agent.toLowerCase() === rec.address.toLowerCase()) : undefined;
   let gasMrsn: number | null = null;
+  let ordersLeft: number | null = null;
   if (rec) {
     try {
-      const bal = await rpc<string>('eth_getBalance', [rec.address, 'latest']);
-      gasMrsn = Number(BigInt(bal)) / 1e18;
+      const [bal, price] = await Promise.all([
+        rpc<string>('eth_getBalance', [rec.address, 'latest']),
+        rpc<string>('eth_gasPrice', []),
+      ]);
+      const balWei = BigInt(bal);
+      gasMrsn = Number(balWei) / 1e18;
+      const perOrder = BigInt(price) * AGENT_GAS_PER_ORDER;
+      ordersLeft = perOrder > 0n ? Number(balWei / perOrder) : null;
     } catch { /* leave unknown */ }
   }
   return {
@@ -78,6 +94,7 @@ export async function agentStatus(owner: string): Promise<AgentStatus> {
     granted: !!mine && !mine.expired,
     expiresAtBlock: mine ? Number(mine.expiresAtBlock) : null,
     gasMrsn,
+    ordersLeft,
   };
 }
 

@@ -246,16 +246,101 @@ function mrsnToUnits(human) {
   return wei / weiPerCollateralUnit();
 }
 
+/**
+ * Margin collateral in MRSN as the chain counts it: native MRSN plus
+ * registered token collateral at its weight (see getMarginCollateral below).
+ * Every equity / margin-ratio / liquidation computation in the API goes
+ * through here, so a USDC-only account is a funded account everywhere.
+ */
 async function getCollateral(address) {
-  const raw = await getCollateralRaw(address);
-  await getProtocol(); // make sure the unit factor is current
-  return unitsToMrsn(raw);
+  return (await getMarginCollateral(address)).collateral;
 }
 
-// The precompile tracks a single collateral balance; margin reservation is
-// internal. Free collateral therefore equals the total balance for display.
+/** Native MRSN collateral only — the part a native withdrawal can move. */
 async function getFreeCollateral(address) {
-  return getCollateral(address);
+  return (await getMarginCollateral(address)).native;
+}
+
+// ---------------------------------------------------------------------
+// Margin collateral = native MRSN + registered token collateral at its weight
+// ---------------------------------------------------------------------
+// The chain's margin checks use `collateral + token_margin_value` (USDC at
+// 90% today; the allowlist is `mersennet_orders_getCollateralAssets`). A user
+// who deposited only USDC therefore *can* trade — the UI must count it too,
+// or it tells them "no collateral" while the chain would accept their order.
+
+const ERC20_SYMBOL = '0x95d89b41';   // symbol()
+const ERC20_DECIMALS = '0x313ce567'; // decimals()
+let _assetsCache = { at: 0, value: null };
+const _tokenMetaCache = new Map();
+
+function decodeAbiString(hex) {
+  try {
+    const h = hex.replace(/^0x/, '');
+    const len = parseInt(h.slice(64, 128), 16);
+    return Buffer.from(h.slice(128, 128 + len * 2), 'hex').toString('utf8').replace(/\0+$/, '');
+  } catch { return 'TOKEN'; }
+}
+
+/** Registered collateral assets with symbol/decimals, cached 5 min. */
+async function getCollateralAssets() {
+  if (_assetsCache.value && Date.now() - _assetsCache.at < 300_000) return _assetsCache.value;
+  const raw = (await rpcCall('mersennet_orders_getCollateralAssets', [])) || [];
+  const assets = [];
+  for (const a of raw) {
+    const token = String(a.token).toLowerCase();
+    let meta = _tokenMetaCache.get(token);
+    if (!meta) {
+      let symbol = 'TOKEN'; let decimals = 18;
+      try { symbol = decodeAbiString(await rpcCall('eth_call', [{ to: token, data: ERC20_SYMBOL }, 'latest'])); } catch { /* keep default */ }
+      try { decimals = parseInt(String(await rpcCall('eth_call', [{ to: token, data: ERC20_DECIMALS }, 'latest'])), 16) || 18; } catch { /* keep default */ }
+      meta = { symbol, decimals };
+      _tokenMetaCache.set(token, meta);
+    }
+    assets.push({
+      token,
+      symbol: meta.symbol,
+      decimals: meta.decimals,
+      weightBps: Number(a.weightBps),
+      valueNum: BigInt(a.valueNum ?? 1),
+      valueDen: BigInt(a.valueDen ?? 1) || 1n,
+    });
+  }
+  _assetsCache = { at: Date.now(), value: assets };
+  return assets;
+}
+
+/**
+ * What the chain counts as margin for `address`, in MRSN:
+ * { collateral (total), native, tokenMarginValue, tokens: [{ symbol, amount, marginValue, weightBps }] }.
+ */
+async function getMarginCollateral(address) {
+  await getProtocol();
+  const [acct, assets] = await Promise.all([
+    rpcCall('mersennet_orders_getAccount', [address]).catch(() => null),
+    getCollateralAssets().catch(() => []),
+  ]);
+  const nativeRaw = acct && acct.collateral != null ? BigInt(acct.collateral) : BigInt(await getCollateralRaw(address));
+  const native = unitsToMrsn(nativeRaw);
+  const tokens = [];
+  let tokenUnits = 0n;
+  for (const tc of (acct && acct.tokenCollateral) || []) {
+    const asset = assets.find((a) => a.token === String(tc.token).toLowerCase());
+    if (!asset) continue;
+    const amountRaw = BigInt(tc.amount);
+    // Same arithmetic as the chain: amount * value_num / value_den * weight / 10000, in collateral units.
+    const marginUnits = (amountRaw * asset.valueNum / asset.valueDen) * BigInt(asset.weightBps) / 10_000n;
+    tokenUnits += marginUnits;
+    tokens.push({
+      token: asset.token,
+      symbol: asset.symbol,
+      amount: Number(amountRaw) / 10 ** asset.decimals,
+      marginValue: unitsToMrsn(marginUnits),
+      weightBps: asset.weightBps,
+    });
+  }
+  const tokenMarginValue = unitsToMrsn(tokenUnits);
+  return { collateral: native + tokenMarginValue, native, tokenMarginValue, tokens };
 }
 
 async function getBestBidAsk(marketId) {
@@ -591,6 +676,8 @@ module.exports = {
   getCollateral,
   getCollateralRaw,
   getFreeCollateral,
+  getCollateralAssets,
+  getMarginCollateral,
   getMarkPrice,
   getOraclePriceForDisplay,
   getOpenInterest,

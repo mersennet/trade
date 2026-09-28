@@ -309,6 +309,14 @@ function OneClickSection() {
   };
 
   const blocksLeft = status?.expiresAtBlock ? Math.max(0, status.expiresAtBlock - status.height) : 0;
+  // ~2 s blocks → "6 d 21 h" rather than "~165 h".
+  const expiresIn = (() => {
+    const h = Math.round(blocksLeft * 2 / 3600);
+    if (h >= 48) return `${Math.floor(h / 24)} d ${h % 24} h`;
+    if (h >= 1) return `${h} h`;
+    return `${Math.max(1, Math.round(blocksLeft * 2 / 60))} min`;
+  })();
+  const ordersLeftText = status?.ordersLeft == null ? '' : status.ordersLeft > 100_000 ? ' · >100k orders' : ` · ≈${status.ordersLeft.toLocaleString()} orders`;
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
@@ -333,10 +341,18 @@ function OneClickSection() {
       {isConnected && oneClickEnabled && rec && status && (
         <div className="text-[10px] text-dim font-mono flex flex-wrap gap-x-3 gap-y-0.5">
           <span>agent {rec.address.slice(0, 8)}…{rec.address.slice(-4)}</span>
-          <span>gas {status.gasMrsn === null ? '—' : status.gasMrsn.toFixed(3)} MRSN{status.gasMrsn !== null && status.gasMrsn < AGENT_GAS_LOW_MRSN ? ' (low)' : ''}</span>
-          <span>expires in ~{Math.round(blocksLeft * 2 / 3600)} h</span>
+          <span>gas {status.gasMrsn === null ? '—' : status.gasMrsn.toFixed(3)} MRSN{ordersLeftText}{status.gasMrsn !== null && status.gasMrsn < AGENT_GAS_LOW_MRSN ? ' (low)' : ''}</span>
+          <span>permission expires in {expiresIn}</span>
           <button onClick={topUp} disabled={!!busy} className="text-primary hover:underline">{busy === 'gas' ? 'sending…' : `top up ${AGENT_GAS_TOPUP_MRSN} MRSN gas`}</button>
         </div>
+      )}
+      {isConnected && oneClickEnabled && rec && status && (
+        <p className="text-[10px] text-dim leading-relaxed">
+          The key is an ordinary wallet kept in this browser; its MRSN only pays gas for the orders it signs
+          (about 0.00007 MRSN each). Nothing is lost when the permission expires or you stop using it: the
+          gas stays in the key, <span className="text-foreground/80">Revoke</span> returns it to your wallet, and enabling again later
+          reuses the same key and balance — one confirmation, no new gas unless it ran low.
+        </p>
       )}
     </div>
   );

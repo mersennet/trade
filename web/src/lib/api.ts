@@ -73,7 +73,7 @@ export const api = {
   // NOTE: on-chain orders are cancelled with a signed tx via
   // cancelOrderOnChain (lib/orderSigning.ts) — there is no server-side cancel.
   getCollateral: (addr: string) =>
-    apiFetch<{ collateral: number; free: number; collateralRaw: string; decimals: number }>(`/collateral/${addr}`),
+    apiFetch<{ collateral: number; native: number; tokenMarginValue: number; tokens: { token: string; symbol: string; amount: number; marginValue: number; weightBps: number }[]; free: number; collateralRaw: string; decimals: number }>(`/collateral/${addr}`),
   // The collateral endpoints return calldata + the raw amount; the FRONTEND
   // then prompts the wallet to sign the approval + deposit/withdraw txs.
   // Use `useVault()` (lib/vault.ts) instead of calling these directly.
