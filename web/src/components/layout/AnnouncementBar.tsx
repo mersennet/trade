@@ -81,7 +81,8 @@ export default function AnnouncementBar() {
     setHydrated(true);
   }, []);
 
-  const active = ANNOUNCEMENTS.filter((a) => !dismissed.includes(a.id) && (a.showWhen ? a.showWhen(protocol) : true));
+  const armed = new Set(Object.keys(etas).map(Number));
+  const active = ANNOUNCEMENTS.filter((a) => !dismissed.includes(a.id) && (a.showWhen ? a.showWhen(protocol, armed) : true));
   // "{eta:1605600}" → "Sun 20 Sep, 16:23 UTC (live estimate, block 1,605,600)"; falls back to "block 1,605,600" when no ETA is known.
   const withEtas = (text: string) => text.replace(/\{eta:(\d+)\}/g, (_m, h: string) => {
     const iso = etas[Number(h)];

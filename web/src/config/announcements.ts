@@ -15,13 +15,31 @@ export interface Announcement {
    * Optional gate on live protocol state so an entry appears / disappears at
    * a consensus switch by itself (no deploy at the weekend). `p` is null
    * until the first /protocol answer; return false to hide until known.
+   * `armed` holds the heights of the switches the network's nodes have
+   * configured (from /protocol/switches), so an entry can wait until a
+   * release that arms its switch is actually running.
    */
-  showWhen?: (p: ClobProtocol | null) => boolean;
+  showWhen?: (p: ClobProtocol | null, armed: Set<number>) => boolean;
 }
 
 // One live item at a time: the bar shows the newest undismissed entry and
 // never rotates (motion on a trading screen costs attention). Newest first.
 export const ANNOUNCEMENTS: Announcement[] = [
+  {
+    // After the 3 Oct switch.
+    id: 'validators-50-live-2026-10-03',
+    text: 'The validator set now has 50 slots: register a node with 1,000 MRSN self-stake and it produces blocks from the next hourly epoch. Node runners earn 500 points a day.',
+    link: { href: '/staking', label: 'Become a validator' },
+    showWhen: (p) => !!p && p.height >= 2127600,
+  },
+  {
+    // Appears once the fleet runs the 30 Sep release (which arms block 2,127,600), until the switch.
+    id: 'switch-2026-10-03',
+    lead: 'Next protocol upgrade:',
+    text: '{eta:2127600} — the validator set grows from 12 to 50 slots, so every registered validator with the minimum self-stake produces blocks. Validators: upgrade to the 30 Sep release before that block.',
+    link: { href: 'https://explorer.mersennet.com/upgrades', label: 'Upgrade schedule' },
+    showWhen: (p, armed) => !!p && armed.has(2127600) && p.height < 2127600,
+  },
   {
     // After the 29 Sep switch: the two changes, past tense. Hides itself until then.
     id: 'fees-reasons-live-2026-09-29',
