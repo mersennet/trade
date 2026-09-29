@@ -41,11 +41,7 @@ async function fetchPerpPositions(address) {
 
 async function getMarkPrice(marketId) {
   try {
-    const ba = await chain.getBestBidAsk(marketId);
-    const bid = chain.toHumanPrice(marketId, ba.bestBid);
-    const ask = chain.toHumanPrice(marketId, ba.bestAsk);
-    if (bid > 0 && ask > 0) return (bid + ask) / 2;
-    return bid || ask || 0;
+    return chain.toHumanPrice(marketId, await chain.getMarkPrice(marketId)) || 0;
   } catch (_) {
     return 0;
   }

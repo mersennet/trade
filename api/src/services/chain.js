@@ -131,6 +131,9 @@ async function rpcCall(method, params = []) {
     const json = await res.json();
     if (json.error) throw new Error(json.error.message || JSON.stringify(json.error));
     return json.result;
+  } catch (e) {
+    e.upstream = true;
+    throw e;
   } finally {
     clearTimeout(timer);
   }
@@ -175,10 +178,15 @@ function rawToUnits(raw, decimals) {
 // Per-account reads (precompile eth_call with `from` = trader)
 // ---------------------------------------------------------------------
 
+const FLAT_POSITION = Object.freeze({ sizeRaw: '0', size: 0, entryPriceRaw: '0', entryPrice: 0, entryNotionalRaw: '0', entryNotional: 0, reservedMargin: 0, reservedMarginRaw: '0' });
+
+// RPC failures propagate: a caller that read them as "no position" would show
+// an open position as closed and price liquidations off zero collateral.
 async function getPosition(marketId, address) {
+  const data = PRECOMPILE_IFACE.encodeFunctionData('getPosition', [marketId]);
+  const r = await ethCall(data, address);
+  if (typeof r !== 'string' || r.startsWith('0x08c379a0')) return { ...FLAT_POSITION };
   try {
-    const data = PRECOMPILE_IFACE.encodeFunctionData('getPosition', [marketId]);
-    const r = await ethCall(data, address);
     const [size, entryPrice] = PRECOMPILE_IFACE.decodeFunctionResult('getPosition', r);
     const sizeRaw = size.toString();
     const entryPriceRaw = entryPrice.toString();
@@ -195,14 +203,15 @@ async function getPosition(marketId, address) {
       reservedMarginRaw: '0',
     };
   } catch {
-    return { sizeRaw: '0', size: 0, entryPriceRaw: '0', entryPrice: 0, entryNotionalRaw: '0', entryNotional: 0, reservedMargin: 0, reservedMarginRaw: '0' };
+    return { ...FLAT_POSITION };
   }
 }
 
 async function getCollateralRaw(address) {
+  const data = PRECOMPILE_IFACE.encodeFunctionData('getCollateral', []);
+  const r = await ethCall(data, address);
+  if (typeof r !== 'string' || r.startsWith('0x08c379a0')) return '0';
   try {
-    const data = PRECOMPILE_IFACE.encodeFunctionData('getCollateral', []);
-    const r = await ethCall(data, address);
     const [collateral] = PRECOMPILE_IFACE.decodeFunctionResult('getCollateral', r);
     return collateral.toString();
   } catch {
@@ -354,15 +363,44 @@ async function getBestBidAsk(marketId) {
   }
 }
 
-/** Mark price = order book mid, raw 1e18 string. Falls back to best side or '0'. */
+// While the market maker requotes, a side of the book can lose its quotes for
+// a block, leaving a stray resting order as the best price ($10 bids on MRSN
+// at $115). Marking positions, stops and alerts there fires them falsely, so
+// a book wider than 1% (quotes are ~0.1% wide) is marked at the median of bid,
+// ask and last trade, and a one-sided book keeps the last good mark.
+const _lastMark = new Map();
+const MARK_FALLBACK_MS = 10 * 60_000;
+
+/** Mark from book top and last trade (BigInt raw units, 0n = absent); null when a side is missing. */
+function markFromBook(bid, ask, last) {
+  if (bid <= 0n || ask <= 0n) return null;
+  const mid = (bid + ask) / 2n;
+  if (ask - bid <= mid / 100n || last <= 0n) return mid;
+  return [bid, ask, last].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))[1];
+}
+
+async function lastTradePrice(marketId) {
+  const markets = await rpcCall('mersennet_orders_getMarkets', []);
+  const m = (markets || []).find((x) => Number(x.id) === Number(marketId));
+  return m && m.lastPrice ? BigInt(m.lastPrice) : 0n;
+}
+
+/** Mark price in raw chain units (see markFromBook); '0' when there is no price at all. */
 async function getMarkPrice(marketId) {
-  const { bestBid, bestAsk } = await getBestBidAsk(marketId);
+  const id = Number(marketId);
+  const { bestBid, bestAsk } = await getBestBidAsk(id);
   const bid = BigInt(bestBid);
   const ask = BigInt(bestAsk);
-  if (bid > 0n && ask > 0n) return ((bid + ask) / 2n).toString();
-  if (bid > 0n) return bid.toString();
-  if (ask > 0n) return ask.toString();
-  return '0';
+  const wide = bid > 0n && ask > 0n && ask - bid > (bid + ask) / 200n;
+  const mark = markFromBook(bid, ask, wide ? await lastTradePrice(id).catch(() => 0n) : 0n);
+  if (mark != null) {
+    _lastMark.set(id, { mark, at: Date.now() });
+    return mark.toString();
+  }
+  const kept = _lastMark.get(id);
+  if (kept && Date.now() - kept.at < MARK_FALLBACK_MS) return kept.mark.toString();
+  const last = await lastTradePrice(id).catch(() => 0n);
+  return (last > 0n ? last : bid > 0n ? bid : ask).toString();
 }
 
 /** Display-only price with age. Mersennet matches on-chain, so mid is never stale. */
@@ -682,6 +720,7 @@ module.exports = {
   getCollateralAssets,
   getMarginCollateral,
   getMarkPrice,
+  markFromBook,
   getOraclePriceForDisplay,
   getOpenInterest,
   getInsuranceFundUsd,
