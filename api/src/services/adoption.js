@@ -63,15 +63,30 @@ async function computeSlow() {
   return { sendersTotal: senders, fundedWalletsTotal: funded, contractsDeployed: contracts, txTotal, telegramMembers: telegram, github };
 }
 
-function slowCached() {
-  const now = Date.now();
-  if (slow.body && now - slow.at < SLOW_TTL) return Promise.resolve(slow.body);
+/**
+ * A copy past its TTL is still served while its refresh runs in the
+ * background; only the very first computation is awaited. The slow set's
+ * scans take ~12 s, and no visitor should ever wait for them.
+ */
+function staleWhileRefreshing(state, ttl, refresh, label) {
+  if (state.body && Date.now() - state.at < ttl) return Promise.resolve(state.body);
+  const pending = refresh();
+  if (!state.body) return pending;
+  pending.catch((e) => console.warn(`[adoption] ${label} refresh failed:`, e.message));
+  return Promise.resolve(state.body);
+}
+
+function refreshSlow() {
   if (!slow.inflight) {
     slow.inflight = computeSlow()
-      .then((body) => { slow.at = Date.now(); slow.body = body; slow.inflight = null; return body; })
-      .catch((e) => { slow.inflight = null; if (slow.body) return slow.body; throw e; });
+      .then((body) => { slow.at = Date.now(); slow.body = body; return body; })
+      .finally(() => { slow.inflight = null; });
   }
   return slow.inflight;
+}
+
+function slowCached() {
+  return staleWhileRefreshing(slow, SLOW_TTL, refreshSlow, 'slow set');
 }
 
 // ---------------------------------------------------------------- fast set
@@ -251,9 +266,7 @@ async function computeFast() {
   };
 }
 
-async function getAdoption() {
-  const now = Date.now();
-  if (fast.body && now - fast.at < FAST_TTL) return fast.body;
+function refreshFast() {
   if (!fast.inflight) {
     fast.inflight = (async () => {
       const body = await computeFast();
@@ -268,10 +281,14 @@ async function getAdoption() {
       } catch { /* leave null */ }
       return body;
     })()
-      .then((body) => { fast.at = Date.now(); fast.body = body; fast.inflight = null; return body; })
-      .catch((e) => { fast.inflight = null; throw e; });
+      .then((body) => { fast.at = Date.now(); fast.body = body; return body; })
+      .finally(() => { fast.inflight = null; });
   }
   return fast.inflight;
+}
+
+function getAdoption() {
+  return staleWhileRefreshing(fast, FAST_TTL, refreshFast, 'fast set');
 }
 
 /** Internal extras (admin key): the addresses behind the aggregates, node hosts, faucet concentration. */
@@ -295,10 +312,12 @@ async function getInternal() {
 module.exports = { getAdoption, getInternal };
 
 // Keep the cache warm: the first computation scans the whole transaction
-// index (~12 s); visitors should only ever hit the cached copy. Skipped
-// without a database (CI module-load checks, unit tests).
+// index (~12 s); visitors should only ever hit the cached copy. The timer
+// refreshes unconditionally: its period is shorter than the TTL, so a TTL
+// check would skip every other tick. Skipped without a database (CI
+// module-load checks, unit tests).
 if (process.env.DATABASE_URL && process.env.NODE_ENV !== 'test') {
-  const warm = () => getAdoption().catch((e) => console.warn('[adoption] warm-up failed:', e.message));
+  const warm = () => refreshFast().catch((e) => console.warn('[adoption] warm-up failed:', e.message));
   setTimeout(warm, 8_000).unref();
   setInterval(warm, FAST_TTL - 30_000).unref();
 }
