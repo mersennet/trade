@@ -611,10 +611,13 @@ async function upcomingSwitches() {
     benchHeight: 'Benching after 3 missed leader slots',
     jailEscalationHeight: 'Escalating jail',
     rewardsToOperatorHeight: 'Block rewards to the operator wallet',
+    revertReasonsHeight: 'Refused orders return their reason',
+    feeFloorHeight: '1 gwei base-fee floor and fee split',
+    maxValidatorsHeight: 'Up to 50 validators',
   };
   const all = { ...(p.switches || {}) };
   const vp = vset && vset.params;
-  if (vp) for (const k of ['benchHeight', 'jailEscalationHeight', 'rewardsToOperatorHeight']) if (typeof vp[k] === 'number') all[k] = vp[k];
+  if (vp) for (const k of ['benchHeight', 'jailEscalationHeight', 'rewardsToOperatorHeight', 'maxValidatorsHeight']) if (typeof vp[k] === 'number') all[k] = vp[k];
   const now = Date.now();
   const switches = Object.entries(all)
     .filter(([, h]) => typeof h === 'number' && h > height)
