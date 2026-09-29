@@ -128,7 +128,7 @@ export default function LeaderboardPage() {
                 <th className="text-right px-4 py-2.5 hidden md:table-cell">Node</th>
                 <th className="text-right px-4 py-2.5 hidden md:table-cell" title="Maker vault deposits: 0.1 point per MRSN per day">Vault LP</th>
                 <th className="text-right px-4 py-2.5 hidden md:table-cell">Referral</th>
-                <th className="text-right px-4 py-2.5 hidden md:table-cell">Bonus</th>
+                <th className="text-right px-4 py-2.5 hidden md:table-cell" title="Weekly sprint prizes and bug bounty awards">Bonus</th>
                 <th className="text-right px-4 py-2.5">Tier</th>
               </tr>
             </thead>
