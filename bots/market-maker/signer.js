@@ -58,6 +58,14 @@ const GAS_PRICE_CACHE_MS = 10_000;
 // within a 10s refresh cycle.
 const SEND_SPACING_MS = Number(process.env.BOT_SEND_SPACING_MS || 120);
 
+// A node that already holds a nonce refuses an identical resend as an
+// underpriced replacement ("fee too low"): its copy stays, and if the
+// validators never received that copy the wallet is stuck on that nonce for
+// good. Nodes replace at +10%, so each refused resend of a nonce pays this
+// much more, per step, up to BUMP_MAX_STEPS.
+const BUMP_STEP_PCT = 15n;
+const BUMP_MAX_STEPS = 6;
+
 /** Deterministic bot private key for a labelled slot (e.g. "maker", "taker-3"). */
 function deriveKey(label) {
   return ethers.keccak256(ethers.toUtf8Bytes(`${BOT_SEED}:${label}`));
@@ -87,6 +95,8 @@ class BotWallet {
     this._stallResyncs = 0;
     this._skipped = 0;
     this._lastSendAt = 0;
+    // { nonce, steps }: the price bump for a nonce a node refused as underpriced.
+    this._bump = null;
   }
 
   async rpc(method, params = []) {
@@ -173,7 +183,10 @@ class BotWallet {
           return null;
         }
       }
-      const gasPrice = await this.gasPrice();
+      let gasPrice = await this.gasPrice();
+      if (this._bump && this._bump.nonce === this._nonce) {
+        gasPrice = (gasPrice * (100n + BUMP_STEP_PCT * BigInt(this._bump.steps))) / 100n;
+      }
       const wait = this._lastSendAt + SEND_SPACING_MS - Date.now();
       if (wait > 0) await new Promise((r) => setTimeout(r, wait));
       this._lastSendAt = Date.now();
@@ -191,10 +204,17 @@ class BotWallet {
       try {
         const hash = await this.rpc('eth_sendRawTransaction', [raw]);
         this._nonce++;
+        if (this._bump && this._nonce > this._bump.nonce) this._bump = null;
         return hash;
       } catch (e) {
+        const msg = e.message || '';
         // On a nonce error, resync so the next attempt recovers.
-        if (/nonce|already known|replacement/i.test(e.message || '')) this._nonce = null;
+        if (/nonce|already known|replacement/i.test(msg)) this._nonce = null;
+        if (/fee too low/i.test(msg) && this._nonce != null) {
+          const steps = this._bump && this._bump.nonce === this._nonce ? this._bump.steps : 0;
+          this._bump = { nonce: this._nonce, steps: Math.min(steps + 1, BUMP_MAX_STEPS) };
+          console.warn(`[${this.label}] nonce ${this._nonce} refused as underpriced; resending at +${Number(BUMP_STEP_PCT) * this._bump.steps}%`);
+        }
         throw e;
       }
     });
