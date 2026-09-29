@@ -118,10 +118,10 @@ export default function VaultPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatTile label="Vault NAV" value={chain ? `${formatNumber(chain.nav, 2)} MRSN` : '—'} hint="Free MRSN + collateral on the precompile + unrealized PnL at book mid" />
         <StatTile label="Share price" value={chain ? `${chain.sharePrice.toFixed(6)} MRSN` : '—'} valueClass={chain && chain.sharePrice >= 1 ? 'text-green' : 'text-red'} hint="MRSN per mvMRSN share (starts at 1.000000)" />
-        {indexed && indexed.apy7d ? (
-          <StatTile label="APY (7d)" value={formatPct(indexed.apy7d)} valueClass={indexed.apy7d >= 0 ? 'text-green' : 'text-red'} hint="Share-price change over the last 7 days, annualised" />
+        {indexed && indexed.return7d ? (
+          <StatTile label="7-day return" value={formatPct(indexed.return7d)} valueClass={indexed.return7d >= 0 ? 'text-green' : 'text-red'} hint="Share-price change over the last 7 days, not annualised: on the testnet the maker trades against the network's own bots, so a yearly rate would mean nothing" />
         ) : (
-          <StatTile label="Since launch" value={chain ? formatPct((chain.sharePrice - 1) * 100) : '—'} valueClass={!chain || chain.sharePrice >= 1 ? 'text-green' : 'text-red'} hint="Share-price change since the vault opened (20 Sep). The 7-day APY appears once the vault is a week old." />
+          <StatTile label="Since launch" value={chain ? formatPct((chain.sharePrice - 1) * 100) : '—'} valueClass={!chain || chain.sharePrice >= 1 ? 'text-green' : 'text-red'} hint="Share-price change since the vault opened (20 Sep). The 7-day return appears once the vault is a week old." />
         )}
         <StatTile label="Depositors" value={chain ? String(chain.depositors) : '—'} hint={chain && chain.seedShares > 0 ? 'Including the protocol\'s seed deposit' : undefined} />
       </div>

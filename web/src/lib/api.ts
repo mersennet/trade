@@ -378,7 +378,7 @@ export interface CompletedUpgrade { key: string; label: string; detail: string; 
 export interface UpcomingUpgrade extends ProtocolSwitch { detail: string; announcedAt: string | null; }
 export interface ProtocolUpgrades { blockTimeSec: number; height: number | null; upcoming: UpcomingUpgrade[]; completed: CompletedUpgrade[]; }
 export interface VaultInfo { address: string; activeFromBlock: number | null; active: boolean; height: number | null; symbol: string; asset: string; minDepositMrsn: number; reserveBps: number; lpPointsPerMrsnDay: number; }
-export interface VaultState { totalShares: number; totalTvl: number; totalPnl: number; apy7d: number; apy30d: number; depositors: number; }
+export interface VaultState { totalShares: number; totalTvl: number; totalPnl: number; apy7d: number; apy30d: number; return7d?: number; return30d?: number; depositors: number; }
 export interface VaultUserState { address: string; shares: number; value: number; shareOfVault: string; lpPoints?: number; history: unknown[]; }
 export interface StakingState { totalStaked: number; totalRewardsDistributed: number; rewardRate: number; stakersCount: number; }
 export interface StakingUserState { address: string; staked: number; rewardsPending: number; unbonding: number; unbondAvailableAt: string | null; }

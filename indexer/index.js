@@ -1159,6 +1159,8 @@ async function ensureVaultSchema() {
   await pool.query(`ALTER TABLE vault_deposits ADD COLUMN IF NOT EXISTS tx_hash TEXT`).catch(() => {});
   await pool.query(`ALTER TABLE vault_deposits ADD COLUMN IF NOT EXISTS block_number BIGINT`).catch(() => {});
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_vault_deposits_tx ON vault_deposits (tx_hash, address, action) WHERE tx_hash IS NOT NULL`).catch(() => {});
+  await pool.query(`ALTER TABLE vault_state ADD COLUMN IF NOT EXISTS return_7d NUMERIC(20, 6) NOT NULL DEFAULT 0`).catch(() => {});
+  await pool.query(`ALTER TABLE vault_state ADD COLUMN IF NOT EXISTS return_30d NUMERIC(20, 6) NOT NULL DEFAULT 0`).catch(() => {});
   await pool.query(`INSERT INTO vault_index_state (id, last_block) VALUES (1, $1) ON CONFLICT DO NOTHING`, [VAULT_DEPLOY_BLOCK]);
 }
 
@@ -1199,25 +1201,28 @@ async function indexVault() {
     const net = await pool.query(`SELECT COALESCE(SUM(CASE WHEN action = 'deposit' THEN amount ELSE -amount END), 0)::float8 AS net FROM vault_deposits WHERE tx_hash IS NOT NULL`);
     const navH = Number(nav) / WEI;
     const pnl = navH - Number(net.rows[0].net || 0);
-    // 7d / 30d APY from the share price trajectory (first event in the window vs now).
-    const apy = async (days) => {
-      // Share price at the first event at least `days` ago vs now, annualised.
-      // 0 until the vault is older than the window (a six-day-old vault
-      // annualised to seven figures is noise, not a rate); the page shows the
-      // plain return since launch from the on-chain share price meanwhile.
+    // LP points first: they must not depend on the state row below being writable.
+    await awardLpPoints(navH, Number(shares) / WEI).catch((e) => console.error('[vault] lp points failed:', e.message));
+    // 7d / 30d share-price change (first event in the window vs now): plain and annualised.
+    // 0 until the vault is older than the window. On the testnet the maker trades against
+    // the network's own bots, so an annualised weekly swing is astronomical: the columns
+    // (NUMERIC(20, 6)) hold it clamped, and the page shows the plain return.
+    const perf = async (days) => {
       const r = await pool.query(`SELECT shares, amount FROM vault_deposits WHERE tx_hash IS NOT NULL AND created_at <= NOW() - ($1 || ' days')::interval AND shares > 0 ORDER BY created_at DESC LIMIT 1`, [String(days)]);
-      if (!r.rows[0] || Number(shares) === 0) return 0;
+      if (!r.rows[0] || Number(shares) === 0) return { ret: 0, apy: 0 };
       const oldPx = Number(r.rows[0].amount) / Number(r.rows[0].shares);
       const nowPx = navH / (Number(shares) / WEI);
-      return oldPx > 0 ? ((nowPx / oldPx) ** (365 / days) - 1) * 100 : 0;
+      if (!(oldPx > 0)) return { ret: 0, apy: 0 };
+      return { ret: (nowPx / oldPx - 1) * 100, apy: ((nowPx / oldPx) ** (365 / days) - 1) * 100 };
     };
+    const fit = (x) => (Number.isFinite(x) ? Math.max(-1e12, Math.min(x, 1e12)) : 0);
+    const [p7, p30] = [await perf(7), await perf(30)];
     await pool.query(
-      `INSERT INTO vault_state (id, total_shares, total_tvl, total_pnl, apy_7d, apy_30d, depositors, updated_at)
-       VALUES (1, $1, $2, $3, $4, $5, $6, NOW())
-       ON CONFLICT (id) DO UPDATE SET total_shares = $1, total_tvl = $2, total_pnl = $3, apy_7d = $4, apy_30d = $5, depositors = $6, updated_at = NOW()`,
-      [Number(shares) / WEI, navH, pnl, await apy(7), await apy(30), Number(depositors)]
+      `INSERT INTO vault_state (id, total_shares, total_tvl, total_pnl, apy_7d, apy_30d, return_7d, return_30d, depositors, updated_at)
+       VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, NOW())
+       ON CONFLICT (id) DO UPDATE SET total_shares = $1, total_tvl = $2, total_pnl = $3, apy_7d = $4, apy_30d = $5, return_7d = $6, return_30d = $7, depositors = $8, updated_at = NOW()`,
+      [Number(shares) / WEI, navH, pnl, fit(p7.apy), fit(p30.apy), fit(p7.ret), fit(p30.ret), Number(depositors)]
     );
-    await awardLpPoints(navH, Number(shares) / WEI);
   } catch (e) {
     console.error('[vault] index failed:', e.message);
   }

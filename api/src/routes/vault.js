@@ -44,13 +44,16 @@ router.get('/state', async (req, res) => {
   try {
     const state = await pool.query('SELECT * FROM vault_state WHERE id = 1');
     const s = state.rows[0];
-    if (!s) return res.json({ totalShares: 0, totalTvl: 0, totalPnl: 0, apy7d: 0, apy30d: 0, depositors: 0, updatedAt: null });
+    if (!s) return res.json({ totalShares: 0, totalTvl: 0, totalPnl: 0, apy7d: 0, apy30d: 0, return7d: 0, return30d: 0, depositors: 0, updatedAt: null });
     res.json({
       totalShares: Number(s.total_shares),
       totalTvl: Number(s.total_tvl),
       totalPnl: Number(s.total_pnl),
       apy7d: Number(s.apy_7d),
       apy30d: Number(s.apy_30d),
+      // Share-price change over the window, not annualised.
+      return7d: Number(s.return_7d ?? 0),
+      return30d: Number(s.return_30d ?? 0),
       depositors: s.depositors,
       updatedAt: s.updated_at,
     });
