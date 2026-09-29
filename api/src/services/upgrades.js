@@ -19,7 +19,7 @@ const chain = require('./chain');
 const STANDBY = process.env.API_ROLE === 'standby';
 
 /** Everything the RPC exposes as a switch, past or future, by key → height. */
-const VSET_KEYS = ['activationHeight', 'benchHeight', 'jailEscalationHeight', 'rewardsToOperatorHeight'];
+const VSET_KEYS = ['activationHeight', 'benchHeight', 'jailEscalationHeight', 'rewardsToOperatorHeight', 'maxValidatorsHeight'];
 async function allSwitches() {
   const [p, vset] = await Promise.all([
     chain.getProtocol(),
@@ -38,6 +38,7 @@ const META = {
   rewardsToOperatorHeight: ['Block rewards to the operator wallet', 'Rewards are credited to the operator address instead of the node identity.'],
   benchHeight: ['Benching after 3 missed leader slots', 'A validator that misses three leader slots leaves the rotation until the epoch boundary.'],
   jailEscalationHeight: ['Escalating jail', 'Consecutive jails last 1, 2, 4, 8, 16 then 24 epochs.'],
+  maxValidatorsHeight: ['Up to 50 validators', 'The active set grows from 12 to 50 slots at the epoch boundary: every registered validator with the minimum self-stake produces blocks, still ranked by stake if more than 50 register.'],
   agentDelegationHeight: ['Agent keys for one-click trading', 'setAgent / revokeAgent on the order-book precompile: a delegated key trades for the owner until its expiry.'],
   priceScaleHeight: ['$0.01 ticks on MRSN, SOL and ARB', 'Those markets move to priceScale 100; on-chain prices are human × 100 and the order books are rescaled in place.'],
   frameCallerHeight: ['Contracts own their CLOB accounts', 'Precompiles authorise the calling frame (msg.sender), not the transaction origin — contracts such as the Maker Vault act as themselves.'],
