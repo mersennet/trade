@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import { useStore, type Bracket } from '@/stores/useStore';
 import { useWallet } from '@/hooks/useWallet';
 import { useToast } from '@/components/shared/Toast';
+import { livePositionSize } from '@/lib/positions';
 
 /**
  * Client-side TP/SL bracket watcher.
@@ -40,6 +41,18 @@ export function useBrackets() {
     let lastErr: Error | null = null;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       try {
+        // Close what is held now: the position may have shrunk, closed or
+        // flipped since the bracket was set, and an order for the old size
+        // would then open or flip a position instead of closing one.
+        const live = await livePositionSize(b.owner, b.marketId);
+        if (live === null) throw new Error('could not read the position from the chain');
+        const held = b.isLong ? live : -live;
+        if (held <= 0) {
+          removeBracket(b.id);
+          useStore.getState().addNotification('info', `${label} removed`, `Market ${b.marketId}: the position it protected is already closed.`);
+          return;
+        }
+        const closeSize = Math.min(Math.floor(Number(b.size)), held);
         const price = await marketableLimitPrice(
           b.marketId,
           isBuy,
@@ -50,12 +63,12 @@ export function useBrackets() {
           marketId: b.marketId,
           isBuy,
           priceUsd: price,
-          sizeBase: b.size,
+          sizeBase: String(closeSize),
           tif: 'Ioc',
           sessionKey: oneClickEnabled ? sessionKey || undefined : undefined,
         });
-        toast(`${label} triggered — closing ${b.size} (market ${b.marketId})`, 'success');
-        useStore.getState().addNotification('fill', `${label} triggered`, `Closed ${b.size} on market ${b.marketId} @ ${tickers[b.marketId]?.markPrice ?? '—'}`);
+        toast(`${label} triggered — closing ${closeSize} (market ${b.marketId})`, 'success');
+        useStore.getState().addNotification('fill', `${label} triggered`, `Closed ${closeSize} on market ${b.marketId} @ ${tickers[b.marketId]?.markPrice ?? '—'}`);
         removeBracket(b.id);
         return;
       } catch (e) {

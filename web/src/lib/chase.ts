@@ -45,6 +45,8 @@ interface ChaseState {
   owner: string;
   orderId: bigint | null;
   price: bigint;
+  /** Unfilled size of the resting order as last read; a re-peg places only this. */
+  remaining: bigint | null;
   reprices: number;
   timer: ReturnType<typeof setInterval> | null;
   busy: boolean;
@@ -118,7 +120,7 @@ async function placeAt(state: ChaseState, price: bigint): Promise<void> {
     state.params.marketId,
     state.params.isBuy,
     price.toString(),
-    state.params.size,
+    (state.remaining ?? BigInt(state.params.size)).toString(),
     0, // GTC
     FLAG_POST_ONLY,
     0,
@@ -173,9 +175,14 @@ async function tick(id: string): Promise<void> {
   try {
     // Fill detection: our resting order vanished without us cancelling it.
     if (state.orderId !== null) {
-      const orders = (await rpc('mersennet_orders_getOpenOrders', [state.owner])) as Array<{ id: string }>;
-      const stillOpen = orders.some((o) => toBig(o.id) === state.orderId);
-      if (!stillOpen) {
+      const orders = (await rpc('mersennet_orders_getOpenOrders', [state.owner])) as Array<{ id: string; size?: string }>;
+      const mine = orders.find((o) => toBig(o.id) === state.orderId);
+      if (!mine) {
+        stopChase(id, 'filled');
+        return;
+      }
+      if (mine.size !== undefined) state.remaining = toBig(mine.size);
+      if (state.remaining === 0n) {
         stopChase(id, 'filled');
         return;
       }
@@ -225,6 +232,7 @@ export async function startChase(params: ChaseParams): Promise<string> {
     owner,
     orderId: null,
     price: 0n,
+    remaining: null,
     reprices: 0,
     timer: null,
     busy: true, // hold ticks until the initial placement lands
