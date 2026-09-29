@@ -69,9 +69,10 @@ router.get('/:address', async (req, res) => {
 
     const ranking = await pool.query(
       `SELECT COUNT(*) + 1 as rank FROM points_balance
-       WHERE season = $1 AND total_points > COALESCE((
-         SELECT total_points FROM points_balance WHERE address = $2 AND season = $1
-       ), 0)`,
+       WHERE season = $1 AND address NOT IN (SELECT address FROM excluded_addresses)
+         AND total_points > COALESCE((
+           SELECT total_points FROM points_balance WHERE address = $2 AND season = $1
+         ), 0)`,
       [season, addr]
     );
 
@@ -102,7 +103,8 @@ router.get('/leaderboard/season/:season', async (req, res) => {
     const result = await pool.query(
       `SELECT address, total_points, trading_points, lp_points, referral_points, tier,
               COALESCE(node_points, 0) AS node_points, COALESCE(bonus_points, 0) AS bonus_points
-       FROM points_balance WHERE season = $1 AND total_points > 0
+       FROM points_balance
+       WHERE season = $1 AND total_points > 0 AND address NOT IN (SELECT address FROM excluded_addresses)
        ORDER BY total_points DESC LIMIT $2`,
       [season, limit]
     );

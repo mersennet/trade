@@ -97,7 +97,18 @@ export default function AnnouncementBar() {
     localStorage.setItem('mersennet-trade_announcements_dismissed', JSON.stringify(next));
   };
 
-  if (!hydrated || !settled) return null;
+  // Until the first /protocol answer says what the line shows, keep its height
+  // with an empty line, so the page does not jump down when it appears — unless
+  // this visitor has dismissed everything there is to show.
+  if (!hydrated || !settled) {
+    if (hydrated && ANNOUNCEMENTS.every((a) => dismissed.includes(a.id))) return null;
+    return (
+      <div aria-hidden className="bg-surface border-b border-border px-3 md:px-4 py-1.5 flex items-center gap-2 text-[10.5px]">
+        <span className="text-primary font-bold shrink-0 select-none">&gt;&gt;</span>
+        <p className="text-muted truncate">&nbsp;</p>
+      </div>
+    );
+  }
 
   if (incident && !dismissed.includes(incident.id)) {
     const tone = INCIDENT_TONE[incident.severity];
