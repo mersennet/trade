@@ -19,7 +19,7 @@ import TelegramAlerts from '@/components/shared/TelegramAlerts';
 import type { ClobProtocol } from '@/lib/api';
 
 export default function AccountPanel() {
-  const { positions, marginMode } = useStore();
+  const { positions } = useStore();
   const collateral = useStore((s) => Number(s.wallet.collateral) || 0);
   // Native part of the margin — the only part a native (MRSN) withdrawal can move.
   const collateralNative = useStore((s) => Number(s.wallet.collateralNative) || 0);
@@ -54,7 +54,7 @@ export default function AccountPanel() {
     Promise.all([api.getStats(), api.getTraderProfile(address)])
       .then(([stats, profile]) => {
         const tiers = (stats.feeTiers || []) as { name: string; minVolume: number; makerFee: number; takerFee: number }[];
-        const vol = Number(profile?.stats?.['30d']?.volume ?? profile?.stats?.['all']?.volume ?? 0);
+        const vol = Number(profile?.stats?.['monthly']?.volume ?? profile?.stats?.['alltime']?.volume ?? 0);
         const tier = [...tiers].sort((a, b) => b.minVolume - a.minVolume).find((t) => vol >= t.minVolume) || tiers[0];
         if (tier) setFeeTier(tier);
         setFeesCharged(stats.feesCharged === true);
@@ -138,14 +138,17 @@ export default function AccountPanel() {
       return sum + (size * mark);
     }, 0);
     const accountEquity = collateral + totalUnrealizedPnl;
-    const marginRatio = collateral > 0 ? (totalNotional / collateral) * 100 : 0;
-    const availableMargin = Math.max(0, collateral - (totalNotional * 0.05));
     // provider.getBalance returns the wallet's native MRSN balance (18 decimals).
     const nativeBalance = Number(balance || '0') / 1e18;
 
     // Liquidation math (settlement era): equity vs maintenance margin.
     const mmBps = protocol?.settlementActive ? Number(protocol.maintenanceMarginBps || 0) : 0;
+    const imBps = protocol?.settlementActive ? Number(protocol.initialMarginBps || 0) : 0;
     const maintenance = totalNotional * mmBps / 10_000;
+    // What new orders can use: equity above the initial margin open positions need.
+    const availableMargin = Math.max(0, accountEquity - totalNotional * imBps / 10_000);
+    // Margin ratio as exchanges show it: maintenance margin over equity (100% = liquidation).
+    const marginRatio = maintenance > 0 ? (accountEquity > 0 ? Math.min(100, (maintenance / accountEquity) * 100) : 100) : 0;
     const liqRatio = maintenance > 0 ? accountEquity / maintenance : Infinity;
     const liqRisk = maintenance > 0 && liqRatio < 1.6;
     const liquidatable = maintenance > 0 && accountEquity <= maintenance;
@@ -211,7 +214,7 @@ export default function AccountPanel() {
           <span className="text-xs font-mono font-medium text-foreground">{formatNumber(stats.availableMargin, 2)} MRSN</span>
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-[11px] text-dim">{marginMode === 'cross' ? 'Cross' : 'Isolated'} Margin Ratio</span>
+          <span className="text-[11px] text-dim">Cross Margin Ratio</span>
           <span className={cn(
             'text-xs font-mono font-semibold',
             stats.marginRatio > 80 ? 'text-red' : stats.marginRatio > 50 ? 'text-yellow' : 'text-foreground'
@@ -220,7 +223,7 @@ export default function AccountPanel() {
           </span>
         </div>
         {/* Margin usage bar — HL-style color states so risk is glanceable */}
-        <div className="h-1 bg-surface-2 rounded-full overflow-hidden" title="Margin usage: notional / collateral">
+        <div className="h-1 bg-surface-2 rounded-full overflow-hidden" title="Margin ratio: maintenance margin / equity — at 100% the keeper can liquidate">
           <div
             className={cn(
               'h-full rounded-full transition-all duration-500',
@@ -362,11 +365,13 @@ export default function AccountPanel() {
             />
             <button
               onClick={() => {
+                // Floor to the cent: rounding up asks for more than the balance and the transfer fails.
+                const floorCents = (x: number) => (Math.floor(x * 100 + 1e-6) / 100).toFixed(2);
                 if (transferAsset === 'MRSN') {
-                  setTransferAmount(transferMode === 'deposit' ? Math.max(0, walletMrsn - 0.01).toFixed(2) : collateralNative.toFixed(2));
+                  setTransferAmount(transferMode === 'deposit' ? floorCents(Math.max(0, walletMrsn - 0.01)) : floorCents(collateralNative));
                 } else {
                   const b = tokenBalances[transferAsset];
-                  setTransferAmount((transferMode === 'deposit' ? b?.wallet ?? 0 : b?.deposited ?? 0).toFixed(2));
+                  setTransferAmount(floorCents(transferMode === 'deposit' ? b?.wallet ?? 0 : b?.deposited ?? 0));
                 }
               }}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-primary font-medium hover:underline"

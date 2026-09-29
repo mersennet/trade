@@ -287,17 +287,18 @@ async function traderTick(address, snap) {
   const mm = p.maintenanceMarginBps / 10_000;
   let notional = 0, pnl = 0, lines = [];
   for (const m of chain.MARKETS) {
-    let pos; try { pos = await chain.getPosition(m.id, address); } catch { continue; }
+    // A failed read means no verdict this tick: a partial account can look liquidatable.
+    let pos; try { pos = await chain.getPosition(m.id, address); } catch { return; }
     const size = Number(pos.size); if (!size) continue;
     const entry = Number(pos.entryPrice);
-    let mark = 0; try { const ba = await chain.getBestBidAsk(m.id); const bid = chain.toHumanPrice(m.id, ba.bestBid), ask = chain.toHumanPrice(m.id, ba.bestAsk); mark = bid > 0 && ask > 0 ? (bid + ask) / 2 : bid || ask; } catch { /* no book */ }
+    let mark = 0; try { mark = chain.toHumanPrice(m.id, await chain.getMarkPrice(m.id)); } catch { /* no book */ }
     if (!mark) continue;
     notional += Math.abs(size) * mark;
     pnl += size * (mark - entry);
     lines.push(`${m.symbol} ${size > 0 ? 'long' : 'short'} ${fmt(Math.abs(size))} @ ${fmt(mark, 2)}`);
   }
   if (!notional) { await setState(address, `liq:${address}`, 'none'); return; }
-  const collateral = Number(await chain.getCollateral(address).catch(() => 0));
+  let collateral; try { collateral = Number(await chain.getCollateral(address)); } catch { return; }
   const equity = collateral + pnl;
   const maintenance = notional * mm;
   const ratio = equity / notional;
@@ -327,8 +328,8 @@ async function statusText(chatId) {
     } else {
       const p = snap.protocol;
       let n = 0; for (const m of chain.MARKETS) { try { const pos = await chain.getPosition(m.id, l.address); if (Number(pos.size)) n++; } catch { /* none */ } }
-      const col = Number(await chain.getCollateral(l.address).catch(() => 0));
-      out.push(`Trader <code>${short(l.address)}</code> — collateral ${fmt(col, 2)} MRSN · ${n} open position${n === 1 ? '' : 's'}${p && p.settlementActive ? '' : ' · liquidation alerts start when settlement goes live'}`);
+      const col = await chain.getCollateral(l.address).then(Number).catch(() => null);
+      out.push(`Trader <code>${short(l.address)}</code> — collateral ${col == null ? 'unavailable right now' : `${fmt(col, 2)} MRSN`} · ${n} open position${n === 1 ? '' : 's'}${p && p.settlementActive ? '' : ' · liquidation alerts start when settlement goes live'}`);
     }
   }
   for (const sw of snap.switches) out.push(`📅 Switch at block ${fmt(sw.height)} in ~${(sw.etaSec / 3600).toFixed(1)} h: ${sw.label}`);

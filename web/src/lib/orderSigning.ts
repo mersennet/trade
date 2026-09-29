@@ -152,6 +152,12 @@ export async function placeOrderOnChain(
   const tif: Tif = params.tif ?? 'Gtc';
   await waitOutScaleSwitch();
   const price = toChainUnits(params.priceUsd, await getPriceScale(params.marketId));
+  // Sizes are whole lots of 1 on every market; rounding a fraction would place
+  // a different size than the user confirmed (0.5 → 1 is twice as much).
+  const sizeNum = Number(String(params.sizeBase).trim());
+  if (!Number.isInteger(sizeNum)) {
+    throw new Error(`Sizes are whole units on this market (lot 1): ${params.sizeBase} would be rounded — use ${Math.floor(sizeNum)} or ${Math.ceil(sizeNum)}.`);
+  }
   const size = toChainUnits(params.sizeBase);
   if (BigInt(size) <= BigInt(0)) throw new Error('Size must be > 0');
   if (BigInt(price) <= BigInt(0)) throw new Error('Price must be > 0');
@@ -195,7 +201,7 @@ export async function placeOrderOnChain(
     data,
     gasLimit: 300_000,
   });
-  const receipt = await tx.wait(1);
+  const receipt = await waitMined(tx);
   if (receipt && receipt.status === 0) {
     throw new Error('The order book refused this order after it was sent (the book moved between the check and the block). Nothing was placed; try again.');
   }
@@ -245,16 +251,33 @@ async function simulateRefusal(
     // RPC hiccup: do not block the order on a failed simulation.
     return null;
   }
-  if (out && out !== '0x' && out.length >= 2 + 64) return null; // accepted
+  // The node answers a refused call successfully, with the revert payload as
+  // the result, so read the selector before the length.
   if (typeof out === 'string' && out.startsWith('0x08c379a0')) {
-    try {
-      const len = parseInt(out.slice(10 + 64, 10 + 128), 16);
-      const hex = out.slice(10 + 128, 10 + 128 + len * 2);
-      const reason = decodeURIComponent(hex.replace(/(..)/g, '%$1'));
-      return `The order book refused this order: ${reason}.`;
-    } catch { /* fall through to the reconstruction */ }
+    const reason = decodeRevertString(out);
+    if (reason) return `The order book refused this order: ${reason}.`;
+    return explainRefusal(from, order);
   }
+  if (typeof out === 'string' && out.startsWith('0x4e487b71')) {
+    return 'The order book refused this order (an internal check failed). Check the size and price, then try again.';
+  }
+  // Accepted: placeOrder answers (orderId, filled, remaining) — whole 32-byte
+  // words. A custom error carries a 4-byte selector and never fits.
+  if (typeof out === 'string' && out.length >= 2 + 64 * 3 && (out.length - 2) % 64 === 0) return null;
   return explainRefusal(from, order);
+}
+
+/** The message of an ABI-encoded `Error(string)` revert payload, or null. */
+export function decodeRevertString(out: string): string | null {
+  if (!out.startsWith('0x08c379a0')) return null;
+  try {
+    const len = parseInt(out.slice(10 + 64, 10 + 128), 16);
+    const hex = out.slice(10 + 128, 10 + 128 + len * 2);
+    if (!Number.isFinite(len) || hex.length !== len * 2) return null;
+    return decodeURIComponent(hex.replace(/(..)/g, '%$1'));
+  } catch {
+    return null;
+  }
 }
 
 async function explainRefusal(
@@ -267,7 +290,7 @@ async function explainRefusal(
     let owner = from;
     try {
       const out = await rpc<string>('eth_call', [{ to: MERSENNET_ORDERS_PRECOMPILE, data: '0xac3c0e30' + from.toLowerCase().replace(/^0x/, '').padStart(64, '0') }, 'latest']);
-      const grantOwner = out && out.length >= 66 ? '0x' + out.slice(26, 66) : '';
+      const grantOwner = out && out.length >= 66 && !out.startsWith('0x08c379a0') && !out.startsWith('0x4e487b71') ? '0x' + out.slice(26, 66) : '';
       if (grantOwner && !/^0x0{40}$/.test(grantOwner)) owner = grantOwner;
     } catch { /* assume the signer is the owner */ }
     const [acct, protocol, markets] = await Promise.all([
@@ -376,6 +399,23 @@ export async function cancelOrderOnChain(
     data,
     gasLimit: 200_000,
   });
-  await tx.wait(1);
+  const receipt = await waitMined(tx);
+  if (receipt && receipt.status === 0) {
+    throw new Error('The order book refused the cancel — the order has probably filled or been cancelled already.');
+  }
   return tx.hash;
+}
+
+/**
+ * ethers v6 `wait()` throws CALL_EXCEPTION when the receipt says the
+ * transaction reverted; report that as a status-0 receipt so callers can say
+ * what happened in words.
+ */
+async function waitMined(tx: { wait: (confirms?: number) => Promise<unknown> }): Promise<{ status?: number | null } | null> {
+  try {
+    return (await tx.wait(1)) as { status?: number | null } | null;
+  } catch (e) {
+    if ((e as { code?: string }).code === 'CALL_EXCEPTION') return { status: 0 };
+    throw e;
+  }
 }

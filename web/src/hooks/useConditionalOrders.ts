@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import { useStore, type ConditionalOrder } from '@/stores/useStore';
 import { useWallet } from '@/hooks/useWallet';
 import { useToast } from '@/components/shared/Toast';
+import { splitWholeLots } from '@/lib/lots';
 
 /**
  * Client-side keeper for conditional orders (stop, trailing stop, TWAP).
@@ -86,13 +87,12 @@ export function useConditionalOrders() {
   async function fireTwapSlice(c: ConditionalOrder) {
     const slices = c.slices || 1;
     const executed = c.executed || 0;
-    const total = Number(c.size);
-    const per = total / slices;
-    // Last slice takes the rounding remainder so the total is exact.
-    const sizeThis = executed === slices - 1 ? total - per * (slices - 1) : per;
-    const sizeStr = String(Number(sizeThis.toFixed(8)));
+    // Whole lots per slice (5 over 3 → 2, 2, 1); the slices sum to the total.
+    const sizeThis = splitWholeLots(Number(c.size), slices)[executed] ?? 0;
+    const sizeStr = String(sizeThis);
     try {
-      const px = await place(c, sizeStr, 'take');
+      // Fewer lots than slices (armed before sizes were whole): nothing to place in this one.
+      const px = sizeThis > 0 ? await place(c, sizeStr, 'take') : null;
       const done = executed + 1;
       if (done >= slices) {
         removeConditional(c.id);
@@ -100,7 +100,7 @@ export function useConditionalOrders() {
         useStore.getState().addNotification('fill', 'TWAP complete', `${c.marketSymbol}: ${c.size} over ${slices} slices`);
       } else {
         updateConditional(c.id, { executed: done, nextAt: Date.now() + (c.intervalMs || 60_000) });
-        toast(`TWAP slice ${done}/${slices} on ${c.marketSymbol}: ${sizeStr} @ ~${px}`, 'info');
+        if (px !== null) toast(`TWAP slice ${done}/${slices} on ${c.marketSymbol}: ${sizeStr} @ ~${px}`, 'info');
       }
     } catch (e) {
       const msg = (e as Error).message || 'unknown error';

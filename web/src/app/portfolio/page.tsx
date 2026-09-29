@@ -197,7 +197,7 @@ export default function PortfolioPage() {
                 <h3 className="text-[11px] font-semibold text-foreground uppercase tracking-wider">Trading Performance</h3>
                 <div className="flex items-center gap-4 text-[11px] font-mono">
                   {(() => {
-                    const all = profile.stats?.['all'] || {};
+                    const all = profile.stats?.['alltime'] || {};
                     const pnl = Number(all.pnl ?? 0);
                     const wins = Number(all.win_count ?? 0);
                     const losses = Number(all.loss_count ?? 0);

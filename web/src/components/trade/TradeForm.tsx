@@ -13,6 +13,7 @@ import { getReferralCode } from '@/lib/referral';
 import { playSound } from '@/lib/sounds';
 import { useTranslation } from '@/i18n';
 import { loadViewingKey, submitShieldedOrder, toChainUnits } from '@/lib/shielded';
+import { floorLots, splitWholeLots } from '@/lib/lots';
 // Stop / Trailing / TWAP are client-side conditional orders (see
 // hooks/useConditionalOrders): armed here, watched in the browser, executed as
 // signed orders when they trigger — silently with one-click, otherwise with a
@@ -54,7 +55,7 @@ const TWAP_DURATIONS: Array<{ value: string; label: string; ms: number }> = [
 const CONDITIONAL_TYPES = new Set(['stop', 'trailing', 'twap']);
 
 export default function TradeForm() {
-  const { market, trade, setTrade, skipConfirm, marginMode, setMarginMode, tickers, positions, oneClickEnabled, sessionKey } = useStore();
+  const { market, trade, setTrade, skipConfirm, tickers, positions, oneClickEnabled, sessionKey } = useStore();
   // Price inputs step by the market's tick ($0.01 on rescaled markets, $10 on BTC).
   const { step: priceStep, tick: priceTick } = useMarketTick(market);
   // "Place your first order" in the checklist prefilled a 1-unit market buy:
@@ -123,7 +124,7 @@ export default function TradeForm() {
     Promise.all([api.getStats(), api.getTraderProfile(address)])
       .then(([stats, profile]) => {
         const tiers = (stats.feeTiers || []) as { name: string; minVolume: number; makerFee: number; takerFee: number }[];
-        const vol = Number(profile?.stats?.['30d']?.volume ?? profile?.stats?.['all']?.volume ?? 0);
+        const vol = Number(profile?.stats?.['monthly']?.volume ?? profile?.stats?.['alltime']?.volume ?? 0);
         const tier = [...tiers].sort((a, b) => b.minVolume - a.minVolume).find((t) => vol >= t.minVolume) || tiers[0];
         if (tier) setFeeRates({ maker: tier.makerFee, taker: tier.takerFee });
         setFeesCharged(stats.feesCharged === true);
@@ -214,7 +215,7 @@ export default function TradeForm() {
     // Sizes against real collateral only; an imaginary 10,000 MRSN account
     // produced sizes the chain could never fill.
     if (!(collateral > 0)) return '—';
-    return (collateral * r / riskPerUnit).toFixed(4);
+    return floorLots(collateral * r / riskPerUnit);
   };
 
   const handleSubmit = async () => {
@@ -250,6 +251,44 @@ export default function TradeForm() {
     if (trade.orderType === 'twap' && !(Number(twapSlices) >= 2 && Number(twapSlices) <= 100)) {
       toast('TWAP needs between 2 and 100 slices', 'error');
       return;
+    }
+    if (!Number.isInteger(Number(trade.size))) {
+      toast(`Sizes are whole ${market.base} on this market (lot 1) — enter ${Math.floor(Number(trade.size)) || 1} or more whole units.`, 'error');
+      return;
+    }
+    const pieces = trade.orderType === 'twap' ? Math.floor(Number(twapSlices)) : trade.orderType === 'scale' ? Math.floor(Number(scaleCount)) : 1;
+    if (pieces > 1 && Number(trade.size) < pieces) {
+      toast(`${trade.orderType === 'twap' ? 'A TWAP' : 'A ladder'} of ${pieces} orders needs at least ${pieces} ${market.base} — sizes are whole units.`, 'error');
+      return;
+    }
+    // The chain has no reduce-only flag: it is enforced at submission against
+    // the live position, which only holds for orders that execute at once.
+    const immediate = trade.orderType === 'market' || (trade.orderType === 'limit' && trade.tif !== 'gtc' && !chase);
+    if (trade.reduceOnly && !immediate) {
+      toast('Reduce Only works with market orders and IOC/FOK limits — a resting or triggered order could open a position if yours closes first.', 'error');
+      return;
+    }
+    const tpN = trade.tpEnabled ? Number(trade.tpPrice) || 0 : 0;
+    const slN = trade.tpEnabled ? Number(trade.slPrice) || 0 : 0;
+    if (tpN > 0 || slN > 0) {
+      if (trade.orderType !== 'market' && trade.orderType !== 'limit') {
+        toast('TP/SL attaches to market and limit orders — for other order types, set it on the position once it opens.', 'error');
+        return;
+      }
+      if (trade.reduceOnly) {
+        toast('TP/SL cannot be attached to a Reduce Only order.', 'error');
+        return;
+      }
+      const ref = trade.orderType === 'market' ? (tickers[market.id]?.markPrice || 0) : Number(trade.price);
+      const long = trade.side === 'buy';
+      if (ref > 0 && tpN > 0 && (long ? tpN <= ref : tpN >= ref)) {
+        toast(`Take-profit ${tpN} must be ${long ? 'above' : 'below'} ${formatPrice(ref)} for a ${long ? 'long' : 'short'}.`, 'error');
+        return;
+      }
+      if (ref > 0 && slN > 0 && (long ? slN >= ref : slN <= ref)) {
+        toast(`Stop-loss ${slN} must be ${long ? 'below' : 'above'} ${formatPrice(ref)} for a ${long ? 'long' : 'short'}.`, 'error');
+        return;
+      }
     }
 
     const useOneClick = oneClickEnabled && !!sessionKey;
@@ -416,7 +455,11 @@ export default function TradeForm() {
         const total = Number(trade.size);
         const { getPriceScale: gps, roundToTick } = await import('@/lib/priceScale');
         const scaleScale = await gps(market.id);
-        const per = Number((total / n).toFixed(8));
+        const slices = splitWholeLots(total, n);
+        if (slices.some((s) => s === 0)) {
+          toast(`A ladder of ${n} orders needs at least ${n} ${market.base} (sizes are whole units) — lower the order count or raise the size.`, 'error');
+          return;
+        }
         if (!useOneClick) toast(`Placing ${n} orders — your wallet will ask ${n} times (enable one-click to skip)`, 'info');
         let placed = 0;
         for (let i = 0; i < n; i++) {
@@ -426,7 +469,7 @@ export default function TradeForm() {
               marketId: market.id,
               isBuy: trade.side === 'buy',
               priceUsd: String(px),
-              sizeBase: String(i === n - 1 ? Number((total - per * (n - 1)).toFixed(8)) : per),
+              sizeBase: String(slices[i]),
               tif: 'Gtc',
               maker: postOnly ? { postOnly: true } : undefined,
               sessionKey: useOneClick ? sessionKey || undefined : undefined,
@@ -455,12 +498,16 @@ export default function TradeForm() {
           if (!useOneClick || !sessionKey) {
             throw new Error('Chase orders need one-click trading (session key) — enable it in settings.');
           }
+          const chaseLots = Number(trade.size);
+          if (!Number.isInteger(chaseLots) || chaseLots <= 0) {
+            throw new Error(`Sizes are whole ${market.base} on this market (lot 1).`);
+          }
           const { startChase } = await import('@/lib/chase');
           const marketSymbol = market.symbol;
           const id = await startChase({
             marketId: market.id,
             isBuy: trade.side === 'buy',
-            size: toChainUnits(trade.size),
+            size: String(chaseLots),
             sessionKey,
             owner: walletAddress,
             onEvent: (evt) => {
@@ -502,6 +549,20 @@ export default function TradeForm() {
           ? 'Ioc'
           : trade.tif === 'gtc' ? 'Gtc' : trade.tif === 'ioc' ? 'Ioc' : 'Fok';
         void builderCode; // referral credit now derives from on-chain fills, not an API hint
+        let sizeForOrder = trade.size;
+        if (trade.reduceOnly) {
+          const { livePositionSize } = await import('@/lib/positions');
+          const live = await livePositionSize(orderOwner, market.id);
+          if (live === null) throw new Error('Could not read your position from the chain — try again.');
+          const reducible = trade.side === 'buy' ? -live : live;
+          if (reducible <= 0) {
+            throw new Error(`Reduce Only: there is no ${trade.side === 'buy' ? 'short' : 'long'} ${market.base} position to reduce.`);
+          }
+          if (Number(trade.size) > reducible) {
+            sizeForOrder = String(reducible);
+            toast(`Reduce Only: size limited to your ${reducible} ${market.base} position`, 'info');
+          }
+        }
         // Snapshot BEFORE sending — the outcome diff needs a pre-trade baseline.
         const before = await snapshotAccount(orderOwner);
         // Optimistic pending order: the Orders tab shows it instantly (marked
@@ -513,7 +574,7 @@ export default function TradeForm() {
           market_id: market.id,
           side: trade.side,
           price: String(priceForOrder),
-          size: trade.size,
+          size: sizeForOrder,
           tif,
           ts: Date.now(),
         });
@@ -542,7 +603,7 @@ export default function TradeForm() {
             marketId: market.id,
             isBuy: trade.side === 'buy',
             priceUsd: priceForOrder,
-            sizeBase: trade.size,
+            sizeBase: sizeForOrder,
             tif,
             maker: isRestingLimit && (postOnly || expireAtBlock > 0)
               ? { postOnly, expireAtBlock: expireAtBlock || undefined }
@@ -559,10 +620,28 @@ export default function TradeForm() {
         }
         // Report the real outcome (filled / resting / partial / no fill) instead
         // of a blind "placed" — the tx mining only proves inclusion, not a fill.
-        void reportOutcome(orderOwner, trade.side === 'buy', String(priceForOrder), before, trade.size);
+        void reportOutcome(orderOwner, trade.side === 'buy', String(priceForOrder), before, sizeForOrder);
+        // TP/SL rides on a bracket, like one set from the Positions table: it
+        // fires while this session is open and closes at most the live position
+        // (nothing, if this order never filled).
+        const tpN = trade.tpEnabled ? Number(trade.tpPrice) || 0 : 0;
+        const slN = trade.tpEnabled ? Number(trade.slPrice) || 0 : 0;
+        if (tpN > 0 || slN > 0) {
+          useStore.getState().setBracket({
+            id: `${orderOwner.toLowerCase()}-${market.id}`,
+            owner: orderOwner,
+            marketId: market.id,
+            isLong: trade.side === 'buy',
+            size: sizeForOrder,
+            tp: tpN > 0 ? String(tpN) : null,
+            sl: slN > 0 ? String(slN) : null,
+            ts: Date.now(),
+          });
+          toast(`TP/SL set on ${market.symbol} — executes while this session is open`, 'info');
+        }
       }
       if (useStore.getState().soundEnabled) playSound('fill');
-      setTrade({ size: '' });
+      setTrade({ size: '', tpPrice: '', slPrice: '' });
     } catch (e) {
       const raw = (e as Error).message || '';
       const msg = useOneClick && /insufficient funds|insufficient balance for gas/i.test(raw)
@@ -673,18 +752,10 @@ export default function TradeForm() {
       {/* Cross/Isolated + Leverage chip on one compact row (perps only) */}
       {!isSpot && (
         <div className="flex items-center gap-1 text-[11px] flex-wrap">
-          <div className="flex bg-surface-2 rounded-md overflow-hidden border border-border shrink-0">
-            {(['cross', 'isolated'] as const).map((m) => (
-              <button
-                key={m}
-                onClick={() => setMarginMode(m)}
-                className={cn(
-                  'px-2 py-1 font-medium capitalize transition-colors',
-                  marginMode === m ? 'bg-foreground/5 text-foreground' : 'text-dim hover:text-muted'
-                )}
-              >{m}</button>
-            ))}
-          </div>
+          <span
+            className="px-2 py-1 font-medium bg-surface-2 border border-border rounded-md text-foreground shrink-0"
+            title="Cross margin: every position is margined against your whole collateral. The order book has no isolated margin."
+          >Cross</span>
           <span className="ml-auto font-mono text-dim whitespace-nowrap">
             <span className="text-muted">Lev </span>
             <span className="text-foreground font-semibold">{trade.leverage}×</span>
@@ -835,12 +906,15 @@ export default function TradeForm() {
           </button>
         </div>
         <input
-          type="number" value={trade.size}
+          type="number" value={trade.size} step={1} min={0} inputMode="numeric"
           aria-label={`Size (${market.base})`}
           onChange={(e) => setTrade({ size: e.target.value })}
-          placeholder="0.00"
+          placeholder="0"
           className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-dim font-mono outline-none focus:border-primary/60 focus:bg-surface-3 transition-all"
         />
+        {trade.size !== '' && !Number.isInteger(Number(trade.size)) && (
+          <p className="text-[10px] text-yellow mt-1">Sizes are whole {market.base} on this market (lot 1) — {trade.size} would be refused.</p>
+        )}
         {/* Available balance + Max, on their own row so the label never wraps */}
         {isConnected && (
           <div className="flex items-center justify-between mt-1">
@@ -851,7 +925,7 @@ export default function TradeForm() {
               onClick={() => {
                 const markPrice = tickers[market.id]?.markPrice || 0;
                 if (!markPrice || !collateral) return;
-                setTrade({ size: ((collateral * trade.leverage) / markPrice).toFixed(4) });
+                setTrade({ size: floorLots((collateral * trade.leverage) / markPrice) });
               }}
               className="text-[10px] text-primary hover:text-primary-hover font-medium"
             >Max</button>
@@ -869,8 +943,7 @@ export default function TradeForm() {
                   if (!markPrice || !collateral) return;
                   const maxNotional = collateral * trade.leverage;
                   const maxSize = maxNotional / markPrice;
-                  const s = (maxSize * pct / 100).toFixed(4);
-                  setTrade({ size: s });
+                  setTrade({ size: floorLots(maxSize * pct / 100) });
                 }}
                 className="flex-1 py-1 text-[10.5px] font-medium bg-surface-2 text-dim hover:text-foreground transition-colors"
               >{pct}%</button>

@@ -37,11 +37,8 @@ async function fetchChainPrice(symbol) {
   const market = chain.MARKETS.find(m => m.base === symbol);
   if (!market) return null;
   try {
-    const ba = await chain.getBestBidAsk(market.id);
-    const bid = Number(ba.bestBid);
-    const ask = Number(ba.bestAsk);
-    if (bid > 0 && ask > 0) return (bid + ask) / 2;
-    return bid || ask || null;
+    const mark = Number(await chain.getMarkPrice(market.id));
+    return mark > 0 ? mark : null;
   } catch (_) {
     return null;
   }

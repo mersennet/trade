@@ -39,10 +39,7 @@ async function initConditionalOrdersTable() {
 const trailingState = new Map();
 
 async function evaluateConditionalOrder(order) {
-  const { bestBid, bestAsk } = await chain.getBestBidAsk(order.market_id);
-  const bid = Number(bestBid);
-  const ask = Number(bestAsk);
-  const mid = bid > 0 && ask > 0 ? (bid + ask) / 2 : bid || ask;
+  const mid = Number(await chain.getMarkPrice(order.market_id));
 
   if (mid <= 0) return false;
 

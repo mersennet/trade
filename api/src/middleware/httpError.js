@@ -37,6 +37,10 @@ function sendError(res, e, where) {
   // Explicit format string: `where` carries the request path (see errorHandler),
   // which must never be interpreted for %-directives.
   console.error('[%s] %s', where || 'api', e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : String(e));
+  if (e && e.upstream) {
+    res.set('Retry-After', '5');
+    return res.status(503).json({ error: 'Chain temporarily unavailable, retry shortly' });
+  }
   return res.status(500).json({ error: 'Internal error' });
 }
 

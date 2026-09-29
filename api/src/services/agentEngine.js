@@ -68,7 +68,7 @@ async function fetchMarketData(marketId, lookback = 30) {
   const ba = await chain.getBestBidAsk(marketId);
   const bid = Number(ba.bestBid);
   const ask = Number(ba.bestAsk);
-  const currentPrice = bid > 0 && ask > 0 ? (bid + ask) / 2 : (bid || ask || 0);
+  const currentPrice = Number(await chain.getMarkPrice(marketId)) || 0;
 
   const { rows } = await pool.query(
     `SELECT price FROM agent_trades WHERE market_id = $1 ORDER BY created_at DESC LIMIT $2`,

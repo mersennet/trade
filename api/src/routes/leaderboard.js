@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const pool = require('../db/pool');
+const chain = require('../services/chain');
 const { sendError } = require('../middleware/httpError');
 
 const router = Router();
@@ -97,7 +98,8 @@ router.get('/trader/:address', async (req, res) => {
       [addr]
     );
 
-    // trades.price / trades.size are plain integer chain units (no rescaling).
+    // trades.price / trades.size are integer chain units; prices are × the
+    // market's priceScale (100 on MRSN, SOL, ARB), sizes are whole lots.
     const toNum = (raw) => { try { return Number(BigInt(String(raw))); } catch { return Number(raw) || 0; } };
 
     res.json({
@@ -111,7 +113,7 @@ router.get('/trader/:address', async (req, res) => {
         taker: r.taker,
         maker: r.maker,
         side: r.side,
-        price: toNum(r.price),
+        price: chain.toHumanPrice(r.market_id, r.price),
         size: toNum(r.size),
       })),
     });
