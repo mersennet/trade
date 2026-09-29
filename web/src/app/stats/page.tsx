@@ -47,7 +47,7 @@ export default function StatsPage() {
 
       {/* Adoption */}
       <Section title="People" sub="Wallets are addresses; the network's own bots (market maker, takers, liquidator) are excluded where the source can tell them apart.">
-        <Tile label="Wallets funded by the faucet" value={n(d?.wallets.fundedByFaucet)} hint="unique addresses that ever received a drip" />
+        <Tile label="Faucet-funded wallets" value={n(d?.wallets.fundedByFaucet)} hint="unique addresses that ever received a drip" />
         <Tile label="Human traders" value={n(d?.wallets.humanTradersTotal)} hint={`${n(d?.wallets.humanTraders7d)} in the last 7 days · ${n(d?.wallets.humanTraders24h)} today`} />
         <Tile label="Active addresses · 24 h" value={n(d?.wallets.activeSenders24h)} hint={`${n(d?.wallets.activeSenders7d)} in 7 days · ${n(d?.wallets.activeSenders30d)} in 30 days (bots included)`} />
         <Tile label="Maker vault depositors" value={n(d?.wallets.vaultDepositors)} hint="wallets holding vault shares" />

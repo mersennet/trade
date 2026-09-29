@@ -144,8 +144,8 @@ export default function StakingPage() {
       <div className="mb-6">
         <h1 className="page-title">Staking</h1>
         <p className="page-sub">
-          Delegate MRSN to a validator and earn a share of every block reward it
-          proposes, minus the validator&apos;s commission. Undelegating starts a
+          Delegate MRSN to a validator and earn a share of the rewards it earns in
+          every block, minus the validator&apos;s commission. Undelegating starts a
           ~4 hour unbonding period before the principal is withdrawable.
           Delegation is native to the chain — no contracts, no custodians.
           {!isConnected && <> Run a node? Connect its operator wallet to see your node, add self-stake or unregister.</>}

@@ -1236,7 +1236,8 @@ async function awardLpPoints(navH, totalShares) {
   await pool.query('UPDATE vault_index_state SET lp_points_at = NOW() WHERE id = 1');
   if (days <= 0) return;
   const pricePerShare = navH / totalShares;
-  const holders = await pool.query(`SELECT address, SUM(CASE WHEN action = 'deposit' THEN shares ELSE -shares END)::float8 AS shares FROM vault_deposits WHERE tx_hash IS NOT NULL GROUP BY address HAVING SUM(CASE WHEN action = 'deposit' THEN shares ELSE -shares END) > 0`);
+  // The network's own wallets (the protocol seed is the maker's) earn no LP points.
+  const holders = await pool.query(`SELECT address, SUM(CASE WHEN action = 'deposit' THEN shares ELSE -shares END)::float8 AS shares FROM vault_deposits WHERE tx_hash IS NOT NULL AND address NOT IN (SELECT address FROM excluded_addresses) GROUP BY address HAVING SUM(CASE WHEN action = 'deposit' THEN shares ELSE -shares END) > 0`);
   const season = await pool.query('SELECT COALESCE(MAX(season), 1) AS s FROM points_balance').then((r) => Number(r.rows[0].s) || 1).catch(() => 1);
   for (const h of holders.rows) {
     const pts = Number(h.shares) * pricePerShare * LP_POINTS_PER_MRSN_DAY * days;
