@@ -121,7 +121,7 @@ export default function PointsPage() {
             <SourceTile label="Trading"  value={points.tradingPoints} />
             <SourceTile label="Node"     value={points.nodePoints || 0} />
             <SourceTile label="Referral" value={points.referralPoints} />
-            <SourceTile label="Sprint"   value={points.bonusPoints || 0} />
+            <SourceTile label="Bonus"    value={points.bonusPoints || 0} hint="Weekly sprint prizes and bug bounty awards" />
             <SourceTile label="LP"       value={points.lpPoints} />
           </div>
         </>
@@ -143,10 +143,11 @@ export default function PointsPage() {
         <div className="divide-y divide-border">
           {[
             { action: 'Trading',     desc: '1 point per $1 traded — both sides of a fill, maker and taker',       mult: 'Live',   tone: 'text-primary', live: true  },
-            { action: 'Node runner', desc: '500 points per day for a verified, online full node', mult: 'Live', tone: 'text-primary', live: true },
+            { action: 'Node runner', desc: '500 points a day per operator wallet with a verified, online node (one node counts per operator)', mult: 'Live', tone: 'text-primary', live: true },
             { action: 'Vault LP',    desc: '0.1 point per MRSN per day deposited in the maker vault (1,000 MRSN for a day = 100 points), credited every few minutes. Deposits opened September 20, 2026 (block 1,605,600).', mult: 'Live', tone: 'text-primary', live: true },
             { action: 'Referrals',   desc: '10% of referee trading points — share your code from the Referrals page; the referee confirms with one signature', mult: 'Live', tone: 'text-primary', live: true },
             { action: 'Weekly sprint', desc: 'Top 3 by volume each week (Monday 00:00 UTC): 3,000 / 2,000 / 1,000 bonus points', mult: 'Live', tone: 'text-primary', live: true },
+            { action: 'Bug bounty', desc: 'A security issue reported privately to security@mersennet.com: 50,000 / 20,000 / 5,000 / 1,000 bonus points by severity — rules in the docs (Points — Season 1)', mult: 'Live', tone: 'text-primary', live: true },
           ].map((e) => (
             <div key={e.action} className="flex items-center justify-between px-4 py-3">
               <div>
@@ -206,9 +207,9 @@ export default function PointsPage() {
   );
 }
 
-function SourceTile({ label, value }: { label: string; value: number }) {
+function SourceTile({ label, value, hint }: { label: string; value: number; hint?: string }) {
   return (
-    <div className="bg-surface border border-border rounded-xl px-3.5 py-3 text-center sm:text-left">
+    <div className="bg-surface border border-border rounded-xl px-3.5 py-3 text-center sm:text-left" title={hint}>
       <p className="text-[10px] text-dim uppercase tracking-wider font-medium mb-1.5">{label}</p>
       <p className="text-[18px] font-mono font-semibold text-foreground tabular-nums leading-none">{formatPoints(value)}</p>
     </div>
