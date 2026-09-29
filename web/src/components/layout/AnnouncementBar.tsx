@@ -7,8 +7,40 @@ import { startPoll } from '@/lib/poll';
 import { formatUtcShort } from '@/lib/utils';
 
 /**
- * Announcement line under the header. Shows the newest undismissed entry
- * from config/announcements.ts; dismissing it reveals the next one. It does
+ * Incident notice written by ops/deploy/incident.sh: a static file Caddy
+ * serves on this origin, so it answers even while the API is down.
+ */
+interface IncidentNotice {
+  active: boolean;
+  id: string;
+  severity: 'danger' | 'warning' | 'info';
+  title: string;
+  text: string;
+  since: string;
+  link?: string;
+}
+
+const INCIDENT_TONE: Record<IncidentNotice['severity'], { line: string; text: string }> = {
+  danger: { line: 'bg-red/10 border-red/50', text: 'text-red' },
+  warning: { line: 'bg-yellow/10 border-yellow/40', text: 'text-yellow' },
+  info: { line: 'bg-surface border-border', text: 'text-cyan' },
+};
+
+async function fetchIncident(): Promise<IncidentNotice | null> {
+  // ?notice=preview shows what `incident.sh --preview` staged, to nobody else.
+  const preview = new URLSearchParams(window.location.search).get('notice') === 'preview';
+  const r = await fetch(preview ? '/status/notice-preview.json' : '/status/notice.json', { cache: 'no-store' });
+  if (!r.ok) return null;
+  const n = (await r.json()) as Partial<IncidentNotice>;
+  return n.active && n.id && n.title && n.text && n.severity && n.severity in INCIDENT_TONE
+    ? (n as IncidentNotice)
+    : null;
+}
+
+/**
+ * Announcement line under the header. An active incident notice comes first;
+ * otherwise it shows the newest undismissed entry from
+ * config/announcements.ts, and dismissing it reveals the next one. It does
  * not rotate — a strip that changes every few seconds on a trading screen
  * pulls the eye away from the book for no reason.
  */
@@ -17,6 +49,7 @@ export default function AnnouncementBar() {
   const [hydrated, setHydrated] = useState(false);
   // Live protocol state drives the switch-related entries (see showWhen).
   const [protocol, setProtocol] = useState<ClobProtocol | null>(null);
+  const [incident, setIncident] = useState<IncidentNotice | null>(null);
   // Live ETAs by height for `{eta:<height>}` tokens in announcement copy, so
   // the bar never states a time the schedule has drifted away from.
   const [etas, setEtas] = useState<Record<number, string>>({});
@@ -26,6 +59,7 @@ export default function AnnouncementBar() {
   useEffect(() => {
     let alive = true;
     const load = () => Promise.all([
+      fetchIncident().then((n) => { if (alive) setIncident(n); }).catch(() => {}),
       api.getProtocol().then((p) => { if (alive) setProtocol(p); }),
       api.getProtocolSwitches().then((s) => {
         if (!alive) return;
@@ -56,14 +90,44 @@ export default function AnnouncementBar() {
     return `${when} UTC (live estimate, block ${Number(h).toLocaleString()})`;
   });
 
-  if (!hydrated || !settled || active.length === 0) return null;
-  const current = active[0];
-
-  const dismiss = () => {
-    const next = [...dismissed, current.id];
+  const dismissId = (id: string) => {
+    const next = [...dismissed, id];
     setDismissed(next);
     localStorage.setItem('mersennet-trade_announcements_dismissed', JSON.stringify(next));
   };
+
+  if (!hydrated || !settled) return null;
+
+  if (incident && !dismissed.includes(incident.id)) {
+    const tone = INCIDENT_TONE[incident.severity];
+    return (
+      <div className={`${tone.line} border-b px-3 md:px-4 py-1.5 pr-8 flex items-start gap-2 text-[10.5px] relative`} role="status">
+        <span className={`${tone.text} font-bold shrink-0 select-none`}>!!</span>
+        <p className="text-foreground leading-snug">
+          <span className={`${tone.text} font-bold uppercase tracking-[0.08em] text-[10px] mr-2`}>{incident.title}</span>
+          {incident.text}
+          <span className="text-dim"> Posted {formatUtcShort(incident.since)} UTC.</span>
+          <a
+            href={incident.link || 'https://status.mersennet.com'}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ml-2 text-primary-bright font-semibold uppercase tracking-[0.08em] text-[10px] hover:underline whitespace-nowrap"
+          >
+            Live status →
+          </a>
+        </p>
+        <button
+          onClick={() => dismissId(incident.id)}
+          aria-label="Dismiss incident notice"
+          className="absolute right-1 top-1/2 -translate-y-1/2 min-w-6 min-h-6 flex items-center justify-center text-dim hover:text-foreground transition-colors text-sm"
+        >×</button>
+      </div>
+    );
+  }
+
+  if (active.length === 0) return null;
+  const current = active[0];
+  const dismiss = () => dismissId(current.id);
 
   return (
     // Terminal system-message line: left-aligned, prompt-prefixed, quiet.
