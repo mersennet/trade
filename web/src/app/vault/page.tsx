@@ -126,7 +126,14 @@ export default function VaultPage() {
         <StatTile label="Depositors" value={chain ? String(chain.depositors) : '—'} hint={chain && chain.seedShares > 0 ? 'Including the protocol\'s seed deposit' : undefined} />
       </div>
 
-      {/* How the pool is deployed right now */}
+      {/* How the pool is deployed right now. Its space is held until the chain
+          read lands (it pushed the deposit panel 155-245 px down). */}
+      {!chain && (
+        <div className="bg-surface border border-border rounded-xl p-4 min-h-[225px] md:min-h-[135px]">
+          <h3 className="text-[11px] font-semibold text-foreground uppercase tracking-wider">Where the MRSN is</h3>
+          <p className="text-[11px] text-dim mt-2">Reading the vault from the chain…</p>
+        </div>
+      )}
       {chain && (
         <div className="bg-surface border border-border rounded-xl p-4">
           <div className="flex items-center justify-between flex-wrap gap-2 mb-2">

@@ -13,6 +13,9 @@ import { startPoll } from '@/lib/poll';
  */
 export default function StatusLine() {
   const { connected } = useWebSocket();
+  // "Reconnecting" only after a connection has existed; before, it is connecting.
+  const [wasConnected, setWasConnected] = useState(false);
+  if (connected && !wasConnected) setWasConnected(true);
   const [block, setBlock] = useState(0);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [lastBlockAt, setLastBlockAt] = useState<number | null>(null);
@@ -61,7 +64,7 @@ export default function StatusLine() {
         {ageSec != null && <span className="text-dim">· {ageSec}S</span>}
       </a>
       <span className={connected ? 'text-dim' : 'text-yellow'}>
-        {connected ? 'WS LIVE' : 'WS RECONNECTING'}
+        {connected ? 'WS LIVE' : wasConnected ? 'WS RECONNECTING' : 'WS CONNECTING'}
         {latencyMs != null && connected && ` · ${latencyMs}MS`}
       </span>
       <span className="ml-auto flex items-center gap-4">

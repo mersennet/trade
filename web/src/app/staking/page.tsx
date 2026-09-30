@@ -31,6 +31,9 @@ interface ValidatorRow {
   myPending: string; // wei
 }
 
+// Validators listed on 30 Sep; more registered ones add a row or two of shift.
+const PLACEHOLDER_ROWS = 11;
+
 function StatTile({ label, value, valueClass }: { label: string; value: string; valueClass?: string }) {
   return (
     <div className="bg-surface border border-border rounded-xl px-3.5 py-3">
@@ -195,9 +198,15 @@ export default function StakingPage() {
             </tr>
           </thead>
           <tbody>
-            {loading && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-dim">Loading validators…</td></tr>
-            )}
+            {/* Rows of the real height while loading: one "Loading" line swapped
+                for eleven rows pushed the whole page down. */}
+            {loading && Array.from({ length: PLACEHOLDER_ROWS }, (_, i) => (
+              <tr key={`placeholder-${i}`} className="border-b border-border/50 last:border-0 h-[51px]">
+                <td colSpan={7} className="px-4 text-dim text-xs">
+                  {i === 0 ? 'Loading validators…' : <span aria-hidden className="block h-2.5 max-w-[560px] rounded bg-surface-2/70 animate-pulse" />}
+                </td>
+              </tr>
+            ))}
             {!loading && rows.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-4 py-8 text-center text-dim">
@@ -307,25 +316,25 @@ export default function StakingPage() {
               );
             })}
           </tbody>
-          {!loading && rows.length > 0 && (
+          {(loading || rows.length > 0) && (
             <tfoot>
               <tr className="border-t-2 border-border bg-surface-2/40">
-                <td className="px-4 py-3 text-xs font-semibold text-foreground">Grand total <span className="text-dim font-normal">· {rows.length} validators</span></td>
+                <td className="px-4 py-3 text-xs font-semibold text-foreground">Grand total <span className="text-dim font-normal">· {loading ? '—' : rows.length} validators</span></td>
                 <td className="px-4 py-3 text-right font-mono tabular-nums font-semibold" title="Grand total staked (MRSN)">
-                  {fmtMrsnWei(rows.reduce((s, r) => s + BigInt(r.selfStake), 0n), 0)}
+                  {loading ? '—' : fmtMrsnWei(rows.reduce((s, r) => s + BigInt(r.selfStake), 0n), 0)}
                   <div className="text-[10px] text-dim font-normal">staked (MRSN)</div>
                 </td>
                 <td className="px-4 py-3 text-right font-mono tabular-nums font-semibold" title="Grand total delegated (MRSN)">
-                  {fmtMrsnWei(rows.reduce((s, r) => s + BigInt(r.delegatedTotal), 0n), 2, true)}
+                  {loading ? '—' : fmtMrsnWei(rows.reduce((s, r) => s + BigInt(r.delegatedTotal), 0n), 2, true)}
                   <div className="text-[10px] text-dim font-normal">delegated (MRSN)</div>
                 </td>
                 <td className="px-4 py-3" />
                 <td className={cn('px-4 py-3 text-right font-mono tabular-nums font-semibold', totalMine > 0n && 'text-primary')} title="Your total delegation (MRSN)">
-                  {fmtMrsnWei(totalMine, 2, true)}
+                  {loading ? '—' : fmtMrsnWei(totalMine, 2, true)}
                   <div className="text-[10px] text-dim font-normal">yours (MRSN)</div>
                 </td>
                 <td className={cn('px-4 py-3 text-right font-mono tabular-nums font-semibold', totalPending > 0n && 'text-green')} title="Your claimable rewards (MRSN)">
-                  {fmtMrsnWei(totalPending, 6, true)}
+                  {loading ? '—' : fmtMrsnWei(totalPending, 6, true)}
                   <div className="text-[10px] text-dim font-normal">claimable (MRSN)</div>
                 </td>
                 <td className="px-4 py-3" />

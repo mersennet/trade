@@ -364,9 +364,10 @@ function PortfolioPreview() {
   const router = useRouter();
   const setMarket = useStore((s) => s.setMarket);
   const [markets, setMarkets] = useState<Market[]>([]);
+  const [failed, setFailed] = useState(false);
   const [tickers, setTickers] = useState<Record<number, Ticker>>({});
   useEffect(() => {
-    api.getMarkets().then((r) => setMarkets(r.markets || [])).catch(() => {});
+    api.getMarkets().then((r) => setMarkets(r.markets || [])).catch(() => setFailed(true));
   }, []);
   useEffect(() => {
     if (markets.length === 0) return;
@@ -375,13 +376,16 @@ function PortfolioPreview() {
     load();
     return startPoll(load, 10_000);
   }, [markets]);
-  if (markets.length === 0) return null;
+  if (failed) return null;
+  // The panel is drawn before the markets arrive, with rows of the real height:
+  // appearing whole, it pushed the page down.
+  const loadingMarkets = markets.length === 0;
   const totalOi = Object.values(tickers).reduce((a, t) => a + (t.openInterest || 0), 0);
   return (
     <div className="bg-surface border border-border rounded-xl overflow-hidden" data-testid="portfolio-preview">
       <div className="px-4 py-2.5 border-b border-border flex items-center justify-between">
         <h3 className="text-[11px] font-semibold text-foreground uppercase tracking-wider">Live markets</h3>
-        <span className="text-[10px] text-dim font-mono">{markets.length} perps · open interest {formatNumber(totalOi, 0)} · live</span>
+        <span className="text-[10px] text-dim font-mono">{loadingMarkets ? '—' : markets.length} perps · open interest {formatNumber(totalOi, 0)} · live</span>
       </div>
       <table className="w-full text-xs">
         <thead>
@@ -395,6 +399,11 @@ function PortfolioPreview() {
           </tr>
         </thead>
         <tbody>
+          {loadingMarkets && Array.from({ length: 5 }, (_, i) => (
+            <tr key={`placeholder-${i}`} className="border-b border-border/40 last:border-0 h-[37px]">
+              <td colSpan={6} className="px-4"><span aria-hidden className="block h-2.5 max-w-[480px] rounded bg-surface-2/70 animate-pulse" /></td>
+            </tr>
+          ))}
           {markets.map((m) => {
             const t = tickers[m.id];
             const chg = t?.change24h ?? 0;

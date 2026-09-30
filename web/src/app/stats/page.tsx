@@ -39,7 +39,8 @@ export default function StatsPage() {
         </div>
         <p className="page-sub">
           Adoption and activity on the Mersennet testnet, from the chain and the terminal&apos;s own database.
-          {d && <> Updated {new Date(d.generatedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} UTC, refreshes every five minutes.</>}
+          {/* Rendered before the data too: appended later, it wrapped the line and moved the page. */}
+          {' '}Updated {d ? new Date(d.generatedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) : '--:--'} UTC, refreshes every five minutes.
         </p>
       </header>
 
@@ -83,12 +84,10 @@ export default function StatsPage() {
       </Section>
 
       {/* 30-day bars */}
-      {d && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <Bars title="Human traders per day" sub="distinct wallets that traded, last 30 days" data={d.daily.map((x) => ({ day: x.day, v: x.humanTraders }))} />
-          <Bars title="Wallets funded per day" sub="first drips to new addresses, last 30 days" data={d.wallets.fundedPerDay.map((x) => ({ day: x.day, v: x.wallets }))} />
-        </div>
-      )}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <Bars title="Human traders per day" sub="distinct wallets that traded, last 30 days" data={(d?.daily ?? []).map((x) => ({ day: x.day, v: x.humanTraders }))} />
+        <Bars title="Wallets funded per day" sub="first drips to new addresses, last 30 days" data={(d?.wallets.fundedPerDay ?? []).map((x) => ({ day: x.day, v: x.wallets }))} />
+      </div>
 
       <p className="text-[11px] text-dim leading-relaxed">
         {d?.note} Raw feed: <code className="font-mono text-foreground/80">/api/v1/stats/adoption</code>. Methodology and program rules:{' '}

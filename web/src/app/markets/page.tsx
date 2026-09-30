@@ -130,9 +130,11 @@ export default function MarketsPage() {
         </div>
       </div>
 
-      {/* Gainers / losers strip — market discovery at a glance */}
+      {/* Gainers / losers strip — market discovery at a glance. Its row (27 px)
+          is held before prices arrive: appearing later, it moved the list. */}
+      <div className="flex items-center gap-2 flex-wrap min-h-[27px]">
       {markets.length > 0 && Object.keys(tickers).length > 0 && (
-        <div className="flex items-center gap-2 flex-wrap">
+        <>
           {gainers.filter((g) => g.ch > 0).map((g) => (
             <button key={`g-${g.m.id}`} onClick={() => handleSelect(g.m)}
               className="flex items-center gap-1.5 px-2.5 py-1 bg-green/5 border border-green/20 rounded-md text-[11px] hover:bg-green/10 transition-colors">
@@ -147,8 +149,9 @@ export default function MarketsPage() {
               <span className="font-mono text-red">{formatNumber(l.ch, 2)}%</span>
             </button>
           ))}
-        </div>
+        </>
       )}
+      </div>
 
       {/* Filter pills + view toggle */}
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -198,8 +201,26 @@ export default function MarketsPage() {
       )}
       {filtered.length === 0 && !loadError && (
         markets.length === 0 && filter === 'all' ? (
-          /* Loading skeleton — shimmer cards while markets fetch */
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5" role="status" aria-label="Loading markets">
+          /* Loading skeleton in the shape of what replaces it: six tall cards
+             swapped for a phone's five 70 px rows shrank the page on load. */
+          <>
+          <div className="md:hidden space-y-2" role="status" aria-label="Loading markets">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-[70px] bg-surface border border-border rounded-lg px-3 flex items-center gap-3">
+                <div className="skeleton w-8 h-8 rounded-full" />
+                <div className="space-y-1.5 flex-1">
+                  <div className="skeleton h-3 w-24" />
+                  <div className="skeleton h-2.5 w-16" />
+                </div>
+              </div>
+            ))}
+          </div>
+          {view === 'table' ? (
+            <div className="hidden md:block h-[259px] bg-surface border border-border rounded-xl p-4 space-y-5" aria-hidden>
+              {Array.from({ length: 6 }).map((_, i) => <div key={i} className="skeleton h-3.5 w-full" />)}
+            </div>
+          ) : (
+          <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 gap-3.5" aria-hidden>
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="bg-surface border border-border rounded-xl p-4 space-y-4">
                 <div className="flex items-center gap-3">
@@ -217,8 +238,9 @@ export default function MarketsPage() {
                 </div>
               </div>
             ))}
-            <span className="sr-only">Loading markets…</span>
           </div>
+          )}
+          </>
         ) : (
           <div className="bg-surface border border-border rounded-xl">
             <EmptyState

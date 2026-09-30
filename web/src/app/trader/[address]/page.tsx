@@ -95,7 +95,9 @@ function EquityCurveChart({ data }: { data: { time: number; value: number }[] })
   }, [initChart]);
 
   if (data.length < 2) return <div className="flex items-center justify-center h-[250px] text-dim text-xs">Not enough data</div>;
-  return <div ref={containerRef} className="w-full" />;
+  // The chart's 250 px from the first paint: the canvas arrives after a dynamic
+  // import and used to push the stats below it down.
+  return <div ref={containerRef} className="w-full h-[250px]" />;
 }
 
 export default function TraderProfilePage() {
@@ -140,7 +142,9 @@ export default function TraderProfilePage() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center h-48">
+        // About the loaded profile's height (period tabs, flow chart, stats): a
+        // 192 px spinner let the footer show, then pushed it away.
+        <div className="flex items-start justify-center pt-16 h-[760px]">
           <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
         </div>
       ) : !profile ? (

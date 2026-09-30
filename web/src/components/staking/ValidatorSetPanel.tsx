@@ -450,8 +450,17 @@ export default function ValidatorSetPanel({ ownNodesSlot }: { ownNodesSlot?: HTM
               </tr>
             </thead>
             <tbody>
-              {sorted.length === 0 && (
-                <tr><td colSpan={8} className="py-3 text-dim">{view?.active ? 'No registrations yet.' : 'The set opens at activation; the four genesis validators are seeded then.'}</td></tr>
+              {/* Rows of the real height until the set loads (13 registered on 30 Sep):
+                  one line swapped for the table moved the page. */}
+              {!view && Array.from({ length: 13 }, (_, i) => (
+                <tr key={`placeholder-${i}`} className="border-b border-border last:border-0 h-[115px] md:h-[46px]">
+                  <td colSpan={8} className="py-1.5 text-dim">
+                    {i === 0 ? 'Loading the validator set…' : <span aria-hidden className="block h-2.5 max-w-[560px] rounded bg-surface-2/70 animate-pulse" />}
+                  </td>
+                </tr>
+              ))}
+              {view && sorted.length === 0 && (
+                <tr><td colSpan={8} className="py-3 text-dim">{view.active ? 'No registrations yet.' : 'The set opens at activation; the four genesis validators are seeded then.'}</td></tr>
               )}
               {sorted.map((v: ValidatorSetEntry, i: number) => {
                 const own = !!address && v.operator.toLowerCase() === address.toLowerCase();
@@ -477,14 +486,14 @@ export default function ValidatorSetPanel({ ownNodesSlot }: { ownNodesSlot?: HTM
                 );
               })}
             </tbody>
-            {sorted.length > 0 && (
+            {(!view || sorted.length > 0) && (
               <tfoot>
                 <tr className="border-t-2 border-border bg-surface-2/40 text-[12px]">
                   <td className="py-1.5 pr-3" />
-                  <td className="py-1.5 pr-3 font-semibold text-foreground" colSpan={2}>Grand total <span className="text-dim font-normal">· {sorted.length} registered</span></td>
-                  <td className="py-1.5 pr-3 text-right font-mono font-semibold" title="Grand total staked (MRSN)">{fmtMrsn(sorted.reduce((a, x) => (BigInt(a) + BigInt(x.selfStake)).toString(), '0'))}<div className="text-[10px] text-dim font-normal">staked (MRSN)</div></td>
-                  <td className="py-1.5 pr-3 text-right font-mono font-semibold" title="Grand total delegated (MRSN)">{fmtDelegated(sorted.reduce((a, x) => (BigInt(a) + BigInt(x.delegated)).toString(), '0'))}<div className="text-[10px] text-dim font-normal">delegated (MRSN)</div></td>
-                  <td className="py-1.5 pr-3 text-right font-mono font-semibold" title="Grand total of leader slots this epoch across the registered validators (the proposed count is the number of blocks in the epoch so far) and of blocks proposed all-time since each registered">{sorted.reduce((a, x) => a + x.proposedSlots, 0).toLocaleString()} proposed<span className="text-dim font-normal"> · {sorted.reduce((a, x) => a + x.missedSlots, 0).toLocaleString()} missed</span><div className="text-[10px] text-dim font-normal">this epoch · {sorted.reduce((a, x) => a + (x.totalProposed || 0), 0).toLocaleString()} all-time</div></td>
+                  <td className="py-1.5 pr-3 font-semibold text-foreground" colSpan={2}>Grand total <span className="text-dim font-normal">· {view ? sorted.length : '—'} registered</span></td>
+                  <td className="py-1.5 pr-3 text-right font-mono font-semibold" title="Grand total staked (MRSN)">{view ? fmtMrsn(sorted.reduce((a, x) => (BigInt(a) + BigInt(x.selfStake)).toString(), '0')) : '—'}<div className="text-[10px] text-dim font-normal">staked (MRSN)</div></td>
+                  <td className="py-1.5 pr-3 text-right font-mono font-semibold" title="Grand total delegated (MRSN)">{view ? fmtDelegated(sorted.reduce((a, x) => (BigInt(a) + BigInt(x.delegated)).toString(), '0')) : '—'}<div className="text-[10px] text-dim font-normal">delegated (MRSN)</div></td>
+                  <td className="py-1.5 pr-3 text-right font-mono font-semibold" title="Grand total of leader slots this epoch across the registered validators (the proposed count is the number of blocks in the epoch so far) and of blocks proposed all-time since each registered">{view ? sorted.reduce((a, x) => a + x.proposedSlots, 0).toLocaleString() : '—'} proposed<span className="text-dim font-normal"> · {view ? sorted.reduce((a, x) => a + x.missedSlots, 0).toLocaleString() : '—'} missed</span><div className="text-[10px] text-dim font-normal">this epoch · {view ? sorted.reduce((a, x) => a + (x.totalProposed || 0), 0).toLocaleString() : '—'} all-time</div></td>
                   <td className="py-1.5 pr-3" colSpan={2} />
                 </tr>
               </tfoot>

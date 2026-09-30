@@ -20,6 +20,20 @@ const SORT_LABEL: Record<string, string> = {
   trade_count: 'Trades',
 };
 
+// Boards hold this many rows of the real height (49 px) while loading, so the
+// page does not jump when the data arrives (ten traders ranked on 30 Sep).
+const PLACEHOLDER_ROWS = 10;
+
+function placeholderRows(cols: number) {
+  return Array.from({ length: PLACEHOLDER_ROWS }, (_, i) => (
+    <tr key={`placeholder-${i}`} className="border-b border-border last:border-0 h-[49px]">
+      <td colSpan={cols} className="px-4 text-dim text-xs">
+        {i === 0 ? 'Loading…' : <span aria-hidden className="block h-2.5 max-w-[560px] rounded bg-surface-2/70 animate-pulse" />}
+      </td>
+    </tr>
+  ));
+}
+
 function rankBadge(rank: number) {
   if (rank === 1) return { tone: 'text-yellow bg-yellow/10',  label: '1' };
   if (rank === 2) return { tone: 'text-foreground bg-surface-2', label: '2' };
@@ -44,7 +58,9 @@ export default function LeaderboardPage() {
   const [loading, setLoading] = useState(true);
   const [board, setBoard] = useState<'traders' | 'points'>('traders');
   const [points, setPoints] = useState<PointsEntry[]>([]);
+  const [pointsLoaded, setPointsLoaded] = useState(false);
   const [sprint, setSprint] = useState<SprintStatus | null>(null);
+  const [sprintSettled, setSprintSettled] = useState(false);
 
   const [loadError, setLoadError] = useState<string | null>(null);
   useEffect(() => {
@@ -55,8 +71,8 @@ export default function LeaderboardPage() {
       .finally(() => setLoading(false));
   }, [period, sort]);
   useEffect(() => {
-    api.getPointsLeaderboard(1).then((r) => setPoints(r.leaderboard || [])).catch(() => {});
-    api.getSprint().then(setSprint).catch(() => {});
+    api.getPointsLeaderboard(1).then((r) => setPoints(r.leaderboard || [])).catch(() => {}).finally(() => setPointsLoaded(true));
+    api.getSprint().then(setSprint).catch(() => {}).finally(() => setSprintSettled(true));
   }, []);
 
   return (
@@ -74,7 +90,12 @@ export default function LeaderboardPage() {
         />
       </header>
 
-      {/* Weekly sprint — awarded by the indexer every Monday 00:00 UTC */}
+      {/* Weekly sprint — awarded by the indexer every Monday 00:00 UTC. Its space
+          is held while it loads (97 px wide, 272 px on a phone where the columns
+          stack): arriving late, it pushed the whole board down. */}
+      {!sprintSettled && (
+        <div aria-hidden className="bg-surface border border-border rounded-xl min-h-[272px] md:min-h-[180px] lg:min-h-[97px]" />
+      )}
       {sprint && (
         <div className="bg-surface border border-border rounded-xl px-4 py-3 flex flex-wrap items-start gap-4" data-testid="weekly-sprint">
           <div className="min-w-[220px]">
@@ -133,7 +154,7 @@ export default function LeaderboardPage() {
               </tr>
             </thead>
             <tbody>
-              {points.length === 0 ? (
+              {!pointsLoaded ? placeholderRows(9) : points.length === 0 ? (
                 <tr><td colSpan={9} className="text-center py-12 text-dim text-xs">No points awarded yet this season.</td></tr>
               ) : points.map((p) => {
                 const rb = rankBadge(p.rank);
@@ -182,9 +203,11 @@ export default function LeaderboardPage() {
       {/* Mobile: card list */}
       {board === 'traders' && (<>
       <div className="md:hidden space-y-2">
-        {loading ? (
-          <div className="text-center py-8 text-dim text-xs">Loading…</div>
-        ) : traders.length > 0 ? traders.map((t) => {
+        {loading ? Array.from({ length: PLACEHOLDER_ROWS }, (_, i) => (
+          <div key={`placeholder-${i}`} className="h-[59px] px-3 flex items-center bg-surface border border-border rounded-lg text-dim text-xs">
+            {i === 0 ? 'Loading…' : <span aria-hidden className="block h-2.5 w-full rounded bg-surface-2/70 animate-pulse" />}
+          </div>
+        )) : traders.length > 0 ? traders.map((t) => {
           const rb = rankBadge(t.rank);
           return (
             <Link
@@ -232,9 +255,7 @@ export default function LeaderboardPage() {
             </tr>
           </thead>
           <tbody>
-            {loading ? (
-              <tr><td colSpan={6} className="text-center py-10 text-dim text-xs">Loading…</td></tr>
-            ) : traders.length > 0 ? traders.map((t) => {
+            {loading ? placeholderRows(6) : traders.length > 0 ? traders.map((t) => {
               const rb = rankBadge(t.rank);
               return (
                 <tr key={t.address} className="border-b border-border last:border-0 hover:bg-surface-2/40 transition-colors">

@@ -11,6 +11,7 @@ export default function OptionsPage() {
   const [chains, setChains] = useState<OptionChain[]>([]);
   const [underlying, setUnderlying] = useState<'BTC' | 'ETH'>('BTC');
   const [contracts, setContracts] = useState<OptionContract[]>([]);
+  const [chainLoaded, setChainLoaded] = useState(false);
   const [positions, setPositions] = useState<OptionPosition[]>([]);
   const [greeksMap, setGreeksMap] = useState<Record<number, OptionGreeks>>({});
   const [selectedContract, setSelectedContract] = useState<OptionContract | null>(null);
@@ -24,7 +25,7 @@ export default function OptionsPage() {
   }, []);
 
   const refresh = useCallback(() => {
-    api.getOptionChain(underlying).then((d) => setContracts(d.contracts || [])).catch(() => {});
+    api.getOptionChain(underlying).then((d) => setContracts(d.contracts || [])).catch(() => {}).finally(() => setChainLoaded(true));
     if (address) api.getOptionPositions(address).then((d) => setPositions(d.positions || [])).catch(() => {});
   }, [underlying, address]);
 
@@ -132,7 +133,8 @@ export default function OptionsPage() {
         </div>
       </div>
 
-      {/* Expiry tabs */}
+      {/* Expiry tabs; one row is held until the chain loads. */}
+      {!chainLoaded && <div aria-hidden className="h-[29px]" />}
       {expiries.length > 0 && (
         <div className="flex gap-1 flex-wrap">
           {expiries.map((exp) => (
@@ -152,7 +154,11 @@ export default function OptionsPage() {
         {/* Option chain table */}
         <div className="xl:col-span-3 bg-surface border border-border rounded-xl p-4 overflow-x-auto">
           <h3 className="text-xs font-medium text-foreground uppercase tracking-wider mb-3">Option Chain</h3>
-          {strikes.length === 0 ? (
+          {!chainLoaded ? (
+            // The chain's usual height (nine strikes of 33 px under a 42 px header):
+            // "No contracts" then a full table made the page jump, and misled.
+            <div className="h-[339px] flex items-start justify-center pt-8 text-dim text-xs">Loading the option chain…</div>
+          ) : strikes.length === 0 ? (
             <p className="text-dim text-xs text-center py-8">No contracts available for this expiry</p>
           ) : (
             <table className="w-full text-xs">
