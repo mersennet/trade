@@ -47,31 +47,42 @@ export default function PositionsTable() {
 
   useEffect(() => {
     if (!isConnected || !address) return;
+    // Answers for a previous account that land after a wallet switch are dropped.
+    let alive = true;
     const fetchData = async () => {
       try {
         const [posRes, ordRes] = await Promise.all([
           api.getPositions(address),
           api.getOrders(address),
         ]);
+        if (!alive) return;
         setPositions(posRes.positions || []);
         setOrders(ordRes.orders || []);
       } catch (e) {
         console.error('[positions] fetch error:', e);
       } finally {
-        setLoading(false);
+        if (alive) setLoading(false);
       }
     };
     fetchData();
-    return startPoll(fetchData, 5000);
+    const stopPoll = startPoll(fetchData, 5000);
+    return () => { alive = false; stopPoll(); };
   }, [address, isConnected, setPositions, setOrders]);
 
   useEffect(() => {
     api.getTrades(market.id, 30).then((r) => setTrades(r.trades || [])).catch((e) => console.error('[trades] fetch error:', e));
   }, [market.id]);
 
+  const [prevAddress, setPrevAddress] = useState(address);
+  if (prevAddress !== address) {
+    setPrevAddress(address);
+    setOrderHistory([]);
+  }
   useEffect(() => {
     if (!address) return;
-    api.getOrderHistory(address, 50).then((r) => setOrderHistory(r.orders || [])).catch(() => {});
+    let alive = true;
+    api.getOrderHistory(address, 50).then((r) => { if (alive) setOrderHistory(r.orders || []); }).catch(() => {});
+    return () => { alive = false; };
   }, [address]);
 
   const handleCancel = async (orderId: number) => {

@@ -91,9 +91,7 @@ export default function FundingArbPage() {
           <h3 className="text-xs font-medium text-foreground uppercase tracking-wider">Cross-Exchange Funding Rates</h3>
           <p className="text-[10px] text-dim mt-0.5">8-hour funding rates across exchanges</p>
         </div>
-        {loading ? (
-          <div className="p-8 text-center text-xs text-dim">Loading funding rates...</div>
-        ) : comparison.length === 0 ? (
+        {!loading && comparison.length === 0 ? (
           <div className="p-8 text-center text-xs text-dim">No funding data available</div>
         ) : (
           <div className="overflow-x-auto">
@@ -108,6 +106,13 @@ export default function FundingArbPage() {
                 </tr>
               </thead>
               <tbody>
+                {/* One row per market while loading: a one-line "Loading" swapped for
+                    the table moved the opportunities panel 134 px. */}
+                {loading && Array.from({ length: 5 }, (_, i) => (
+                  <tr key={`placeholder-${i}`} className="border-b border-border last:border-0 h-[37px]">
+                    <td colSpan={5} className="px-4 text-dim">{i === 0 ? 'Loading funding rates…' : <span aria-hidden className="block h-2.5 rounded bg-surface-2/70 animate-pulse" />}</td>
+                  </tr>
+                ))}
                 {comparison.map((c) => (
                   <tr key={c.symbol} className="border-b border-border last:border-0 hover:bg-surface-2/50 transition-colors">
                     <td className="px-4 py-2.5 font-mono font-medium text-foreground">{c.symbol}</td>

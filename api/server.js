@@ -488,3 +488,15 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`[api] REST: http://0.0.0.0:${PORT}/api/v1/`);
   console.log(`[api] WebSocket: ws://0.0.0.0:${PORT}/ws`);
 });
+
+// As PID 1 in its container Node has no default SIGTERM action, so `docker stop`
+// used to wait out its 10 s grace period and then kill mid-request. Stop taking
+// connections, let in-flight requests finish; WebSockets never end on their
+// own, so exit after 5 s regardless (clients reconnect, via the other app host).
+for (const sig of ['SIGTERM', 'SIGINT']) {
+  process.once(sig, () => {
+    console.log(`[api] ${sig}: closing`);
+    server.close(() => process.exit(0));
+    setTimeout(() => process.exit(0), 5000).unref();
+  });
+}

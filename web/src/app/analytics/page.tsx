@@ -246,21 +246,20 @@ export default function AnalyticsPage() {
         <p className="page-sub">Track your trading performance with detailed statistics</p>
       </div>
 
-      {protocolStats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[
-            { label: '24H Volume', value: formatMrsn(protocolStats.volume24h) },
-            { label: '7D Volume', value: formatMrsn(protocolStats.volume7d) },
-            { label: 'Unique Traders', value: formatNumber(protocolStats.uniqueTraders, 0), color: 'text-primary' },
-            { label: 'Total Trades', value: formatNumber(protocolStats.totalTrades || 0, 0) },
-          ].map((item) => (
-            <div key={item.label} className="bg-surface border border-border rounded-xl p-4 text-center">
-              <p className="text-[10px] text-dim uppercase tracking-wider font-medium mb-1">{item.label}</p>
-              <p className={cn('text-lg font-bold font-mono', item.color || 'text-foreground')}>{item.value}</p>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* Drawn before the numbers arrive ("—"): appearing late, the tiles pushed the page 105-198 px down. */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: '24H Volume', value: protocolStats ? formatMrsn(protocolStats.volume24h) : '—' },
+          { label: '7D Volume', value: protocolStats ? formatMrsn(protocolStats.volume7d) : '—' },
+          { label: 'Unique Traders', value: protocolStats ? formatNumber(protocolStats.uniqueTraders, 0) : '—', color: 'text-primary' },
+          { label: 'Total Trades', value: protocolStats ? formatNumber(protocolStats.totalTrades || 0, 0) : '—' },
+        ].map((item) => (
+          <div key={item.label} className="bg-surface border border-border rounded-xl p-4 text-center">
+            <p className="text-[10px] text-dim uppercase tracking-wider font-medium mb-1">{item.label}</p>
+            <p className={cn('text-lg font-bold font-mono', item.color || 'text-foreground')}>{item.value}</p>
+          </div>
+        ))}
+      </div>
 
       {isConnected && address ? (
         loading ? (

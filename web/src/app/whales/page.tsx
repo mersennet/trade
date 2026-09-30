@@ -21,6 +21,10 @@ export default function WhalesPage() {
   const { toast } = useToast();
   const [trades, setTrades] = useState<WhaleTrade[]>([]);
   const [wallets, setWallets] = useState<WhaleWallet[]>([]);
+  // Until the first answers, the panels hold their loaded height (the feed caps at
+  // 480 px; 20 wallets) and say they are loading, not that nothing was found.
+  const [tradesLoaded, setTradesLoaded] = useState(false);
+  const [walletsLoaded, setWalletsLoaded] = useState(false);
   const [alerts, setAlerts] = useState<WhaleAlert[]>([]);
   const [markets, setMarkets] = useState<Market[]>([]);
   const [threshold, setThreshold] = useState('50000');
@@ -28,8 +32,8 @@ export default function WhalesPage() {
   const [alertThreshold, setAlertThreshold] = useState('100000');
 
   const refresh = useCallback(() => {
-    api.getWhaleActivity(Number(threshold) || undefined).then((d) => setTrades(d.trades || [])).catch(() => {});
-    api.getWhaleWallets().then((d) => setWallets(d.wallets || [])).catch(() => {});
+    api.getWhaleActivity(Number(threshold) || undefined).then((d) => setTrades(d.trades || [])).catch(() => {}).finally(() => setTradesLoaded(true));
+    api.getWhaleWallets().then((d) => setWallets(d.wallets || [])).catch(() => {}).finally(() => setWalletsLoaded(true));
   }, [threshold]);
 
   useEffect(() => {
@@ -93,7 +97,9 @@ export default function WhalesPage() {
           <span className="text-[10px] text-dim font-mono">{trades.length} trades</span>
         </div>
         <div className="p-3">
-          {trades.length === 0 ? (
+          {!tradesLoaded ? (
+            <div className="h-[480px] flex items-center justify-center text-dim text-xs">Loading whale trades…</div>
+          ) : trades.length === 0 ? (
             <p className="text-dim text-xs text-center py-10">No whale trades detected at this threshold</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-[480px] overflow-y-auto pr-1">
@@ -151,7 +157,9 @@ export default function WhalesPage() {
           <div className="px-4 py-2.5 border-b border-border">
             <h3 className="text-[11px] font-semibold text-foreground uppercase tracking-wider">Top Whale Wallets</h3>
           </div>
-          {wallets.length === 0 ? (
+          {!walletsLoaded ? (
+            <div className="h-[1009px] md:h-[769px] flex items-start justify-center pt-10 text-dim text-xs">Loading whale wallets…</div>
+          ) : wallets.length === 0 ? (
             <p className="text-dim text-xs text-center py-10">No whale wallets tracked yet</p>
           ) : (
             <div className="overflow-x-auto">

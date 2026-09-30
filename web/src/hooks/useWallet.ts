@@ -102,10 +102,19 @@ export function useWallet() {
     setWallet({ address, provider, signer, balance });
 
     removeListeners();
-    const handler = (accs: unknown) => {
+    const handler = async (accs: unknown) => {
       const a = accs as string[];
-      if (!a || a.length === 0) disconnect();
-      else setWallet({ address: a[0] });
+      if (!a || a.length === 0) { disconnect(); return; }
+      const next = a[0];
+      // Another account: none of the previous one's numbers may linger, and the
+      // signer must be the new account's (the wallet refuses a mismatched sender).
+      setWallet({ address: next, balance: '0', collateral: '0', collateralNative: '0', signer: null });
+      useStore.setState({ positions: [], orders: [] });
+      const [nextSigner, nextBalance] = await Promise.all([
+        provider.getSigner(next).catch(() => null),
+        rpc.getBalance(next).then((b) => b.toString()).catch(() => '0'),
+      ]);
+      if (useStore.getState().wallet.address === next) setWallet({ signer: nextSigner, balance: nextBalance });
     };
     listenerRef.current = handler;
     eip.on('accountsChanged', handler);

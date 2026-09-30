@@ -2,7 +2,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useWallet } from '@/hooks/useWallet';
 import { useToast } from '@/components/shared/Toast';
-import { api, createWsConnection, type Trade, type Market, type LeaderboardEntry } from '@/lib/api';
+import { api, type Trade, type Market, type LeaderboardEntry } from '@/lib/api';
+import { subscribe as subscribeWs } from '@/lib/wsHub';
 import { cn, formatPrice, formatNumber, shortenAddress } from '@/lib/utils';
 
 interface TraderSettings {
@@ -132,26 +133,12 @@ export default function CopyTradingPage() {
     toast('Preview: copy trades are simulated — signed execution coming soon', 'info');
   }, [address, copiedTrades, saveCopiedTrades, toast, markets]);
 
-  const wsRef = useRef<WebSocket | null>(null);
-
   useEffect(() => {
-    if (!copyMode || !isConnected || followedSettings.length === 0) {
-      if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
-      return;
-    }
+    if (!copyMode || !isConnected || followedSettings.length === 0) return;
 
-    const ws = createWsConnection();
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      for (const s of followedSettings) {
-        ws.send(JSON.stringify({ action: 'subscribe', channel: `trades:followed:${s.address.toLowerCase()}` }));
-      }
-    };
-
-    ws.onmessage = (event) => {
+    // A fill between two followed wallets arrives once per wallet: seenTradeIds dedupes.
+    const onTrade = (data: { type: string; id: number; time?: string; marketId: number; taker: string; maker: string; side: Trade['side']; price: number; size: number }) => {
       try {
-        const data = JSON.parse(event.data);
         if (data.type !== 'trade') return;
         if (seenTradeIds.current.has(data.id)) return;
         seenTradeIds.current.add(data.id);
@@ -169,10 +156,8 @@ export default function CopyTradingPage() {
       } catch {}
     };
 
-    ws.onerror = () => {};
-    ws.onclose = () => {};
-
-    return () => { ws.close(); wsRef.current = null; };
+    const unsubscribes = followedSettings.map((s) => subscribeWs(`trades:followed:${s.address.toLowerCase()}`, onTrade));
+    return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
   }, [copyMode, isConnected, followedSettings, executeCopyTrade, persistSeenTrades]);
 
   const totalPnl = copiedTrades.reduce((sum, t) => sum + t.pnl, 0);
