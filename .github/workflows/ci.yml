@@ -28,11 +28,15 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+    # A change outside the four components (compose file, smoke test, workflows, anything
+    # new) runs every job: skipping them all let such a change pass as a green CI.
+    # Only plain documents at the root (*.md, LICENSE) skip everything.
     outputs:
-      web: ${{ steps.f.outputs.web == 'true' || github.event_name != 'push' && github.event_name != 'pull_request' }}
-      api: ${{ steps.f.outputs.api == 'true' || github.event_name != 'push' && github.event_name != 'pull_request' }}
-      bots: ${{ steps.f.outputs.bots == 'true' || github.event_name != 'push' && github.event_name != 'pull_request' }}
-      indexer: ${{ steps.f.outputs.indexer == 'true' || github.event_name != 'push' && github.event_name != 'pull_request' }}
+      web: ${{ steps.f.outputs.web == 'true' || steps.o.outputs.other == 'true' || github.event_name != 'push' && github.event_name != 'pull_request' }}
+      api: ${{ steps.f.outputs.api == 'true' || steps.o.outputs.other == 'true' || github.event_name != 'push' && github.event_name != 'pull_request' }}
+      bots: ${{ steps.f.outputs.bots == 'true' || steps.o.outputs.other == 'true' || github.event_name != 'push' && github.event_name != 'pull_request' }}
+      indexer: ${{ steps.f.outputs.indexer == 'true' || steps.o.outputs.other == 'true' || github.event_name != 'push' && github.event_name != 'pull_request' }}
+      repo: ${{ steps.o.outputs.other == 'true' || github.event_name != 'push' && github.event_name != 'pull_request' }}
     steps:
       - uses: actions/checkout@v5
       - uses: dorny/paths-filter@v3
@@ -55,6 +59,39 @@ jobs:
             indexer:
               - *shared
               - 'indexer/**'
+      - uses: dorny/paths-filter@v3
+        id: o
+        with:
+          # 'every': a file counts only if it matches all of these, i.e. it lies
+          # outside the components and is not a root document.
+          predicate-quantifier: 'every'
+          filters: |
+            other:
+              - '**'
+              - '!web/**'
+              - '!api/**'
+              - '!bots/**'
+              - '!indexer/**'
+              - '!*.md'
+              - '!LICENSE'
+
+  repo:
+    name: repo — compose file, smoke test, audit
+    needs: changes
+    if: needs.changes.outputs.repo == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: docker-compose.yml is valid
+        run: docker compose -f docker-compose.yml config --no-interpolate -q
+      - uses: actions/setup-node@v5
+        with: { node-version: 22, cache: npm, cache-dependency-path: smoke/package-lock.json }
+      - name: Smoke test parses and its dependencies are clean
+        working-directory: smoke
+        run: |
+          npm ci
+          node --check smoke.mjs
+          npm audit --audit-level=high
 
   web:
     name: web (Next.js) — lint, build, audit
@@ -123,16 +160,18 @@ jobs:
       - run: find . -maxdepth 2 -name '*.js' -not -path './node_modules/*' -print0 | xargs -0 -n1 node --check
       - run: npm audit --audit-level=high
 
-  # One status for branch rules and badges, green when every job that ran
-  # passed and the rest were skipped by the path filter.
+  # One status for branch rules and badges, green when the change detector ran
+  # and every job that ran passed (the rest were skipped by the path filter). A
+  # failed detector skips every job, which must not read as a pass.
   ci:
     name: CI
-    needs: [changes, web, api, bots, indexer]
+    needs: [changes, repo, web, api, bots, indexer]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - run: |
-          echo "web=${{ needs.web.result }} api=${{ needs.api.result }} bots=${{ needs.bots.result }} indexer=${{ needs.indexer.result }}"
-          for r in "${{ needs.web.result }}" "${{ needs.api.result }}" "${{ needs.bots.result }}" "${{ needs.indexer.result }}"; do
+          echo "changes=${{ needs.changes.result }} repo=${{ needs.repo.result }} web=${{ needs.web.result }} api=${{ needs.api.result }} bots=${{ needs.bots.result }} indexer=${{ needs.indexer.result }}"
+          [ "${{ needs.changes.result }}" = success ] || { echo "change detection did not succeed"; exit 1; }
+          for r in "${{ needs.repo.result }}" "${{ needs.web.result }}" "${{ needs.api.result }}" "${{ needs.bots.result }}" "${{ needs.indexer.result }}"; do
             case "$r" in success|skipped) ;; *) echo "a job failed or was cancelled"; exit 1 ;; esac
           done
