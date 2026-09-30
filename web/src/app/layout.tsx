@@ -34,6 +34,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
+    site: '@mersennetlabs',
     title: 'Mersennet Trade: Perpetuals on Mersennet',
     description: 'On-chain perpetual futures on the Mersennet zero-knowledge L1.',
     images: [OG_IMAGE],
