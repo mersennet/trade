@@ -112,6 +112,20 @@ export default function TradeForm() {
   const currentPosition = useMemo(() => {
     return positions.find((p) => p.marketId === market.id);
   }, [positions, market.id]);
+  // What new exposure can use: equity (collateral + unrealized PnL) minus the
+  // initial margin open positions already hold (the positions API's `margin`).
+  const availableMargin = useMemo(() => {
+    const upnl = positions.reduce((s, p) => s + (Number(p.unrealizedPnl) || 0), 0);
+    const used = positions.reduce((s, p) => s + (Number(p.margin) || 0), 0);
+    return Math.max(0, collateral + upnl - used);
+  }, [positions, collateral]);
+  // Largest size for this side: closing an opposite position needs no new margin.
+  const maxOrderSize = (markPrice: number) => {
+    if (!markPrice) return 0;
+    const held = Number(currentPosition?.size || 0);
+    const closing = trade.side === 'buy' ? Math.max(0, -held) : Math.max(0, held);
+    return closing + (availableMargin * trade.leverage) / markPrice;
+  };
 
   // Real fee tier from 30d volume — same source AccountPanel uses. Falls back
   // to the Base tier so the confirm sheet never shows a hardcoded stale rate.
@@ -918,14 +932,13 @@ export default function TradeForm() {
         {/* Available balance + Max, on their own row so the label never wraps */}
         {isConnected && (
           <div className="flex items-center justify-between mt-1">
-            <span className="text-[10px] text-dim font-mono">
-              Avail <span className="text-foreground/80">{formatNumber(collateral, 2)} MRSN</span>
+            <span className="text-[10px] text-dim font-mono" title="Equity (collateral plus unrealized PnL) minus the initial margin your open positions hold">
+              Avail <span className="text-foreground/80">{formatNumber(availableMargin, 2)} MRSN</span>
             </span>
             <button
               onClick={() => {
-                const markPrice = tickers[market.id]?.markPrice || 0;
-                if (!markPrice || !collateral) return;
-                setTrade({ size: floorLots((collateral * trade.leverage) / markPrice) });
+                const size = maxOrderSize(tickers[market.id]?.markPrice || 0);
+                if (size > 0) setTrade({ size: floorLots(size) });
               }}
               className="text-[10px] text-primary hover:text-primary-hover font-medium"
             >Max</button>
@@ -940,10 +953,8 @@ export default function TradeForm() {
               <button
                 key={pct}
                 onClick={() => {
-                  if (!markPrice || !collateral) return;
-                  const maxNotional = collateral * trade.leverage;
-                  const maxSize = maxNotional / markPrice;
-                  setTrade({ size: floorLots(maxSize * pct / 100) });
+                  const maxSize = maxOrderSize(markPrice);
+                  if (maxSize > 0) setTrade({ size: floorLots(maxSize * pct / 100) });
                 }}
                 className="flex-1 py-1 text-[10.5px] font-medium bg-surface-2 text-dim hover:text-foreground transition-colors"
               >{pct}%</button>

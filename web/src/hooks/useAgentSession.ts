@@ -15,7 +15,11 @@ export function useAgentSession() {
   const setSessionKey = useStore((s) => s.setSessionKey);
   const setOneClick = useStore((s) => s.setOneClick);
   useEffect(() => {
-    if (!address) { setSessionKey(null); setOneClick(false); return; }
+    // A new address starts with no key: until the check below answers, the
+    // previous account's agent key would sign one-click orders for that account.
+    setSessionKey(null);
+    setOneClick(false);
+    if (!address) return;
     let alive = true;
     const check = async () => {
       try {

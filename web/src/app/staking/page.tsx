@@ -138,6 +138,13 @@ export default function StakingPage() {
     }
   };
 
+  // Largest stake first, as the validator set below ranks them (the chain lists
+  // validators in registration order).
+  const sortedRows = [...rows].sort((a, b) => {
+    const sa = BigInt(a.selfStake) + BigInt(a.delegatedTotal);
+    const sb = BigInt(b.selfStake) + BigInt(b.delegatedTotal);
+    return sa === sb ? a.address.localeCompare(b.address) : sb > sa ? 1 : -1;
+  });
   const totalMine = rows.reduce((s, r) => s + BigInt(r.myDelegation), 0n);
   const totalPending = rows.reduce((s, r) => s + BigInt(r.myPending), 0n);
   const totalNetwork = rows.reduce((s, r) => s + BigInt(r.selfStake) + BigInt(r.delegatedTotal), 0n);
@@ -214,16 +221,16 @@ export default function StakingPage() {
                 </td>
               </tr>
             )}
-            {!loading && rows.map((r) => {
+            {!loading && sortedRows.map((r) => {
               const m = mode[r.address] ?? 'delegate';
               const amt = amounts[r.address] ?? '';
               const own = myIdentities.has(r.address.toLowerCase());
               return (
                 <tr key={r.address} id={`delegate-${r.address.toLowerCase()}`} className={cn('border-b border-border/50 last:border-0', own && 'bg-primary/5')}>
                   <td className="px-4 py-3 font-mono text-foreground">{shortenAddress(r.address)}{own && <span className="text-primary"> · your node</span>}</td>
-                  <td className="px-4 py-3 text-right font-mono tabular-nums">{fmtMrsnWei(r.selfStake, 0)}</td>
-                  {/* Fixed decimals so the column reads as one unit: 0.00 · 1,004.91 ·
-                      41,002.00 (community feedback). Exact value on hover. */}
+                  {/* Both stake columns in fixed decimals so they read as one unit:
+                      0.00 · 1,004.91 · 41,002.00 (community feedback). Exact value on hover. */}
+                  <td className="px-4 py-3 text-right font-mono tabular-nums" title={`${fmtMrsnWei(r.selfStake, 18)} MRSN`}>{fmtMrsnWei(r.selfStake, 2, true)}</td>
                   <td className="px-4 py-3 text-right font-mono tabular-nums" title={`${fmtMrsnWei(r.delegatedTotal, 18)} MRSN`}>
                     {fmtMrsnWei(r.delegatedTotal, 2, true)}
                   </td>
@@ -321,7 +328,7 @@ export default function StakingPage() {
               <tr className="border-t-2 border-border bg-surface-2/40">
                 <td className="px-4 py-3 text-xs font-semibold text-foreground">Grand total <span className="text-dim font-normal">· {loading ? '—' : rows.length} validators</span></td>
                 <td className="px-4 py-3 text-right font-mono tabular-nums font-semibold" title="Grand total staked (MRSN)">
-                  {loading ? '—' : fmtMrsnWei(rows.reduce((s, r) => s + BigInt(r.selfStake), 0n), 0)}
+                  {loading ? '—' : fmtMrsnWei(rows.reduce((s, r) => s + BigInt(r.selfStake), 0n), 2, true)}
                   <div className="text-[10px] text-dim font-normal">staked (MRSN)</div>
                 </td>
                 <td className="px-4 py-3 text-right font-mono tabular-nums font-semibold" title="Grand total delegated (MRSN)">

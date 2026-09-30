@@ -58,10 +58,10 @@ export default function OptionsPage() {
     return Array.from(set).sort();
   }, [contracts]);
 
-  const [selectedExpiry, setSelectedExpiry] = useState('');
-  useEffect(() => {
-    if (expiries.length && !expiries.includes(selectedExpiry)) setSelectedExpiry(expiries[0]);
-  }, [expiries, selectedExpiry]);
+  const [pickedExpiry, setSelectedExpiry] = useState('');
+  // The first expiry until one is picked. Set from an effect, it left a render
+  // saying "No contracts" between the loading state and the chain.
+  const selectedExpiry = expiries.includes(pickedExpiry) ? pickedExpiry : (expiries[0] ?? '');
 
   const filteredContracts = useMemo(() =>
     contracts.filter((c) => expiryDay(c.expiry) === selectedExpiry),

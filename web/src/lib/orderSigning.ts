@@ -246,9 +246,11 @@ async function simulateRefusal(
     out = await rpc<string>('eth_call', [{ from, to: MERSENNET_ORDERS_PRECOMPILE, data, gas: '0x493e0' }, 'latest']);
   } catch (e) {
     const msg = (e as Error).message || '';
-    const reason = /revert(?:ed)?(?::| with reason)?\s*"?([^"]+)"?/i.exec(msg)?.[1];
-    if (reason) return `The order book refused this order: ${reason.trim()}.`;
-    // RPC hiccup: do not block the order on a failed simulation.
+    const reason = revertReasonOf(msg);
+    if (reason) return `The order book refused this order: ${reason}.`;
+    // A revert without a readable reason is still a refusal; anything else is
+    // an RPC hiccup, which must not block the order.
+    if (/revert/i.test(msg)) return explainRefusal(from, order);
     return null;
   }
   // The node answers a refused call successfully, with the revert payload as
@@ -265,6 +267,15 @@ async function simulateRefusal(
   // words. A custom error carries a 4-byte selector and never fits.
   if (typeof out === 'string' && out.length >= 2 + 64 * 3 && (out.length - 2) % 64 === 0) return null;
   return explainRefusal(from, order);
+}
+
+/** The reason in an RPC error message ("execution reverted: …", ethers' reason="…", or Hardhat's reason string '…'), or null. */
+export function revertReasonOf(msg: string): string | null {
+  const m = /reason="([^"]+)"/.exec(msg)
+    || /reverted with reason string '([^']+)'/i.exec(msg)
+    || /execution reverted:\s*([^"(\n]+)/i.exec(msg);
+  const reason = m?.[1]?.trim();
+  return reason && reason.length > 1 ? reason : null;
 }
 
 /** The message of an ABI-encoded `Error(string)` revert payload, or null. */
