@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useRef, useState, useCallback, lazy, Suspense } from 'react';
 import { useStore } from '@/stores/useStore';
-import { api, createWsConnection } from '@/lib/api';
+import { api } from '@/lib/api';
+import { subscribe as subscribeWs } from '@/lib/wsHub';
 import { cn, formatPrice, formatNumber } from '@/lib/utils';
 import { useDismissable } from '@/hooks/useDismissable';
 
@@ -209,7 +210,6 @@ export default function Chart() {
   // candles API returned no real trade history for this market/timeframe.
   const [isSynthetic, setIsSynthetic] = useState(false);
   const candlesCache = useRef<any[]>([]);
-  const wsRef = useRef<WebSocket | null>(null);
   const drawClickCount = useRef(0);
   const drawTempPoint = useRef<{ time: number; price: number } | null>(null);
 
@@ -612,29 +612,12 @@ export default function Chart() {
     } catch { /* series not ready yet — buildChart will pick up the seed */ }
   }, [market.id, tickers]);
 
-  // Real-time candle updates via WebSocket
+  // Real-time candle updates from the tab's shared WebSocket (lib/wsHub), which
+  // also reconnects after a dropped connection.
   useEffect(() => {
     const tfSec = TF_MS[tf] || 3600;
-    // Reconnect with capped exponential backoff so candles resume after a
-    // dropped connection instead of freezing. The disposed guard prevents
-    // ws.close() in cleanup from scheduling a zombie reconnect.
-    let disposed = false;
-    let retryTimer: ReturnType<typeof setTimeout> | null = null;
-    let attempts = 0;
-
-    function connect() {
-      if (disposed) return;
-      const ws = createWsConnection();
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        attempts = 0;
-        ws.send(JSON.stringify({ action: 'subscribe', channel: `trades:${market.id}` }));
-      };
-
-      ws.onmessage = (ev) => {
+    return subscribeWs(`trades:${market.id}`, (data) => {
         try {
-          const data = JSON.parse(ev.data);
           if (data.type !== 'trade' || data.marketId !== market.id) return;
 
           const tradeTime = typeof data.time === 'string' ? Math.floor(new Date(data.time).getTime() / 1000) : Math.floor(data.time);
@@ -664,24 +647,7 @@ export default function Chart() {
             color: updated.close >= updated.open ? 'rgba(43,217,106,0.25)' : 'rgba(255,77,61,0.25)',
           });
         } catch {}
-      };
-
-      ws.onclose = () => {
-        if (disposed) return;
-        const delay = Math.min(1000 * 2 ** attempts, 30000);
-        attempts += 1;
-        retryTimer = setTimeout(connect, delay);
-      };
-
-      ws.onerror = () => ws.close();
-    }
-
-    connect();
-    return () => {
-      disposed = true;
-      if (retryTimer) clearTimeout(retryTimer);
-      wsRef.current?.close();
-    };
+    });
   }, [market.id, tf, chartType]);
 
   async function loadCandles() {

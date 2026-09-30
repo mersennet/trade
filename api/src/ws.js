@@ -273,8 +273,10 @@ function setupWebSocket(server) {
     }
   }
 
+  // Messages name their channel: a trade goes out on its market's channel and on
+  // each followed party's, and one shared client socket must tell them apart.
   function broadcastToChannel(channel, data) {
-    const msg = JSON.stringify(data);
+    const msg = JSON.stringify({ ...data, channel });
     for (const [ws, channels] of subscriptions) {
       if (channels.has(channel) && ws.readyState === WebSocket.OPEN) {
         try {
@@ -340,7 +342,7 @@ function setupWebSocket(server) {
               ? dataCache.tickers.get(Number(id))
               : dataCache.orderbooks.get(Number(id));
             if (cached) {
-              try { ws.send(JSON.stringify(cached)); } catch (_) {}
+              try { ws.send(JSON.stringify({ ...cached, channel: msg.channel })); } catch (_) {}
             }
           }
         } else if (msg.action === 'unsubscribe' && msg.channel) {
