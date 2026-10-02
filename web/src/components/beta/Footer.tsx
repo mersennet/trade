@@ -37,6 +37,7 @@ const FOOTER_LINKS = [
       { label: 'Downloads', href: 'https://mersennet.com/downloads/', external: true },
       { label: 'Feedback', href: '/feedback' },
       { label: 'Telegram chat', href: 'https://t.me/Mersennet', external: true },
+      { label: 'Announcements', href: 'https://t.me/mersennet_announcements', external: true },
       { label: 'X · @mersennetlabs', href: 'https://x.com/mersennetlabs', external: true },
     ],
   },
