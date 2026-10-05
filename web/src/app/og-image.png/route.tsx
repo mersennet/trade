@@ -77,7 +77,7 @@ export async function GET() {
           </div>
 
           <div style={{ display: 'flex', fontSize: 26, color: '#7dff9b', fontWeight: 500 }}>
-            MRSN · BTC · ETH · SOL · ARB · Up to 100× leverage · Free testnet MRSN
+            MRSN · BTC · ETH · SOL · ARB · Up to 10× leverage · Free testnet MRSN
           </div>
         </div>
 
