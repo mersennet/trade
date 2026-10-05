@@ -107,7 +107,8 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
-      - run: npm audit --audit-level=high
+      - name: npm audit --audit-level=high (time-limited exceptions in audit-allowlist.json)
+        run: node scripts/audit.mjs
 
   api:
     name: api — syntax, load, audit
