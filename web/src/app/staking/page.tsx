@@ -189,19 +189,21 @@ export default function StakingPage() {
         </div>
       )}
 
-      {/* overflow-x-auto: seven columns are ~930px wide; on a phone the Stake /
-          Delegate actions were clipped off the right edge with no way to reach them. */}
+      {/* overflow-x-auto: seven columns are ~1,000px wide; on a phone the Stake /
+          Delegate actions were clipped off the right edge with no way to reach them.
+          Keep the row within the 1,050px content box of a 1152–1280px window, or
+          Claim is cut off at the edge there with no sign that the table scrolls. */}
       <div className="bg-surface border border-border rounded-xl overflow-x-auto">
         <table className="w-full min-w-[720px] text-sm">
           <thead>
             <tr className="text-[10px] text-dim uppercase tracking-wider border-b border-border">
-              <th className="text-left font-medium px-4 py-3">Validator</th>
-              <th className="text-right font-medium px-4 py-3" title="Bonded by the operator">Self-stake (MRSN)</th>
-              <th className="text-right font-medium px-4 py-3" title="Staked behind the validator by delegators">Delegated (MRSN)</th>
-              <th className="text-right font-medium px-4 py-3" title="Share of delegators' rewards the operator keeps">Commission</th>
-              <th className="text-right font-medium px-4 py-3" title="MRSN this wallet has delegated to the validator">Your delegation (MRSN)</th>
-              <th className="text-right font-medium px-4 py-3" title="Claimable rewards on your delegation">Rewards (MRSN)</th>
-              <th className="text-right font-medium px-4 py-3 w-[300px]">Actions</th>
+              <th className="text-left font-medium px-3 py-3">Validator</th>
+              <th className="text-right font-medium px-3 py-3" title="Bonded by the operator">Self-stake (MRSN)</th>
+              <th className="text-right font-medium px-3 py-3" title="Staked behind the validator by delegators">Delegated (MRSN)</th>
+              <th className="text-right font-medium px-3 py-3" title="Share of delegators' rewards the operator keeps">Commission</th>
+              <th className="text-right font-medium px-3 py-3" title="MRSN this wallet has delegated to the validator">Your delegation (MRSN)</th>
+              <th className="text-right font-medium px-3 py-3" title="Claimable rewards on your delegation">Rewards (MRSN)</th>
+              <th className="text-right font-medium px-3 py-3 w-[300px]">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -209,14 +211,14 @@ export default function StakingPage() {
                 for eleven rows pushed the whole page down. */}
             {loading && Array.from({ length: PLACEHOLDER_ROWS }, (_, i) => (
               <tr key={`placeholder-${i}`} className="border-b border-border/50 last:border-0 h-[51px]">
-                <td colSpan={7} className="px-4 text-dim text-xs">
+                <td colSpan={7} className="px-3 text-dim text-xs">
                   {i === 0 ? 'Loading validators…' : <span aria-hidden className="block h-2.5 max-w-[560px] rounded bg-surface-2/70 animate-pulse" />}
                 </td>
               </tr>
             ))}
             {!loading && rows.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-dim">
+                <td colSpan={7} className="px-3 py-8 text-center text-dim">
                   {loadError ? 'Could not reach the network — retrying automatically…' : 'No validators found.'}
                 </td>
               </tr>
@@ -227,21 +229,21 @@ export default function StakingPage() {
               const own = myIdentities.has(r.address.toLowerCase());
               return (
                 <tr key={r.address} id={`delegate-${r.address.toLowerCase()}`} className={cn('border-b border-border/50 last:border-0', own && 'bg-primary/5')}>
-                  <td className="px-4 py-3 font-mono text-foreground">{shortenAddress(r.address)}{own && <span className="text-primary"> · your node</span>}</td>
+                  <td className="px-3 py-3 font-mono text-foreground">{shortenAddress(r.address)}{own && <span className="text-primary"> · your node</span>}</td>
                   {/* Both stake columns in fixed decimals so they read as one unit:
                       0.00 · 1,004.91 · 41,002.00 (community feedback). Exact value on hover. */}
-                  <td className="px-4 py-3 text-right font-mono tabular-nums" title={`${fmtMrsnWei(r.selfStake, 18)} MRSN`}>{fmtMrsnWei(r.selfStake, 2, true)}</td>
-                  <td className="px-4 py-3 text-right font-mono tabular-nums" title={`${fmtMrsnWei(r.delegatedTotal, 18)} MRSN`}>
+                  <td className="px-3 py-3 text-right font-mono tabular-nums" title={`${fmtMrsnWei(r.selfStake, 18)} MRSN`}>{fmtMrsnWei(r.selfStake, 2, true)}</td>
+                  <td className="px-3 py-3 text-right font-mono tabular-nums" title={`${fmtMrsnWei(r.delegatedTotal, 18)} MRSN`}>
                     {fmtMrsnWei(r.delegatedTotal, 2, true)}
                   </td>
-                  <td className="px-4 py-3 text-right font-mono tabular-nums">{(r.commissionBps / 100).toFixed(1)}%</td>
-                  <td className={cn('px-4 py-3 text-right font-mono tabular-nums', BigInt(r.myDelegation) > 0n && 'text-primary')} title={`${fmtMrsnWei(r.myDelegation, 18)} MRSN`}>
+                  <td className="px-3 py-3 text-right font-mono tabular-nums">{(r.commissionBps / 100).toFixed(1)}%</td>
+                  <td className={cn('px-3 py-3 text-right font-mono tabular-nums', BigInt(r.myDelegation) > 0n && 'text-primary')} title={`${fmtMrsnWei(r.myDelegation, 18)} MRSN`}>
                     {fmtMrsnWei(r.myDelegation, 2, true)}
                   </td>
-                  <td className={cn('px-4 py-3 text-right font-mono tabular-nums', BigInt(r.myPending) > 0n && 'text-green')}>
+                  <td className={cn('px-3 py-3 text-right font-mono tabular-nums', BigInt(r.myPending) > 0n && 'text-green')}>
                     {fmtMrsnWei(r.myPending, 6, true)}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-3">
                     <div className="flex items-center justify-end gap-1.5">
                       <div className="flex rounded-lg border border-border overflow-hidden">
                         <button
@@ -261,7 +263,7 @@ export default function StakingPage() {
                           placeholder="MRSN"
                           inputMode="decimal"
                           aria-label={`Amount in MRSN to ${m} with ${shortenAddress(r.address)}`}
-                          className="w-28 bg-surface-2 border border-border rounded-lg pl-2 pr-9 py-1 text-xs font-mono text-right focus:outline-none focus:border-primary"
+                          className="w-24 bg-surface-2 border border-border rounded-lg pl-2 pr-9 py-1 text-xs font-mono text-right focus:outline-none focus:border-primary"
                         />
                         <button
                           type="button"
@@ -326,25 +328,25 @@ export default function StakingPage() {
           {(loading || rows.length > 0) && (
             <tfoot>
               <tr className="border-t-2 border-border bg-surface-2/40">
-                <td className="px-4 py-3 text-xs font-semibold text-foreground">Grand total <span className="text-dim font-normal">· {loading ? '—' : rows.length} validators</span></td>
-                <td className="px-4 py-3 text-right font-mono tabular-nums font-semibold" title="Grand total staked (MRSN)">
+                <td className="px-3 py-3 text-xs font-semibold text-foreground">Grand total <span className="text-dim font-normal">· {loading ? '—' : rows.length} validators</span></td>
+                <td className="px-3 py-3 text-right font-mono tabular-nums font-semibold" title="Grand total staked (MRSN)">
                   {loading ? '—' : fmtMrsnWei(rows.reduce((s, r) => s + BigInt(r.selfStake), 0n), 2, true)}
                   <div className="text-[10px] text-dim font-normal">staked (MRSN)</div>
                 </td>
-                <td className="px-4 py-3 text-right font-mono tabular-nums font-semibold" title="Grand total delegated (MRSN)">
+                <td className="px-3 py-3 text-right font-mono tabular-nums font-semibold" title="Grand total delegated (MRSN)">
                   {loading ? '—' : fmtMrsnWei(rows.reduce((s, r) => s + BigInt(r.delegatedTotal), 0n), 2, true)}
                   <div className="text-[10px] text-dim font-normal">delegated (MRSN)</div>
                 </td>
-                <td className="px-4 py-3" />
-                <td className={cn('px-4 py-3 text-right font-mono tabular-nums font-semibold', totalMine > 0n && 'text-primary')} title="Your total delegation (MRSN)">
+                <td className="px-3 py-3" />
+                <td className={cn('px-3 py-3 text-right font-mono tabular-nums font-semibold', totalMine > 0n && 'text-primary')} title="Your total delegation (MRSN)">
                   {loading ? '—' : fmtMrsnWei(totalMine, 2, true)}
                   <div className="text-[10px] text-dim font-normal">yours (MRSN)</div>
                 </td>
-                <td className={cn('px-4 py-3 text-right font-mono tabular-nums font-semibold', totalPending > 0n && 'text-green')} title="Your claimable rewards (MRSN)">
+                <td className={cn('px-3 py-3 text-right font-mono tabular-nums font-semibold', totalPending > 0n && 'text-green')} title="Your claimable rewards (MRSN)">
                   {loading ? '—' : fmtMrsnWei(totalPending, 6, true)}
                   <div className="text-[10px] text-dim font-normal">claimable (MRSN)</div>
                 </td>
-                <td className="px-4 py-3" />
+                <td className="px-3 py-3" />
               </tr>
             </tfoot>
           )}
