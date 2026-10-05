@@ -55,7 +55,8 @@ router.post('/propose', strictLimiter, async (req, res) => {
       return res.status(409).json({ error: 'A proposal for this symbol already exists' });
     }
 
-    const leverage = Math.min(100, Math.max(1, Number(max_leverage) || 20));
+    // The chain's 10% initial margin caps every market at 10x.
+    const leverage = Math.min(10, Math.max(1, Number(max_leverage) || 10));
 
     const result = await pool.query(
       `INSERT INTO market_proposals

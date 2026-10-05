@@ -1,0 +1,8 @@
+[
+  {
+    "id": "GHSA-vfj7-8cjw-p6xm",
+    "package": "braces",
+    "reason": "Lint tooling only (eslint-config-next > @next/eslint-plugin-next > fast-glob > micromatch > braces), never shipped to users; no patched braces release yet. Drop this entry once one exists.",
+    "expires": "2026-11-04"
+  }
+]

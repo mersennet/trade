@@ -34,7 +34,7 @@ export default function RiskPage() {
 
         <h2 className="text-white mt-8">3. Market risk</h2>
         <p className="text-white/75">
-          Perpetual futures use leverage of up to 100x, depending on the market. Adverse price movements can cause partial or full
+          Perpetual futures use leverage of up to 10x on every market. Adverse price movements can cause partial or full
           liquidation. Funding payments (positive or negative) may meaningfully affect your PnL over time.
           Markets in beta may have wide bid-ask spreads and shallow depth.
         </p>
