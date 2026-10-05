@@ -33,7 +33,7 @@ export default function CreateMarketPage() {
   const [symbol, setSymbol] = useState('');
   const [baseAsset, setBaseAsset] = useState('');
   const [quoteAsset, setQuoteAsset] = useState('USD');
-  const [maxLeverage, setMaxLeverage] = useState(20);
+  const [maxLeverage, setMaxLeverage] = useState(10);
 
   const fetchProposals = useCallback(async () => {
     try {
@@ -69,7 +69,7 @@ export default function CreateMarketPage() {
       setSymbol('');
       setBaseAsset('');
       setQuoteAsset('USD');
-      setMaxLeverage(20);
+      setMaxLeverage(10);
       fetchProposals();
     } catch (e) {
       toast(`Proposal failed: ${(e as Error).message}`, 'error');
@@ -237,16 +237,15 @@ export default function CreateMarketPage() {
           <input
             type="range"
             min={1}
-            max={100}
+            max={10}
             value={maxLeverage}
             onChange={(e) => setMaxLeverage(Number(e.target.value))}
             className="w-full h-1.5 bg-surface-2 rounded-full appearance-none cursor-pointer accent-primary"
           />
           <div className="flex justify-between text-[10px] text-dim font-mono mt-1">
             <span>1x</span>
-            <span>25x</span>
-            <span>50x</span>
-            <span>100x</span>
+            <span>5x</span>
+            <span>10x</span>
           </div>
         </div>
 
