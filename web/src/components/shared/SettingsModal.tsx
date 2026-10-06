@@ -252,8 +252,8 @@ export default function SettingsModal() {
 
 /**
  * One-click trading = an agent key. Enabling grants the key on-chain (one
- * confirmation), funds it with gas (a second one), then orders, brackets and
- * conditional orders sign silently while positions stay on the main wallet.
+ * confirmation), funds it with gas (a second one), then orders, closes, brackets
+ * and conditional orders sign silently while positions stay on the main wallet.
  */
 function OneClickSection() {
   const { address, provider, isConnected } = useWallet();
@@ -323,7 +323,7 @@ function OneClickSection() {
         <div>
           <span className="text-[11px] text-foreground block">One-Click Trading (agent key)</span>
           <span className="text-[10px] text-dim">
-            A key kept in this browser signs orders, TP/SL and conditional orders without a wallet popup. It can trade for your account, never withdraw from it.
+            A key kept in this browser signs orders, position closes, TP/SL and conditional orders without a wallet popup. It can trade for your account, never withdraw from it.
           </span>
         </div>
         {isConnected && status?.active && (

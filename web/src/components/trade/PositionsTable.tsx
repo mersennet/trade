@@ -9,6 +9,8 @@ import EmptyState, { SkeletonRows } from '@/components/shared/EmptyState';
 import { playSound } from '@/lib/sounds';
 import { startPoll } from '@/lib/poll';
 import { useStore as useAppStore } from '@/stores/useStore';
+import { pruneClosedBrackets } from '@/hooks/useBrackets';
+import { AGENT_GAS_TOPUP_MRSN } from '@/lib/agent';
 
 type Tab = 'positions' | 'orders' | 'trades' | 'history';
 
@@ -36,6 +38,8 @@ export default function PositionsTable() {
   const removeConditional = useStore((s) => s.removeConditional);
   const setBracket = useStore((s) => s.setBracket);
   const removeBracket = useStore((s) => s.removeBracket);
+  const oneClickOn = useStore((s) => s.oneClickEnabled && !!s.sessionKey);
+  const closeSigner = oneClickOn ? 'signed by your one-click key, no wallet popup' : 'confirm in your wallet; turn on one-click trading in Settings to skip the popup';
 
   // Reset the loading skeleton when the wallet disconnects (render-time
   // adjust, not an effect setState).
@@ -183,6 +187,8 @@ export default function PositionsTable() {
     if (size <= 0) { toast('Position too small to partially close', 'info'); return; }
     const side = Number(pos.size) > 0 ? 'Sell' : 'Buy';
     const mark = tickers[pos.marketId]?.markPrice || 0;
+    const { oneClickEnabled, sessionKey } = useAppStore.getState();
+    const useOneClick = oneClickEnabled && !!sessionKey;
     try {
       // Signed IOC order to the precompile closes the position (reduce-only is
       // implicit: an opposing IOC order nets the existing position down). Price
@@ -202,11 +208,19 @@ export default function PositionsTable() {
         priceUsd: priceForClose,
         sizeBase: size.toString(),
         tif: 'Ioc',
+        sessionKey: useOneClick ? sessionKey || undefined : undefined,
       });
       toast(fraction >= 1 ? `Closing ${pos.symbol} position` : `Closing ${Math.round(fraction * 100)}% of ${pos.symbol}`, 'success');
       if (useAppStore.getState().soundEnabled) playSound('fill');
+      if (fraction >= 1) {
+        for (const ms of [5_000, 14_000]) setTimeout(() => { void pruneClosedBrackets(address, pos.marketId); }, ms);
+      }
     } catch (e) {
-      toast(`Close failed: ${(e as Error).message}`, 'error');
+      const raw = (e as Error).message || '';
+      const msg = useOneClick && /insufficient funds|insufficient balance for gas/i.test(raw)
+        ? `Your one-click agent key is out of gas — top it up in Settings (${AGENT_GAS_TOPUP_MRSN} MRSN lasts thousands of orders).`
+        : raw;
+      toast(`Close failed: ${msg}`, 'error');
     }
   };
 
@@ -410,13 +424,14 @@ export default function PositionsTable() {
                               <button
                                 key={f}
                                 onClick={() => handleClosePosition(p, f)}
-                                title={f === 1 ? 'Close entire position' : `Close ${f * 100}% of the position`}
+                                title={`${f === 1 ? 'Close entire position' : `Close ${f * 100}% of the position`} (${closeSigner})`}
                                 className="px-1.5 py-1 text-[9px] font-medium text-dim hover:text-foreground bg-surface-2 rounded border border-border hover:border-foreground/20 transition-colors"
                               >{f === 1 ? '100' : `${f * 100}`}%</button>
                             ))}
                           </div>
                           <button
                             onClick={() => handleClosePosition(p)}
+                            title={`Close at market (${closeSigner})`}
                             className="px-2.5 py-1 text-[10px] font-medium bg-red/10 text-red rounded-md hover:bg-red/20 transition-colors"
                           >Close</button>
                         </div>
