@@ -110,6 +110,9 @@ export interface Bracket {
   tp: string | null;
   sl: string | null;
   ts: number;
+  /** The watcher has seen the position open on chain. A bracket set together
+   * with a resting order exists before its position does. */
+  seenOpen?: boolean;
 }
 
 interface AppState {

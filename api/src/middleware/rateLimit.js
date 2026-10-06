@@ -64,4 +64,4 @@ const strictLimiter = rateLimit({
   skip: isLocalhost,
 });
 
-module.exports = { apiLimiter, strictLimiter, clientIp };
+module.exports = { apiLimiter, strictLimiter, clientIp, keyGenerator };

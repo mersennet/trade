@@ -41,14 +41,17 @@ const tableReady = ensureTable().catch((e) => {
 });
 
 const crypto = require('crypto');
+const { clientIp, keyGenerator } = require('../middleware/rateLimit');
 function hashIp(req) {
-  const ip = req.headers['x-real-ip'] || req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || '';
-  if (!ip) return null;
+  const ip = clientIp(req);
+  if (!ip || ip === 'unknown') return null;
   return crypto.createHash('sha256').update(ip + (process.env.FEEDBACK_IP_SALT || 'mersennet-trade')).digest('hex').slice(0, 16);
 }
 
-// Behind Caddy, req.ip is the proxy; key the limiter on the forwarded client
-// address instead so one abusive source cannot exhaust everyone's quota.
+// Behind Caddy, req.ip is the proxy; key the limiter on the client address
+// (see middleware/rateLimit.js) so one abusive source cannot exhaust
+// everyone's quota. X-Real-IP is not set by our proxies, so a client can send
+// any value in it.
 const rateLimit = require('express-rate-limit');
 const postLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -56,7 +59,7 @@ const postLimiter = rateLimit({
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   validate: false,
-  keyGenerator: (req) => req.headers['x-real-ip'] || req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || 'unknown',
+  keyGenerator,
   message: { error: 'too many submissions, try again later' },
 });
 

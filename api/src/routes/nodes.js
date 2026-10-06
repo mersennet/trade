@@ -17,6 +17,7 @@ const { ethers } = require('ethers');
 const pool = require('../db/pool');
 const { whoami } = require('../services/nodeProbe');
 const { sendError } = require('../middleware/httpError');
+const { keyGenerator } = require('../middleware/rateLimit');
 
 const router = express.Router();
 const SEASON = 1;
@@ -53,7 +54,7 @@ const verifyLimiter = rateLimit({
   limit: 12,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
-  keyGenerator: (req) => req.headers['x-real-ip'] || (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip,
+  keyGenerator,
   validate: false,
   message: { error: 'Too many verification attempts; try again in 15 minutes' },
 });
@@ -129,7 +130,7 @@ const probeLimiter = rateLimit({
   limit: 10,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
-  keyGenerator: (req) => req.headers['x-real-ip'] || (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip,
+  keyGenerator,
   validate: false,
   message: { error: 'Too many probes; try again in a minute' },
 });

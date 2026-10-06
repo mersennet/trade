@@ -1,9 +1,75 @@
 'use client';
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useStore, type Bracket } from '@/stores/useStore';
 import { useWallet } from '@/hooks/useWallet';
 import { useToast } from '@/components/shared/Toast';
 import { livePositionSize } from '@/lib/positions';
+import { api } from '@/lib/api';
+
+const UNFILLED_GRACE_MS = 60_000;
+const FLAT_CONFIRM_MS = 8_000;
+let pruning = false;
+const firing = new Set<string>();
+const flatSince = new Map<string, number>();
+
+/**
+ * Drop the owner's brackets whose position is gone: closed by hand, liquidated,
+ * flipped or closed in another tab. Otherwise they stay armed, and drawn on
+ * the chart, until a trigger happens to cross. A bracket set with a resting
+ * order exists before its position does, so one that has never seen its
+ * position open goes only when it is over a minute old and no order of the
+ * owner rests on that market. When the chain does not answer, nothing goes.
+ * rpc.mersennet.com has several origins and one catching up after a restart
+ * can briefly serve a state from before the position opened, so the position
+ * must read flat on two passes FLAT_CONFIRM_MS apart.
+ */
+export async function pruneClosedBrackets(owner: string, marketId?: number) {
+  if (pruning) return;
+  pruning = true;
+  try {
+    const store = useStore.getState;
+    const mine = store().brackets.filter((b) => b.owner.toLowerCase() === owner.toLowerCase()
+      && (marketId === undefined || b.marketId === marketId));
+    let restingMarkets: Set<number> | null = null;
+    for (const b of mine) {
+      if (firing.has(b.id)) continue;
+      const live = await livePositionSize(b.owner, b.marketId);
+      if (live === null) continue;
+      const current = store().brackets.find((x) => x.id === b.id);
+      if (!current || current.ts !== b.ts || firing.has(b.id)) continue;
+      const held = current.isLong ? live : -live;
+      const key = `${current.id}:${current.ts}`;
+      if (held > 0) {
+        flatSince.delete(key);
+        if (!current.seenOpen) store().setBracket({ ...current, seenOpen: true });
+        continue;
+      }
+      if (!current.seenOpen) {
+        if (Date.now() - current.ts < UNFILLED_GRACE_MS) continue;
+        if (restingMarkets === null) {
+          try {
+            const res = await api.getOrders(owner);
+            restingMarkets = new Set(res.orders.map((o) => Number(o.market_id)));
+          } catch {
+            return;
+          }
+        }
+        if (restingMarkets.has(current.marketId)) continue;
+      }
+      const first = flatSince.get(key);
+      if (first === undefined) {
+        flatSince.set(key, Date.now());
+        continue;
+      }
+      if (Date.now() - first < FLAT_CONFIRM_MS) continue;
+      flatSince.delete(key);
+      store().removeBracket(current.id);
+      store().addNotification('info', 'TP/SL removed', `Market ${current.marketId}: the position it protected is closed.`);
+    }
+  } finally {
+    pruning = false;
+  }
+}
 
 /**
  * Client-side TP/SL bracket watcher.
@@ -27,7 +93,6 @@ export function useBrackets() {
   const sessionKey = useStore((s) => s.sessionKey);
   const { address, provider } = useWallet();
   const { toast } = useToast();
-  const firingRef = useRef<Set<string>>(new Set());
 
   async function fireBracket(b: Bracket, leg: 'tp' | 'sl') {
     const label = leg === 'tp' ? 'Take-profit' : 'Stop-loss';
@@ -93,11 +158,19 @@ export function useBrackets() {
   }
 
   useEffect(() => {
+    if (!address) return;
+    const run = () => { void pruneClosedBrackets(address); };
+    run();
+    const timer = setInterval(run, 10_000);
+    return () => clearInterval(timer);
+  }, [address]);
+
+  useEffect(() => {
     if (!address || brackets.length === 0) return;
 
     for (const b of brackets) {
       if (b.owner.toLowerCase() !== address.toLowerCase()) continue;
-      if (firingRef.current.has(b.id)) continue;
+      if (firing.has(b.id)) continue;
       const mark = tickers[b.marketId]?.markPrice;
       if (!mark) continue;
 
@@ -113,8 +186,8 @@ export function useBrackets() {
       }
       if (!fire) continue;
 
-      firingRef.current.add(b.id);
-      void fireBracket(b, fire).finally(() => firingRef.current.delete(b.id));
+      firing.add(b.id);
+      void fireBracket(b, fire).finally(() => firing.delete(b.id));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tickers, brackets, address]);
