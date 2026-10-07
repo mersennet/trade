@@ -403,9 +403,20 @@ async function getMarkPrice(marketId) {
   return (last > 0n ? last : bid > 0n ? bid : ask).toString();
 }
 
+// Markets with no external listing are priced off their own book, so a swept
+// or polluted book became "the price" (6 Oct: MRSN/USD shown at $16,472, and
+// bots quoting off this feed kept it there). Outside 0.3x-3x of the seed the
+// display falls back to the seed.
+const DISPLAY_REFERENCE_USD = { 1: 115, 5: 100 };
+
 /** Display-only price with age. Mersennet matches on-chain, so mid is never stale. */
 async function getOraclePriceForDisplay(marketId) {
   const price = await getMarkPrice(marketId);
+  const ref = DISPLAY_REFERENCE_USD[Number(marketId)];
+  const human = toHumanPrice(marketId, price);
+  if (ref && human > 0 && (human > ref * 3 || human < ref * 0.3)) {
+    return { price: toChainPrice(marketId, ref).toString(), age: 0, clamped: true };
+  }
   return { price, age: 0 };
 }
 

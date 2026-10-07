@@ -38,7 +38,9 @@ const { refreshProtocol, ensureUnits, marginBps } = require('./settlement');
 const { deriveKey } = require('./signer');
 const { ethers: ethersLib } = require('ethers');
 const MARKETS = {
-  1: { symbol: 'MRSN', seed: 115,   tick: 0.05, baseSize: 150, levels: 3 }, // top level absorbs a whole taker wave (5 × 10) between refreshes
+  // Top level absorbs a whole taker wave (5 × 10) between refreshes; 8 levels
+  // so one large sweep cannot empty the side (6 Oct: ~500 contracts did).
+  1: { symbol: 'MRSN', seed: 115,   tick: 0.05, baseSize: 150, levels: 8 },
   2: { symbol: 'BTC',  seed: 77000, tick: 10,   baseSize: 3,   levels: 5 }, // busiest market: deeper ask side so takers don't empty it between cycles
   3: { symbol: 'ETH',  seed: 2500,  tick: 1,    baseSize: 8,   levels: 3 },
   4: { symbol: 'SOL',  seed: 100,   tick: 0.05, baseSize: 60,  levels: 3 },
