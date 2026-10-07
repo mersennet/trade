@@ -112,6 +112,12 @@ export default function ValidatorSetPanel({ ownNodesSlot }: { ownNodesSlot?: HTM
   useEffect(() => { if (!selected && candidates[0]) setSelected(candidates[0].identity); }, [candidates, selected]);
   const minStake = view ? Number(weiToMrsn(view.params.minSelfStake, 0)) : 1000;
   const blocksToEpoch = view ? Math.max(0, view.nextEpochAt - view.height) : 0;
+  // A jailed validator is back at the first block of `jailedUntilEpoch`; repeat jails last 1, 2, 4… epochs.
+  const jailReturnAt = (v: ValidatorSetEntry) => (view ? v.jailedUntilEpoch * view.params.epochBlocks : 0);
+  const jailEta = (v: ValidatorSetEntry) => {
+    const min = view ? Math.round(Math.max(0, jailReturnAt(v) - view.height) * 2.05 / 60) : 0;
+    return min >= 120 ? `~${Math.round(min / 60)} h` : `~${Math.max(1, min)} min`;
+  };
   const myEntries = (view?.validators || []).filter((v) => address && v.operator.toLowerCase() === address.toLowerCase());
   const activationPending = !!view && !view.active;
 
@@ -166,7 +172,7 @@ export default function ValidatorSetPanel({ ownNodesSlot }: { ownNodesSlot?: HTM
             <div className="px-4 py-2.5 border-b border-border flex flex-wrap items-center gap-x-3 gap-y-1">
               <h3 className="text-[11px] font-semibold text-primary uppercase tracking-wider">Your node</h3>
               <span className="font-mono text-[12px] text-foreground" title="Node identity (its signing key). Your wallet is the operator.">{shortenAddress(v.identity)}</span>
-              <span className={cn('font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded', STATUS_TONE[v.status] || 'text-dim')}>{v.status}{v.status === 'jailed' ? ` until epoch ${v.jailedUntilEpoch}` : ''}</span>
+              <span title={v.status === 'jailed' ? `Back automatically at block ${jailReturnAt(v).toLocaleString()}. Jailed ${v.timesJailed} time${v.timesJailed === 1 ? '' : 's'} in a row: repeat jails last 1, 2, 4, 8, 16, then 24 epochs; one full epoch without misses resets the count.` : undefined} className={cn('font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded', STATUS_TONE[v.status] || 'text-dim')}>{v.status}{v.status === 'jailed' ? ` until epoch ${v.jailedUntilEpoch} · ${jailEta(v)}` : ''}</span>
               {v.benched && <span title="Missed 3 leader slots this epoch: out of the leader rotation until the epoch boundary (still voting)" className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded text-yellow-400 bg-yellow-400/10">benched</span>}
               <span className="text-[11px] text-dim font-mono" title={inSet ? 'In the active set this epoch' : 'Not in the active set this epoch'}>{rank > 0 ? `rank #${rank} of ${maxValidators}` : ''}{inSet ? '' : ' · waiting for the next epoch'}</span>
               {b?.build && (b.outdated ? <UpgradeBadge build={b.build} latest={builds.latest} /> : <span className="text-[11px] text-dim font-mono" title="Build reported by the node">build {b.build}</span>)}
