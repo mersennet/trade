@@ -31,7 +31,7 @@
     "typescript": "^5"
   },
   "overrides": {
-    "sharp": "^0.35.3",
+    "sharp": "^0.35.5",
     "axios": "^1.18.0"
   }
 }
