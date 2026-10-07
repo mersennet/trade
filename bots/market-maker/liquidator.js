@@ -20,6 +20,15 @@ async function rpcCall(method, params = []) {
 const inflight = new Map(); // account -> sentAt
 let lastIdleLog = 0;
 
+// A liquidation that cannot trade (every resting order on the other side
+// belongs to an account that cannot margin the fill) still succeeds and
+// leaves the account liquidatable; retrying it every 30 s filled blocks for
+// nothing. Each attempt doubles the wait (1 min up to 1 h) until the account
+// stops being liquidatable.
+const backoff = new Map(); // account -> { attempts, nextAt }
+const BACKOFF_MIN_MS = 60_000;
+const BACKOFF_MAX_MS = 3_600_000;
+
 // The precompile marks positions at each market's last trade. When that is
 // outside 0.3x-3x of the maker's seed (index.js MARKETS) the book was swept
 // or polluted, and liquidating on it closes accounts at a price nobody can
@@ -59,18 +68,27 @@ async function tick() {
   const r = await rpcCall('mersennet_orders_getLiquidatable', []);
   const accounts = (r?.accounts || []).map((a) => a.toLowerCase());
   for (const [a, t] of inflight) if (Date.now() - t > 30_000 || !accounts.includes(a)) inflight.delete(a);
+  for (const a of backoff.keys()) if (!accounts.includes(a)) backoff.delete(a);
   const dislocated = await dislocatedMarkets();
   let skipped = 0;
   for (const account of accounts) {
     if (inflight.has(account)) continue;
     if (account === keeper.address.toLowerCase()) continue;
+    const b = backoff.get(account);
+    if (b && Date.now() < b.nextAt) continue;
     try {
       if (dislocated.size && [...(await marketsHeld(account))].some((m) => dislocated.has(m))) {
         skipped += 1;
         continue;
       }
       const tx = await keeper.liquidate(account);
-      if (tx) { inflight.set(account, Date.now()); console.log(`[liq] liquidating ${account} tx ${tx}`); }
+      if (tx) {
+        inflight.set(account, Date.now());
+        const attempts = (b?.attempts || 0) + 1;
+        const wait = Math.min(BACKOFF_MAX_MS, BACKOFF_MIN_MS * 2 ** (attempts - 1));
+        backoff.set(account, { attempts, nextAt: Date.now() + wait });
+        console.log(`[liq] liquidating ${account} tx ${tx} (attempt ${attempts}; next try in ${Math.round(wait / 60_000)} min if still liquidatable)`);
+      }
     } catch (e) {
       console.warn(`[liq] ${account}: ${e.message}`);
     }
