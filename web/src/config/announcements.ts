@@ -26,6 +26,19 @@ export interface Announcement {
 // never rotates (motion on a trading screen costs attention). Newest first.
 export const ANNOUNCEMENTS: Announcement[] = [
   {
+    // The day after the MRSN/USD repair (block 2,324,700).
+    id: 'mrsn-repaired-2026-10-08',
+    text: 'MRSN/USD is repaired: orders at the broken prices were cancelled and positions opened at them were reset to $115. Trading is back to normal.',
+    showWhen: (p) => !!p && p.height >= 2324700 && p.height < 2324700 + 43_200,
+  },
+  {
+    // From the 6 Oct sweep until the repair.
+    id: 'mrsn-repair-2026-10-08',
+    lead: 'MRSN/USD:',
+    text: 'the market has been stuck around $16,500 since one order swept its book on 6 Oct, so accounts holding MRSN/USD can\'t place orders or withdraw. The network repairs it on {eta:2324700}: orders at the broken prices are cancelled and positions opened at them are reset to $115. No positions were liquidated; Maker Vault deposits are paused until then.',
+    showWhen: (p) => !!p && p.height < 2324700,
+  },
+  {
     // After the 3 Oct switch.
     id: 'validators-50-live-2026-10-03',
     text: 'The validator set now has 50 slots: register a node with 1,000 MRSN self-stake and it produces blocks from the next hourly epoch. Node runners earn 500 points a day.',
