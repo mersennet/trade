@@ -80,8 +80,20 @@ function toHex(v) { return '0x' + BigInt(Math.max(1, Math.round(v))).toString(16
 function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
 function randEl(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
+// A resting bid far above the seed band, or an ask far below it, is matched
+// first by any order on the other side, so a market with one is not traded:
+// on 6 Oct one sweep left MRSN/USD bids up to 1.65M (143x the seed) and every
+// sell printed there.
+function dislocated(id) {
+  const top = rawTop[id];
+  if (!top) return false;
+  const seed = toChain(MARKETS[id].seed, id);
+  return top.bid > seed * 3 || (top.ask > 0 && top.ask < seed * 0.3);
+}
+
 function pickMarket() {
-  const entries = Object.entries(MARKETS);
+  const entries = Object.entries(MARKETS).filter(([id]) => !dislocated(Number(id)));
+  if (entries.length === 0) return null;
   const totalW = entries.reduce((s, [, m]) => s + m.weight, 0);
   let r = Math.random() * totalW;
   for (const [id, m] of entries) {
@@ -190,6 +202,7 @@ async function refreshInventory() {
 
 function generateTrade() {
   const marketId = pickMarket();
+  if (marketId === null) return null;
   const m = MARKETS[marketId];
   const taker = randEl(TAKERS);
   const mid = liveMid[marketId] || toChain(m.seed, marketId);
@@ -269,7 +282,7 @@ async function runWave() {
   }
   submitErrLogged = false;
   const waveSize = randInt(CONFIG.waveSizeMin, CONFIG.waveSizeMax);
-  const trades = Array.from({ length: waveSize }, () => generateTrade());
+  const trades = Array.from({ length: waveSize }, () => generateTrade()).filter(Boolean);
 
   const start = Date.now();
   const results = await Promise.allSettled(trades.map(t => submitTrade(t)));
