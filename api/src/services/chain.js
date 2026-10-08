@@ -544,9 +544,21 @@ async function getBalance(address) {
   return BigInt(r).toString();
 }
 
+// The head is shared for a second, so a burst of requests makes one call, and
+// a refused call (the RPC's per-IP rate limit) is answered from a head under
+// 30 s old instead of failing the request (and the health check).
+let _head = { number: null, at: 0 };
 async function getBlockNumber() {
-  const r = await rpcCall('eth_blockNumber');
-  return Number(BigInt(r));
+  const now = Date.now();
+  if (_head.number != null && now - _head.at < 1000) return _head.number;
+  try {
+    const r = await rpcCall('eth_blockNumber');
+    _head = { number: Number(BigInt(r)), at: now };
+    return _head.number;
+  } catch (e) {
+    if (_head.number != null && now - _head.at < 30_000) return _head.number;
+    throw e;
+  }
 }
 
 // Deposit / withdraw collateral via the precompile.
