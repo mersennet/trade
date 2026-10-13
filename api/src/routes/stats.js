@@ -58,6 +58,10 @@ async function cachedStats() {
     statsCache.inflight = computeStats()
       .then((body) => { statsCache = { at: Date.now(), body, inflight: null }; return body; })
       .catch((e) => { statsCache.inflight = null; throw e; });
+    // A caller served the stale body never awaits this refresh, so its failure
+    // (on the replica, Postgres cancels queries that conflict with recovery)
+    // would be an unhandled rejection, and Node exits on those.
+    statsCache.inflight.catch(() => {});
   }
   // A stale body is better than a 1 s wait while the refresh runs.
   return statsCache.body || statsCache.inflight;
