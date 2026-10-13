@@ -36,6 +36,10 @@ export default function AccountPanel() {
   const [tokenBalances, setTokenBalances] = useState<Record<string, { wallet: number; deposited: number }>>({});
   // 'MRSN' or a registered token symbol — which asset the transfer panel moves.
   const [transferAsset, setTransferAsset] = useState('MRSN');
+  // A token whose margin weight is zero takes no deposits, only withdrawals.
+  const assetChoices = transferMode === 'deposit' ? tokenAssets.filter((a) => a.weightBps > 0) : tokenAssets;
+  const shownAsset = transferAsset === 'MRSN' || assetChoices.some((a) => a.symbol === transferAsset) ? transferAsset : 'MRSN';
+  if (shownAsset !== transferAsset) setTransferAsset(shownAsset);
   const [feeTier, setFeeTier] = useState<{ name: string; makerFee: number; takerFee: number } | null>(null);
   const [feesCharged, setFeesCharged] = useState(false);
   const [points, setPoints] = useState<{ total: number; tier: string } | null>(null);
@@ -271,13 +275,17 @@ export default function AccountPanel() {
             <div
               key={a.token}
               className="flex items-center justify-between"
-              title={`${a.symbol} margin collateral, counted at ${(a.weightBps / 100).toFixed(0)}% of value · wallet balance ${formatNumber(b.wallet, 2)}`}
+              title={a.weightBps > 0
+                ? `${a.symbol} margin collateral, counted at ${(a.weightBps / 100).toFixed(0)}% of value · wallet balance ${formatNumber(b.wallet, 2)}`
+                : `${a.symbol} no longer counts as margin and is no longer accepted as a deposit; what you deposited can be withdrawn at any time`}
             >
               <span className="text-[11px] text-dim">{a.symbol} Collateral</span>
               <span className="text-xs font-mono font-medium text-foreground text-right">
                 {formatNumber(b.deposited, 2)}
-                {b.deposited > 0 && <span className="text-dim"> → {formatNumber(b.deposited * a.weightBps / 10_000, 2)} MRSN margin</span>}
-                <span className="block text-[10px] text-dim font-normal">{formatNumber(b.wallet, 2)} in wallet · counts at {(a.weightBps / 100).toFixed(0)}%</span>
+                {b.deposited > 0 && a.weightBps > 0 && <span className="text-dim"> → {formatNumber(b.deposited * a.weightBps / 10_000, 2)} MRSN margin</span>}
+                <span className="block text-[10px] text-dim font-normal">
+                  {formatNumber(b.wallet, 2)} in wallet · {a.weightBps > 0 ? `counts at ${(a.weightBps / 100).toFixed(0)}%` : 'no longer counts as margin · withdraw anytime'}
+                </span>
               </span>
             </div>
           );
@@ -330,9 +338,9 @@ export default function AccountPanel() {
               margin (mersennet_orders_getCollateralAssets; USDC at 90% today —
               the faucet's USDT/DAI are not registered, so they are not offered).
               Segmented up to three assets, a dropdown beyond that. */}
-          {tokenAssets.length > 0 && tokenAssets.length <= 2 && (
+          {assetChoices.length > 0 && assetChoices.length <= 2 && (
             <div className="flex gap-0.5 p-0.5 bg-surface rounded-md">
-              {['MRSN', ...tokenAssets.map((a) => a.symbol)].map((sym) => (
+              {['MRSN', ...assetChoices.map((a) => a.symbol)].map((sym) => (
                 <button
                   key={sym}
                   onClick={() => setTransferAsset(sym)}
@@ -344,7 +352,7 @@ export default function AccountPanel() {
               ))}
             </div>
           )}
-          {tokenAssets.length > 2 && (
+          {assetChoices.length > 2 && (
             <select
               value={transferAsset}
               onChange={(e) => setTransferAsset(e.target.value)}
@@ -352,7 +360,7 @@ export default function AccountPanel() {
               className="w-full bg-surface border border-border rounded-md px-2 py-1.5 text-[11px] font-semibold text-foreground outline-none focus:border-primary/40"
             >
               <option value="MRSN">MRSN</option>
-              {tokenAssets.map((a) => <option key={a.token} value={a.symbol}>{a.symbol} · counts at {(a.weightBps / 100).toFixed(0)}%</option>)}
+              {assetChoices.map((a) => <option key={a.token} value={a.symbol}>{a.symbol} · {a.weightBps > 0 ? `counts at ${(a.weightBps / 100).toFixed(0)}%` : 'withdraw only'}</option>)}
             </select>
           )}
           <div className="relative">
@@ -389,6 +397,10 @@ export default function AccountPanel() {
               const want = Number(transferAmount);
               if (!Number.isFinite(want) || want <= 0) { toast('Enter a positive amount', 'error'); return; }
               if (transferAsset !== 'MRSN') {
+                const asset = tokenAssets.find((a) => a.symbol === transferAsset);
+                if (transferMode === 'deposit' && asset && asset.weightBps === 0) {
+                  toast(`${transferAsset} is no longer accepted as collateral; deposit MRSN instead (what you deposited can still be withdrawn)`, 'error'); return;
+                }
                 const b = tokenBalances[transferAsset];
                 if (transferMode === 'deposit' && b && want > b.wallet + 1e-9) {
                   toast(`You have ${b.wallet.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${transferAsset} in this wallet — you can deposit at most that`, 'error'); return;
