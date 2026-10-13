@@ -28,6 +28,7 @@ export default function StatsPage() {
   const usd = (v: number | null | undefined) => (v == null ? '—' : v >= 1e9 ? `$${(v / 1e9).toFixed(2)}B` : v >= 1e6 ? `$${(v / 1e6).toFixed(2)}M` : `$${v.toLocaleString('en-US', { maximumFractionDigits: 0 })}`);
 
   const v = d?.network.validators;
+  const share = (x: number | null) => (x == null ? '—' : `${(x * 100).toFixed(1)}%`);
   const humanShare24h = d && d.trading.trades24h ? (d.trading.humanTrades24h ?? 0) / d.trading.trades24h : null;
 
   return (
@@ -49,38 +50,45 @@ export default function StatsPage() {
       {/* Adoption */}
       <Section title="People" sub="Wallets are addresses; the network's own bots (market maker, takers, liquidator) are excluded where the source can tell them apart.">
         <Tile label="Faucet-funded wallets" value={n(d?.wallets.fundedByFaucet)} hint="unique addresses that ever received a drip" />
-        <Tile label="Human traders" value={n(d?.wallets.humanTradersTotal)} hint={`${n(d?.wallets.humanTraders7d)} in the last 7 days · ${n(d?.wallets.humanTraders24h)} today`} />
-        <Tile label="Active addresses · 24 h" value={n(d?.wallets.activeSenders24h)} hint={`${n(d?.wallets.activeSenders7d)} in 7 days · ${n(d?.wallets.activeSenders30d)} in 30 days (bots included)`} />
+        <Tile label="Human traders" value={n(d?.wallets.humanTradersTotal)} lines={[['last 7 days', n(d?.wallets.humanTraders7d)], ['today', n(d?.wallets.humanTraders24h)]]} />
+        <Tile label="Active addresses · 24 h" value={n(d?.wallets.activeSenders24h)} lines={[['7 days', n(d?.wallets.activeSenders7d)], ['30 days', n(d?.wallets.activeSenders30d)]]} hint="bots included" />
         <Tile label="Maker vault depositors" value={n(d?.wallets.vaultDepositors)} hint="wallets holding vault shares" />
-        <Tile label="Points holders" value={n(d?.wallets.pointsHolders)} hint={`${n(d?.wallets.referrals)} referrals`} />
-        <Tile label="Telegram members" value={n(d?.community.telegramMembers)} hint={d?.community.github ? `GitHub: ${d.community.github.repos} public repos · ${d.community.github.stars} stars` : 'GitHub: —'} />
+        <Tile label="Points holders" value={n(d?.wallets.pointsHolders)} lines={[['referrals', <Link key="referrals" href="/referrals" className="text-primary hover:underline">{n(d?.wallets.referrals)}</Link>]]} />
+        <Tile label="Telegram members" value={n(d?.community.telegramMembers)} lines={d?.community.github ? [['GitHub repos', n(d.community.github.repos)], ['GitHub stars', n(d.community.github.stars)]] : [['GitHub', '—']]} />
       </Section>
 
       {/* Trading */}
       <Section title="Trading" sub="Volume in USD-quoted notional. A fill counts as human when either side is not a bot.">
-        <Tile label="Trades · 24 h" value={n(d?.trading.trades24h)} hint={`${n(d?.trading.humanTrades24h)} human (${humanShare24h == null ? '—' : (humanShare24h * 100).toFixed(1) + '%'}) · ${n((d?.trading.trades24h ?? 0) - (d?.trading.humanTrades24h ?? 0))} bots`} />
-        <Tile label="Volume · 24 h" value={usd(d?.trading.volume24h)} hint={`${usd(d?.trading.humanVolume24h)} human`} />
-        <Tile label="Trades · 7 d" value={n(d?.trading.trades7d)} hint={`${n(d?.trading.humanTrades7d)} human · ${usd(d?.trading.volume7d)} volume`} />
-        <Tile label="Trades · all time" value={n(d?.trading.tradesTotal)} hint={`${n(d?.trading.humanTradesTotal)} human · ${usd(d?.trading.volumeTotal)} volume`} />
+        <Tile label="Trades · 24 h" value={n(d?.trading.trades24h)} lines={[
+          ['human', `${n(d?.trading.humanTrades24h)} (${share(humanShare24h)})`],
+          ['bots', `${n(d ? (d.trading.trades24h ?? 0) - (d.trading.humanTrades24h ?? 0) : null)} (${share(humanShare24h == null ? null : 1 - humanShare24h)})`],
+        ]} />
+        <Tile label="Volume · 24 h" value={usd(d?.trading.volume24h)} lines={[['human', usd(d?.trading.humanVolume24h)]]} />
+        <Tile label="Trades · 7 d" value={n(d?.trading.trades7d)} lines={[['human', n(d?.trading.humanTrades7d)], ['volume', usd(d?.trading.volume7d)]]} />
+        <Tile label="Trades · all time" value={n(d?.trading.tradesTotal)} lines={[['human', n(d?.trading.humanTradesTotal)], ['volume', usd(d?.trading.volumeTotal)]]} />
         <Tile label="Markets" value={n(d?.trading.markets)} hint="perpetuals on the native order book" />
         <Tile label="Bot wallets" value={n(d?.wallets.botWallets)} hint="market maker, takers, liquidator — the network's own" />
       </Section>
 
       {/* TVL */}
       <Section title="Value on the network" sub="Testnet MRSN has no monetary value; these are balances, not dollars.">
-        <Tile label="Order-book collateral" value={mrsn(d?.tvl.orderBookCollateralMrsn)} hint={`${n(d?.tvl.orderBookAccounts)} funded accounts (native MRSN + USDC at its margin weight)`} />
+        <Tile label="Order-book collateral" value={mrsn(d?.tvl.orderBookCollateralMrsn)} lines={[['funded accounts', n(d?.tvl.orderBookAccounts)]]} hint="native MRSN, plus token collateral at its margin weight" />
         <Tile label="Maker vault" value={mrsn(d?.tvl.makerVaultNavMrsn)} hint="net asset value" />
-        <Tile label="Staked" value={mrsn(d?.tvl.stakedMrsn)} hint={`${mrsn(v?.delegatedMrsn)} of it delegated`} />
+        <Tile label="Staked" value={mrsn(d?.tvl.stakedMrsn)} lines={[['delegated', mrsn(v?.delegatedMrsn)]]} />
         <Tile label="Total" value={mrsn(d?.tvl.totalMrsn)} hint="collateral + vault + stake" accent />
       </Section>
 
       {/* Network */}
-      <Section title="Network" sub="From the chain and the status page.">
-        <Tile label="Validators" value={v ? `${n(v.active)} / ${n(v.registered)}` : '—'} hint={v ? `${n(v.community)} community-run · ${n(v.jailed)} jailed · epoch ${n(v.epoch)}` : ''} />
-        <Tile label="Verified nodes online" value={`${n(d?.network.verifiedNodesOnline)} / ${n(d?.network.verifiedNodes)}`} hint={`${n(d?.network.nodeOperators)} operators`} />
-        <Tile label="Transactions · 24 h" value={n(d?.network.tx24h)} hint={`${n(d?.network.txTotal)} since genesis · ${n(d?.network.contractsDeployed)} contracts deployed`} />
-        <Tile label="Block time" value={d?.network.blockTimeSec == null ? '—' : `${d.network.blockTimeSec.toFixed(2)} s`} hint={`height ${n(d?.network.height)}`} />
-        <Tile label="Uptime · 24 h" value={pct(d?.network.uptime?.avg24h)} hint={`average over ${n(d?.network.uptime?.monitors)} public monitors`} />
+      <Section title="Network" sub={<>Validators from the chain, as listed on the <Link href="/staking" className="text-primary hover:underline">staking page</Link>; transactions from the <a href="https://explorer.mersennet.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">explorer</a>; uptime from the <a href="https://status.mersennet.com/status/mersennet" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">status page</a>.</>}>
+        <Tile label="Validators" value={n(v?.registered)} lines={v ? [
+          ['genesis', n(v.genesis ?? v.registered - v.community)],
+          ['community-run', n(v.community)],
+          ['epoch', `${n(v.epoch)} (every 60 m)`],
+        ] : undefined} />
+        <Tile label="Node status" value={v ? `${n(v.active)} / ${n(v.registered)}` : '—'} unit="active" lines={v ? nodeStatusLines(v, d?.network) : undefined} />
+        <Tile label="Transactions" value={n(d?.network.tx24h)} unit="24 h" lines={[['since genesis', n(d?.network.txTotal)], ['contracts deployed', n(d?.network.contractsDeployed)]]} />
+        <Tile label="Block time" value={d?.network.blockTimeSec == null ? '—' : `${d.network.blockTimeSec.toFixed(2)} s`} lines={[['block height', n(d?.network.height)]]} />
+        <Tile label="Uptime · 24 h" value={pct(d?.network.uptime?.avg24h)} lines={[['public monitors', n(d?.network.uptime?.monitors)]]} />
       </Section>
 
       {/* 30-day bars */}
@@ -99,7 +107,25 @@ export default function StatsPage() {
   );
 }
 
-function Section({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
+type Validators = NonNullable<AdoptionStats['network']['validators']>;
+
+/** Every registered validator by state (benched ones are still in the active set), then nodes nobody registered. */
+function nodeStatusLines(v: Validators, net: AdoptionStats['network'] | undefined): [string, React.ReactNode][] {
+  const fmt = (x: number | null | undefined) => (x == null ? '—' : x.toLocaleString('en-US'));
+  const st = v.statuses ?? {};
+  const benched = v.benched ?? 0;
+  const lines: [string, React.ReactNode][] = [
+    ['active', fmt(v.active == null ? null : v.active - benched)],
+    ['active (benched)', fmt(benched)],
+    ['jailed', fmt(v.jailed)],
+  ];
+  for (const s of ['standby', 'pending', 'exiting']) if (st[s]) lines.push([s, fmt(st[s])]);
+  if (v.unregisteredNodesOnline != null) lines.push(['unregistered', fmt(v.unregisteredNodesOnline)]);
+  if (net) lines.push(['verified online', `${fmt(net.verifiedNodesOnline)} / ${fmt(net.verifiedNodes)}`]);
+  return lines;
+}
+
+function Section({ title, sub, children }: { title: string; sub?: React.ReactNode; children: React.ReactNode }) {
   return (
     <section>
       <div className="mb-2">
@@ -111,12 +137,24 @@ function Section({ title, sub, children }: { title: string; sub?: string; childr
   );
 }
 
-function Tile({ label, value, hint, accent }: { label: string; value: string; hint?: string; accent?: boolean }) {
+/** A headline number; `lines` are "label: value" pairs, one per line; `hint` is a plain note under them. */
+function Tile({ label, value, unit, lines, hint, accent }: {
+  label: string; value: string; unit?: string; lines?: [string, React.ReactNode][]; hint?: string; accent?: boolean;
+}) {
   return (
     <div className={cn('bg-surface border rounded-xl px-3.5 py-3 min-w-0', accent ? 'border-primary/30' : 'border-border')}>
       <p className="text-[10px] text-dim uppercase tracking-wider font-medium mb-1.5 truncate" title={label}>{label}</p>
-      <p className={cn('text-[18px] font-mono font-semibold tabular-nums leading-none truncate', accent ? 'text-primary' : 'text-foreground')} title={value}>{value}</p>
-      {hint && <p className="text-[10px] text-dim mt-1.5 leading-snug">{hint}</p>}
+      <p className={cn('text-[18px] font-mono font-semibold tabular-nums leading-none truncate', accent ? 'text-primary' : 'text-foreground')} title={unit ? `${value} ${unit}` : value}>
+        {value}{unit && <span className="ml-1 text-[10px] font-sans font-medium text-dim">{unit}</span>}
+      </p>
+      {lines && lines.length > 0 && (
+        <div className="mt-1.5 space-y-px">
+          {lines.map(([k, val]) => (
+            <p key={k} className="text-[10px] text-dim leading-snug">{k}: <span className="font-mono tabular-nums text-foreground/80">{val}</span></p>
+          ))}
+        </div>
+      )}
+      {hint && <p className="text-[10px] text-dim mt-1 leading-snug">{hint}</p>}
     </div>
   );
 }
