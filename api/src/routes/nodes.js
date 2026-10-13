@@ -329,6 +329,7 @@ async function awardDailyPoints() {
       `SELECT operator, MIN(identity) AS identity FROM verified_nodes
        WHERE last_seen_at > NOW() - ${ACTIVE_WINDOW}
          AND (points_awarded_on IS NULL OR points_awarded_on < (NOW() AT TIME ZONE 'utc')::date)
+         AND LOWER(operator) NOT IN (SELECT address FROM excluded_addresses)
        GROUP BY operator`
     );
     for (const row of ops.rows) {
