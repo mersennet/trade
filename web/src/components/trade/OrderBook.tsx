@@ -174,9 +174,10 @@ export default function OrderBook() {
     return 0;
   }, [bestBid, bestAsk]);
 
+  // A one-sided book has no mid: its best price alone is not the market.
   const midPrice = useMemo(() => {
     if (bestBid > 0 && bestAsk > 0) return (bestBid + bestAsk) / 2;
-    return bestBid || bestAsk || 0;
+    return 0;
   }, [bestBid, bestAsk]);
 
   // Tick-direction flash on the mid price (green uptick / red downtick),
@@ -343,7 +344,7 @@ export default function OrderBook() {
                   'text-[16px] font-extrabold font-mono tabular-nums tracking-tight transition-colors duration-300 crt-glow',
                   midDir === 'up' ? 'text-green' : midDir === 'down' ? 'text-red' : 'text-primary-bright'
                 )}>
-                  {midPrice ? formatPrice(midPrice) : '—'}
+                  {midPrice ? formatPrice(midPrice) : '– – – –'}
                 </span>
                 <span className="text-[10px] text-muted font-mono px-1.5 py-0.5 rounded bg-surface-3/80 border border-border-subtle">
                   spread {formatPrice(spread)}{spreadPct > 0 ? ` · ${spreadPct < 0.01 ? '<0.01' : spreadPct.toFixed(2)}%` : ''}
