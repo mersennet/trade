@@ -18,6 +18,10 @@ import { startPoll } from '@/lib/poll';
 import TelegramAlerts from '@/components/shared/TelegramAlerts';
 import type { ClobProtocol } from '@/lib/api';
 
+// Test USDC stops counting as margin at this block (chain 131071); the chain
+// then reports its weight as zero and the row switches to withdraw-only.
+const USDC_MARGIN_OFF = { token: '0xa44b23d1d0c0133da71dece399d5d5ade6dd22d1', height: 2_670_700, when: '~Fri 16 Oct 11:30 UTC' };
+
 export default function AccountPanel() {
   const { positions } = useStore();
   const collateral = useStore((s) => Number(s.wallet.collateral) || 0);
@@ -286,6 +290,11 @@ export default function AccountPanel() {
                 <span className="block text-[10px] text-dim font-normal">
                   {formatNumber(b.wallet, 2)} in wallet · {a.weightBps > 0 ? `counts at ${(a.weightBps / 100).toFixed(0)}%` : 'no longer counts as margin · withdraw anytime'}
                 </span>
+                {a.weightBps > 0 && b.deposited > 0 && a.token.toLowerCase() === USDC_MARGIN_OFF.token && (
+                  <span className="block text-[10px] text-yellow font-normal">
+                    stops counting as margin at block {USDC_MARGIN_OFF.height.toLocaleString()} ({USDC_MARGIN_OFF.when})
+                  </span>
+                )}
               </span>
             </div>
           );

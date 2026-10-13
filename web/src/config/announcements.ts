@@ -26,6 +26,20 @@ export interface Announcement {
 // never rotates (motion on a trading screen costs attention). Newest first.
 export const ANNOUNCEMENTS: Announcement[] = [
   {
+    // The day after test USDC stops counting as margin (block 2,670,700).
+    id: 'usdc-margin-off-live-2026-10-16',
+    text: 'Test USDC no longer counts as margin on the order book (since block 2,670,700). USDC you deposited can be withdrawn any time from the Withdraw panel.',
+    showWhen: (p) => !!p && p.height >= 2670700 && p.height < 2670700 + 43_200,
+  },
+  {
+    // Until the switch.
+    id: 'usdc-margin-off-2026-10-16',
+    lead: 'Test USDC:',
+    text: 'from {eta:2670700} it no longer counts as margin and new USDC deposits are refused. If your positions rely on USDC, deposit MRSN or reduce them before then; USDC you deposited can be withdrawn any time.',
+    link: { href: 'https://faucet.mersennet.com', label: 'Get MRSN' },
+    showWhen: (p) => !!p && p.height < 2670700,
+  },
+  {
     // The day after the MRSN/USD repair (block 2,324,700).
     id: 'mrsn-repaired-2026-10-08',
     text: 'MRSN/USD is repaired: orders at the broken prices were cancelled and positions opened at them were reset to $115. Trading is back to normal.',
