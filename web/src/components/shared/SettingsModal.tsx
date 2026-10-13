@@ -1,9 +1,10 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useStore } from '@/stores/useStore';
 import { useWallet } from '@/hooks/useWallet';
-import { api, type ApiKey } from '@/lib/api';
-import { cn } from '@/lib/utils';
+import { api, type ApiKey, type ReferralStatus } from '@/lib/api';
+import { cn, formatPoints } from '@/lib/utils';
 import { agentStatus, enableAgent, disableAgent, topUpAgentGas, loadAgent, AGENT_GAS_LOW_MRSN, AGENT_GAS_TOPUP_MRSN, type AgentStatus } from '@/lib/agent';
 
 const SLIPPAGE_PRESETS = [0.1, 0.5, 1.0, 2.0];
@@ -11,6 +12,57 @@ const SLIPPAGE_PRESETS = [0.1, 0.5, 1.0, 2.0];
 /** API key management: list / create / revoke scoped keys for the connected
  * wallet. The raw key is shown exactly once at creation (only its hash is
  * stored server-side). */
+/** The wallet's referral link (its first code); codes are created on the Referrals page. */
+function ReferralSection() {
+  const { address, isConnected } = useWallet();
+  const setShowSettings = useStore((s) => s.setShowSettings);
+  const [code, setCode] = useState<string | null | undefined>(undefined);
+  const [status, setStatus] = useState<ReferralStatus | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!address) return;
+    let alive = true;
+    api.getBuilderCodesByOwner(address)
+      .then((r) => { if (alive) setCode(r.codes?.[0]?.code ?? null); })
+      .catch(() => { if (alive) setCode(null); });
+    api.getReferralStatus(address).then((r) => { if (alive) setStatus(r); }).catch(() => {});
+    return () => { alive = false; };
+  }, [address]);
+
+  const link = code ? `https://trade.mersennet.com/?ref=${code}` : null;
+  const toPage = (
+    <Link href="/referrals" onClick={() => setShowSettings(false)} className="text-[10px] font-medium text-primary hover:underline">
+      {link ? 'Referrals page →' : 'Create your referral link →'}
+    </Link>
+  );
+  return (
+    <div className="space-y-2">
+      <h3 className="text-xs font-medium text-foreground">Referrals</h3>
+      <p className="text-[10px] text-dim">Earn 10% of the trading points of every trader you bring in; nothing is taken from theirs.</p>
+      {!isConnected ? (
+        <p className="text-[10px] text-dim">Connect a wallet to get your referral link.</p>
+      ) : link ? (
+        <div className="flex items-center gap-1.5">
+          <code className="flex-1 text-[10px] font-mono text-foreground bg-surface-2 rounded px-2 py-1.5 truncate">{link}</code>
+          <button
+            onClick={() => { navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
+            className="px-2 py-1.5 text-[10px] font-medium text-primary hover:underline shrink-0"
+          >{copied ? 'Copied' : 'Copy'}</button>
+        </div>
+      ) : null}
+      {isConnected && code !== undefined && (
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[10px] text-dim">
+            {status && status.referees > 0 ? `${status.referees} referred · ${formatPoints(status.referralPoints)} points earned` : ''}
+          </span>
+          {toPage}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ApiKeysSection() {
   const { address, isConnected } = useWallet();
   const [keys, setKeys] = useState<ApiKey[]>([]);
@@ -215,6 +267,10 @@ export default function SettingsModal() {
               onChange={setSoundEnabled}
             />
           </div>
+
+          <div className="h-px bg-border" />
+
+          <ReferralSection />
 
           <div className="h-px bg-border" />
 
