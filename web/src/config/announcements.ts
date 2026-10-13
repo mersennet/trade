@@ -35,7 +35,7 @@ export const ANNOUNCEMENTS: Announcement[] = [
     // Until the switch.
     id: 'usdc-margin-off-2026-10-16',
     lead: 'Test USDC:',
-    text: 'from {eta:2670700} it no longer counts as margin and new USDC deposits are refused. If your positions rely on USDC, deposit MRSN or reduce them before then; USDC you deposited can be withdrawn any time.',
+    text: 'from block 2,670,700 (about 11:30 UTC on Fri 16 Oct) it no longer counts as margin and new USDC deposits are refused. If your positions rely on USDC, deposit MRSN or reduce them before then; USDC you deposited can be withdrawn any time.',
     link: { href: 'https://faucet.mersennet.com', label: 'Get MRSN' },
     showWhen: (p) => !!p && p.height < 2670700,
   },
