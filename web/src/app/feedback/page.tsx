@@ -74,7 +74,7 @@ export default function FeedbackPage() {
         <h1 className="page-title">Beta feedback</h1>
         <p className="page-sub">
           Found a bug? Want a feature? Confused by something? Tell us. Beta testers shape the product.
-          {' '}Prefer to talk? Our official community chat: <a href="https://t.me/Mersennet" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">t.me/Mersennet</a>.
+          {' '}Prefer to talk? Our official community chat: <a href="https://t.me/Mersennet" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">t.me/Mersennet</a> · <a href="https://discord.gg/aJSQ63PUes" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Discord</a>.
         </p>
       </header>
 
@@ -167,7 +167,7 @@ export default function FeedbackPage() {
       {/* Community shortcuts */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <a
-          href="https://discord.gg/mersennet"
+          href="https://discord.gg/aJSQ63PUes"
           target="_blank"
           rel="noopener noreferrer"
           className="rounded-xl border border-border bg-surface p-4 hover:border-primary/30 hover:bg-surface-2/30 transition-colors"
