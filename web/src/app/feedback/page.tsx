@@ -9,6 +9,7 @@ const CATEGORIES = [
   { id: 'bug',      label: 'Bug report',     hint: 'What broke? Steps to reproduce. Browser/wallet you used.' },
   { id: 'feature',  label: 'Feature request',hint: 'What would you like to see added or improved?' },
   { id: 'security', label: 'Security',       hint: 'For confidential security reports, email security@mersennet.com instead.' },
+  { id: 'scam',     label: 'Scam',           hint: 'A fake site, an impersonator, a phishing link or a scam token: paste the link, handle or address and where you saw it. The team never messages first and never asks for your keys or seed phrase.' },
   { id: 'other',    label: 'Other',          hint: 'Anything else.' },
 ];
 
@@ -73,7 +74,7 @@ export default function FeedbackPage() {
         <h1 className="page-title">Beta feedback</h1>
         <p className="page-sub">
           Found a bug? Want a feature? Confused by something? Tell us. Beta testers shape the product.
-          {' '}Prefer to talk? The official chat is <a href="https://t.me/Mersennet" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">t.me/Mersennet</a>.
+          {' '}Prefer to talk? Our official community chat: <a href="https://t.me/Mersennet" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">t.me/Mersennet</a>.
         </p>
       </header>
 
@@ -83,14 +84,14 @@ export default function FeedbackPage() {
           <label className="block text-[10px] uppercase tracking-wider text-dim mb-2 font-semibold">
             Category
           </label>
-          <div className="flex items-center gap-px bg-background rounded-md border border-border overflow-hidden">
+          <div className="grid grid-cols-3 sm:grid-cols-5 gap-px bg-background rounded-md border border-border overflow-hidden">
             {CATEGORIES.map((c) => (
               <button
                 key={c.id}
                 type="button"
                 onClick={() => setCategory(c.id)}
                 className={cn(
-                  'flex-1 px-3 py-2 text-[12px] font-medium transition-colors',
+                  'px-3 py-2 text-[12px] font-medium transition-colors',
                   category === c.id
                     ? 'bg-foreground/[0.07] text-foreground'
                     : 'bg-surface-2 text-dim hover:text-foreground'

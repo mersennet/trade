@@ -16,7 +16,7 @@ const router = Router();
 const MAX_MESSAGE = 4000;
 // 'validator' = prospective node operators registering interest from the docs
 // (docs.mersennet.com proxies POST /api/v1/feedback to this service).
-const ALLOWED_CATEGORIES = new Set(['bug', 'feature', 'security', 'validator', 'other']);
+const ALLOWED_CATEGORIES = new Set(['bug', 'feature', 'security', 'scam', 'validator', 'other']);
 
 async function ensureTable() {
   await pool.query(`

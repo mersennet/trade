@@ -41,8 +41,8 @@ export const ANNOUNCEMENTS: Announcement[] = [
   {
     // After the 3 Oct switch.
     id: 'validators-50-live-2026-10-03',
-    text: 'The validator set now has 50 slots: register a node with 1,000 MRSN self-stake and it produces blocks from the next hourly epoch. Node runners earn 500 points a day.',
-    link: { href: '/staking', label: 'Become a validator' },
+    text: 'Validator set limit: 50 slots | register a node with 1,000 MRSN self-stake and it produces blocks from the next hourly epoch. Node operators earn 500 points a day.',
+    link: { href: 'https://docs.mersennet.com/validators/run-a-node/', label: 'Become a validator' },
     showWhen: (p) => !!p && p.height >= 2127600,
   },
   {
@@ -96,8 +96,8 @@ export const ANNOUNCEMENTS: Announcement[] = [
   },
   {
     id: 'validators-open-2026-09',
-    text: 'The validator set is open — run a node in one command, bond 1,000 MRSN and produce blocks from the next epoch. Node runners earn 500 points a day.',
-    link: { href: '/staking', label: 'Become a validator' },
+    text: 'The validator set is open — run a node in one command, bond 1,000 MRSN and produce blocks from the next epoch. Node operators earn 500 points a day.',
+    link: { href: 'https://docs.mersennet.com/validators/run-a-node/', label: 'Become a validator' },
   },
   {
     id: 'staking-live-2026-08',

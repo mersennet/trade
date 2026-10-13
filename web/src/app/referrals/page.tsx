@@ -58,7 +58,7 @@ export default function ReferralsPage() {
           their trading points to the referrer every few minutes. */}
       <div className="max-w-2xl mx-auto px-4 py-3 rounded-lg bg-primary/[0.06] border border-primary/20">
         <p className="text-xs text-foreground/85 leading-relaxed">
-          <span className="text-primary font-semibold">How it works.</span> Share your link. When a trader opens it and connects a wallet, the terminal asks them to
+          <span className="text-primary font-semibold">How it works:</span> Share your link. When a trader opens it and connects a wallet, the terminal asks them to
           confirm the referral with one signature — that is what makes it trustworthy. From then on you earn <span className="font-mono">10%</span> of their trading points
           as a bonus (nothing is deducted from them), updated every few minutes. First code wins; self-referrals do not count.
           {referralStatus?.referredBy && (
