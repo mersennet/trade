@@ -83,7 +83,7 @@ export default function StatsPage() {
         <Tile label="Validators" value={n(v?.registered)} lines={v ? [
           ['genesis', n(v.genesis ?? v.registered - v.community)],
           ['community-run', n(v.community)],
-          ['epoch', `${n(v.epoch)} (every 60 m)`],
+          ['epoch', `${n(v.epoch)} (every 60\u00a0m)`],
         ] : undefined} />
         <Tile label="Node status" value={v ? `${n(v.active)} / ${n(v.registered)}` : '—'} unit="active" lines={v ? nodeStatusLines(v, d?.network) : undefined} />
         <Tile label="Transactions" value={n(d?.network.tx24h)} unit="24 h" lines={[['since genesis', n(d?.network.txTotal)], ['contracts deployed', n(d?.network.contractsDeployed)]]} />
