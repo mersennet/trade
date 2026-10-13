@@ -31,7 +31,11 @@ router.get('/sprint', async (req, res) => {
           GROUP BY address ORDER BY volume DESC LIMIT 10`,
         [start.toISOString()]
       ).catch(() => ({ rows: [] })),
-      pool.query(`SELECT week_start, address, rank, volume::float8 AS volume, points::float8 AS points FROM weekly_sprint_awards WHERE address <> 'none' ORDER BY week_start DESC, rank ASC LIMIT 3`).catch(() => ({ rows: [] })),
+      // The latest awarded week; a winner whose points were forfeited is left out.
+      pool.query(`SELECT week_start, address, rank, volume::float8 AS volume, points::float8 AS points FROM weekly_sprint_awards
+                   WHERE week_start = (SELECT MAX(week_start) FROM weekly_sprint_awards WHERE address <> 'none')
+                     AND address <> 'none' AND address NOT IN (SELECT address FROM excluded_addresses)
+                   ORDER BY rank ASC`).catch(() => ({ rows: [] })),
     ]);
     res.json({
       weekStart: start.toISOString(),

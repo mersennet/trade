@@ -730,10 +730,12 @@ async function awardPoints() {
          SELECT LOWER(maker) AS address, price * size / ${priceScaleSql('market_id')} AS volume
            FROM trades WHERE maker IS NOT NULL AND block_timestamp IS NOT NULL
        ) sides
-       -- Exclude legacy zero-prefixed accounts AND configured bot wallets
-       -- so points reflect real traders only, matching the leaderboard.
+       -- Exclude legacy zero-prefixed accounts, configured bot wallets and
+       -- every address in excluded_addresses (bots, forfeited accounts), so
+       -- points reflect real traders only, matching the leaderboard.
        WHERE address NOT LIKE '0x00000000000000000000000000000000000000%'
          AND address <> ALL($1::text[])
+         AND address NOT IN (SELECT address FROM excluded_addresses)
        GROUP BY address`,
       [BOT_ADDRESSES]
     );
@@ -836,6 +838,7 @@ async function awardReferralPoints(season) {
          FROM referrals r
          LEFT JOIN points_balance pb ON LOWER(pb.address) = LOWER(r.referee) AND pb.season = $1
         WHERE LOWER(r.referrer) <> LOWER(r.referee)
+          AND LOWER(r.referrer) NOT IN (SELECT address FROM excluded_addresses)
         GROUP BY LOWER(r.referrer)`,
       [season]
     );
@@ -896,6 +899,7 @@ async function awardWeeklySprint(season) {
          ) sides
         WHERE address NOT LIKE '0x00000000000000000000000000000000000000%'
           AND address <> ALL($3::text[])
+          AND address NOT IN (SELECT address FROM excluded_addresses)
         GROUP BY address
         ORDER BY volume DESC
         LIMIT 3`,
