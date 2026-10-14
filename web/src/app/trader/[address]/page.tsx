@@ -1,7 +1,8 @@
 'use client';
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api, type TraderProfile, type TraderStatRow, type Trade } from '@/lib/api';
+import EquityCurve from '@/components/shared/EquityCurve';
 import { formatNumber, shortenAddress, cn } from '@/lib/utils';
 
 type Period = '24h' | '7d' | '30d' | 'all';
@@ -52,52 +53,6 @@ function buildFlowCurve(trades: Trade[]) {
     cum += (t.side === 'buy' ? 1 : -1) * t.price * t.size;
     return { time: Math.floor(new Date(t.time).getTime() / 1000), value: cum };
   });
-}
-
-function EquityCurveChart({ data }: { data: { time: number; value: number }[] }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<unknown>(null);
-
-  const initChart = useCallback(async () => {
-    if (!containerRef.current || data.length < 2) return;
-    const { createChart, LineSeries } = await import('lightweight-charts');
-    if (chartRef.current) (chartRef.current as { remove: () => void }).remove();
-    const chart = createChart(containerRef.current, {
-      width: containerRef.current.clientWidth, height: 250,
-      layout: { background: { color: 'transparent' }, textColor: 'rgba(255,255,255,0.4)', fontSize: 10 },
-      grid: { vertLines: { color: 'rgba(255,255,255,0.03)' }, horzLines: { color: 'rgba(255,255,255,0.03)' } },
-      rightPriceScale: { borderColor: 'rgba(255,255,255,0.06)' },
-      timeScale: { borderColor: 'rgba(255,255,255,0.06)' },
-    });
-    const series = chart.addSeries(LineSeries, {
-      color: data[data.length - 1].value >= 0 ? '#2bd96a' : '#ef4444',
-      lineWidth: 2,
-    });
-    const deduped = data.reduce<{ time: number; value: number }[]>((acc, d) => {
-      if (acc.length === 0 || acc[acc.length - 1].time !== d.time) acc.push(d);
-      else acc[acc.length - 1] = d;
-      return acc;
-    }, []);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    series.setData(deduped as any);
-    chart.timeScale().fitContent();
-    chartRef.current = chart;
-    const ro = new ResizeObserver(() => {
-      if (containerRef.current) chart.applyOptions({ width: containerRef.current.clientWidth });
-    });
-    ro.observe(containerRef.current);
-    return () => ro.disconnect();
-  }, [data]);
-
-  useEffect(() => {
-    initChart();
-    return () => { if (chartRef.current) (chartRef.current as { remove: () => void }).remove(); };
-  }, [initChart]);
-
-  if (data.length < 2) return <div className="flex items-center justify-center h-[250px] text-dim text-xs">Not enough data</div>;
-  // The chart's 250 px from the first paint: the canvas arrives after a dynamic
-  // import and used to push the stats below it down.
-  return <div ref={containerRef} className="w-full h-[250px]" />;
 }
 
 export default function TraderProfilePage() {
@@ -176,7 +131,7 @@ export default function TraderProfilePage() {
                 {stats.totalPnl >= 0 ? '+' : ''}{formatNumber(stats.totalPnl)} MRSN
               </span>
             </div>
-            <EquityCurveChart data={flowCurve} />
+            <EquityCurve data={flowCurve} height={250} />
             <p className="text-[10px] text-dim mt-2">Cumulative signed notional of recent fills, a directional sketch, not realized PnL.</p>
           </div>
 
