@@ -9,7 +9,8 @@
  *
  * Engine (primary only, every 60 s):
  *   operators  benched · missed slots with none proposed · jailed · status
- *              change · node behind the head · node silent · outdated build
+ *              change · node behind the head · node silent · outdated build ·
+ *              upgrade landed, or went wrong (other build, behind, silent)
  *              (+ 24 h / 6 h / 1 h before every protocol switch)
  *   traders    equity within 1.6× of maintenance margin, or below it (the
  *              keeper liquidates) — only once settlement is active
@@ -141,7 +142,7 @@ async function pollOnce() {
            ON CONFLICT (chat_id, address) DO UPDATE SET kind = EXCLUDED.kind, username = EXCLUDED.username, linked_at = NOW()`,
           [chatId, address, kind, username]);
         await send(chatId, `Linked to <code>${short(address)}</code> (${kind}). You will hear from me when ${kind === 'operator'
-          ? 'your validator misses slots, is benched or jailed, falls behind the chain, goes silent, runs an outdated build, or a protocol switch is 24 h / 6 h / 1 h away'
+          ? 'your validator misses slots, is benched or jailed, falls behind the chain, goes silent, runs an outdated build, finishes an upgrade (or the upgrade goes wrong), or a protocol switch is 24 h / 6 h / 1 h away'
           : 'a position gets within reach of liquidation (equity under 1.6× maintenance margin) or is liquidatable'}.\n\n/status — where things stand now\n/stop — unlink everything`);
         await send(chatId, await statusText(chatId));
       } else if (cmd === '/status') {
@@ -253,19 +254,26 @@ async function operatorTick(address, snap, verified) {
     // live node facts: build registry (whoami) and the verified_nodes recheck
     const b = knownBuildOf ? knownBuildOf(v.identity) : null;
     const vn = verified.find((n) => n.identity.toLowerCase() === id);
-    if (b && head && b.height && head - b.height > 300) {
-      await fireOnce(address, `behind:${id}`, 6 * HOUR, `⚠️ Node ${tag} is <b>${fmt(head - b.height)} blocks behind</b> the chain (node ${fmt(b.height)}, head ${fmt(head)}); it cannot propose while it catches up. If it does not recover within a few minutes, re-run the installer with <code>--reset-state</code>.`);
+    // whoami reported b.height at b.seenAt and the registry re-asks every 5 minutes:
+    // compare with where the chain was then, and only while the answer is recent
+    // (a node that stopped answering is silent, not behind).
+    const fresh = !!(b && b.seenAt && Date.now() - b.seenAt < 12 * 60_000);
+    const lag = fresh && b.height != null && head ? Math.max(0, head - Math.floor((Date.now() - b.seenAt) / BLOCK_MS) - b.height) : null;
+    const build = (b && b.build) || (vn && vn.version ? String(vn.version).split('-').pop() : null);
+    if (latest && build && build !== latest) {
+      await fireOnce(address, `outdated:${id}:${latest}`, 7 * 24 * HOUR, `🔧 Node ${tag} runs build <code>${build}</code>; the current release is <code>${latest}</code>. Upgrade keeps keys and data:\n<code>curl -fsSL https://mersennet.com/downloads/install.sh | sudo bash -s -- --operator ${address}</code>`);
+    }
+    // Right after an upgrade the watch reports on the node instead, allowing for the catch-up minute.
+    const watching = await upgradeWatch(address, { id, tag, b, fresh, lag, latest });
+    if (!watching && lag != null && lag > 300) {
+      await fireOnce(address, `behind:${id}`, 6 * HOUR, `⚠️ Node ${tag} is <b>${fmt(lag)} blocks behind</b> the chain (node at ${fmt(b.height)}); it cannot propose while it catches up. If it does not recover within a few minutes, re-run the installer with <code>--reset-state</code>.`);
       await setState(address, `wasbehind:${id}`, '1');
-    } else if (b && head && (await stateValue(address, `wasbehind:${id}`)) === '1') {
+    } else if (lag != null && lag <= 20 && (await stateValue(address, `wasbehind:${id}`)) === '1') {
       await setState(address, `wasbehind:${id}`, '0');
       await fireOnce(address, `insync:${id}:${Math.floor(Date.now() / HOUR)}`, HOUR, `✅ Node ${tag} is back in sync (height ${fmt(b.height)}).`);
     }
     if (vn && vn.last_seen_at && Date.now() - new Date(vn.last_seen_at).getTime() > 45 * 60_000 && v.status === 'active') {
       await fireOnce(address, `silent:${id}`, 6 * HOUR, `⚠️ Node ${tag} has not answered the network's probe for ${fmt((Date.now() - new Date(vn.last_seen_at).getTime()) / 60_000)} minutes. Is the server up and port 8545 open to the app host?`);
-    }
-    const build = (b && b.build) || (vn && vn.version ? String(vn.version).split('-').pop() : null);
-    if (latest && build && build !== latest) {
-      await fireOnce(address, `outdated:${id}:${latest}`, 7 * 24 * HOUR, `🔧 Node ${tag} runs build <code>${build}</code>; the current release is <code>${latest}</code>. Upgrade keeps keys and data:\n<code>curl -fsSL https://mersennet.com/downloads/install.sh | sudo bash -s -- --operator ${address}</code>`);
     }
     // protocol switches: 24 h, 6 h, 1 h before each height
     for (const sw of switches) {
@@ -278,6 +286,49 @@ async function operatorTick(address, snap, verified) {
       }
     }
   }
+}
+
+// ─── upgrades ──────────────────────────────────────────────────────────────
+const BLOCK_MS = 2022;
+const UPGRADE_WATCH_MS = 45 * 60_000;
+/**
+ * Confirms an upgrade once the node answers whoami on the current release, and
+ * reports the ways one goes wrong: a build that is not the current release, a
+ * node that stays behind, one that stops answering. Only the whoami registry
+ * counts here: verified_nodes' version can lag by 30 minutes and would read as
+ * a build change back and forth. True while an upgrade is being watched.
+ */
+async function upgradeWatch(address, { id, tag, b, fresh, lag, latest }) {
+  if (!b || !b.build || !b.seenAt) return false;
+  const now = Date.now();
+  const prev = await stateValue(address, `build:${id}`);
+  if (fresh && prev !== b.build) {
+    await setState(address, `build:${id}`, b.build);
+    if (prev && latest && b.build === latest) {
+      await setState(address, `upgrade:${id}`, JSON.stringify({ build: b.build, at: now }));
+      await setState(address, `wasbehind:${id}`, '0'); // the confirmation below says where it stands
+      const height = lag == null ? '' : `Block height ${fmt(b.height)} — ${lag <= 20 ? 'in sync' : `catching up, ${fmt(lag)} blocks behind`}\n`;
+      await fireOnce(address, `upgraded:${id}:${b.build}`, 30 * 24 * HOUR,
+        `✅ <b>Node ${tag} upgraded</b> and running as a systemd service.\nBinary <code>${b.build}</code> — up to date (was <code>${prev}</code>)\n${height}Keys, state and operator were kept; nothing else to do. If it falls behind or stops answering in the next 45 minutes, I will tell you here.`);
+    } else if (prev && latest && b.build !== latest) {
+      await fireOnce(address, `upgrade-other:${id}:${b.build}`, 7 * 24 * HOUR,
+        `⚠️ Node ${tag} changed build from <code>${prev}</code> to <code>${b.build}</code>, but the current release is <code>${latest}</code>. Re-run the installer to get it (keeps keys and data):\n<code>curl -fsSL https://mersennet.com/downloads/install.sh | sudo bash -s -- --operator ${address}</code>`);
+    }
+  }
+  let up = null;
+  try { up = JSON.parse((await stateValue(address, `upgrade:${id}`)) || 'null'); } catch { /* none recorded */ }
+  if (!up || up.build !== b.build) return false;
+  const since = now - up.at;
+  if (since >= UPGRADE_WATCH_MS) return false;
+  if (lag != null && lag > 60 && since >= 5 * 60_000) {
+    await setState(address, `wasbehind:${id}`, '1'); // the "back in sync" message follows
+    await fireOnce(address, `upgrade-behind:${id}:${b.build}`, 7 * 24 * HOUR,
+      `⚠️ <b>Node ${tag} upgraded but is not keeping up</b>: ${fmt(lag)} blocks behind the chain ${Math.round(since / 60_000)} minutes after the upgrade (it should be in sync within a minute). On the server:\n<code>mersennet-check</code>\n<code>journalctl -u mersennet -n 50 --no-pager</code>\nIf the log shows <code>RESTORED STATE ROOT MISMATCH</code> or <code>FORK DETECTED</code>, reset the state (keeps keys and operator):\n<code>curl -fsSL https://mersennet.com/downloads/install.sh | sudo bash -s -- --reset-state --operator ${address}</code>`);
+  } else if (!fresh) {
+    await fireOnce(address, `upgrade-silent:${id}:${b.build}`, 7 * 24 * HOUR,
+      `⚠️ <b>Node ${tag} stopped answering</b> after its upgrade: no reply for ${Math.round((now - b.seenAt) / 60_000)} minutes. On the server:\n<code>systemctl status mersennet</code>\n<code>journalctl -u mersennet -n 50 --no-pager</code>\nIf the service keeps restarting, send those log lines in https://discord.gg/aJSQ63PUes (#run-a-node) or https://t.me/Mersennet.`);
+  }
+  return true;
 }
 
 // ─── trader rules ──────────────────────────────────────────────────────────
