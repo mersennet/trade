@@ -28,7 +28,7 @@ export default function UpgradeBadge({ build, latest, className }: { build?: str
         <span className="basis-full mt-1 flex flex-wrap items-center gap-2 rounded-md border border-border bg-surface-2 px-2.5 py-2 text-[11px]">
           <code className="font-mono text-foreground break-all">{UPGRADE_CMD}</code>
           <button type="button" onClick={copy} className="text-primary hover:underline shrink-0">{copied ? 'Copied' : 'Copy'}</button>
-          <span className="basis-full text-dim">Run on the node as root. Keeps keys, state and operator; ~1 min. <a href="https://docs.mersennet.com/validators/run-a-node/#step-4--keep-it-running" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Guide →</a></span>
+          <span className="basis-full text-dim">Run on the node as root. Keeps keys, state and operator; ~1 min. <a href="https://docs.mersennet.com/validators/run-a-node/#step-4--maintenance" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Guide →</a></span>
         </span>
       )}
     </span>
