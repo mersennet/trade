@@ -110,7 +110,7 @@ export default function WalletButton() {
           {collateral > 0 && (
             <>
               <div className="w-px h-3.5 bg-border" />
-              <div className="flex items-center gap-1.5" title="Margin the order book counts for you: deposited MRSN plus registered token collateral (USDC at 90%)">
+              <div className="flex items-center gap-1.5" title="Margin the order book counts for you: deposited MRSN, plus registered tokens at their weight (test USDC counts 0 from block 2,670,700)">
                 <span className="text-dim">Margin</span>
                 <span className="font-mono font-medium text-green">{formatNumber(collateral, 2)} MRSN</span>
               </div>
