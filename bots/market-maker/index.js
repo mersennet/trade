@@ -46,6 +46,11 @@ const MARKETS = {
   4: { symbol: 'SOL',  seed: 100,   tick: 0.05, baseSize: 60,  levels: 3 },
   5: { symbol: 'ARB',  seed: 100,   tick: 0.05, baseSize: 500, levels: 3 },
 };
+// MM_ASK_MULT_<SYMBOL>: scale the ask side of one market (default 1), e.g. so a
+// known large buy (a liquidation sweep) fills near the mid instead of reaching
+// whatever rests far above it. Bids are unchanged.
+const ASK_MULT = Object.fromEntries(Object.entries(MARKETS).map(
+  ([id, m]) => [id, Number(process.env[`MM_ASK_MULT_${m.symbol}`] || 1)]));
 
 // MM_OWNER: quote for another account through agent delegation — the vault.
 // Orders signed by the maker key are booked to MM_OWNER once the vault has
@@ -342,7 +347,7 @@ function buildOrders(marketId, mid) {
       if (s >= 1) orders.push({ marketId, side: 'buy',  price: bidPrice, size: s });
     }
     if (askPrice >= 2) {
-      const s = fit(size, askPrice);
+      const s = fit(Math.max(1, Math.round(size * ASK_MULT[marketId])), askPrice);
       if (!skipAsks && !capShort && s >= 1) orders.push({ marketId, side: 'sell', price: askPrice, size: s });
     }
   }
@@ -370,6 +375,7 @@ async function openOrders() {
         marketId: hexToNum(o.market_id ?? o.marketId),
         side: String(o.side || '').toLowerCase() === 'sell' ? 'sell' : 'buy',
         price: hexToNum(o.price),
+        size: hexToNum(o.size),
       }))
       .filter((o) => o.id > 0n);
   } catch (e) {
@@ -545,14 +551,19 @@ async function refreshQuotes() {
     // place only the missing ones (typically what the taker just consumed),
     // and retire a bounded number of off-ladder orders per cycle.
     const resting = await openOrders();
-    const wanted = new Set(ladder.map(quoteKey));
+    const wanted = new Map(ladder.map((o) => [quoteKey(o), o.size]));
+    // A resting order holds its level while its size is within 2x of the
+    // ladder's (sizes vary by at most 1.5x between cycles); otherwise (a taker
+    // ate most of it, or MM_ASK_MULT changed) it is retired and re-placed.
+    // Orders whose size the node did not report always hold.
+    const sized = (o) => !o.size || (o.size >= wanted.get(quoteKey(o)) / 2 && o.size <= wanted.get(quoteKey(o)) * 2);
     // One resting order per level: the oldest keeps its price-time priority,
     // any newer duplicate at the same level is surplus and gets retired along
     // with off-ladder orders (oldest first, bounded per cycle).
     const keeper = new Map();
     for (const o of resting) {
       const k = quoteKey(o);
-      if (wanted.has(k) && (!keeper.has(k) || o.id < keeper.get(k).id)) keeper.set(k, o);
+      if (wanted.has(k) && sized(o) && (!keeper.has(k) || o.id < keeper.get(k).id)) keeper.set(k, o);
     }
     const quoted = new Set(keeper.keys());
     if (jumped.size) for (const k of [...quoted]) { if (jumped.has(Number(k.split(':')[0]))) quoted.delete(k); }
@@ -624,6 +635,7 @@ async function main() {
   console.log(`[mm] RPC: ${RPC_URL}`);
   console.log(`[mm] Markets: ${CONFIG.markets.map(id => MARKETS[id].symbol).join(', ')}`);
   console.log(`[mm] Refresh: ${CONFIG.refreshInterval / 1000}s | quote maintenance (place missing levels, retire <=${CONFIG.cancelPerCycle} off-ladder/duplicate orders per cycle)`);
+  for (const [id, mult] of Object.entries(ASK_MULT)) if (mult !== 1) console.log(`[mm] ${MARKETS[id].symbol}: asks x${mult}`);
 
   await ensureMarkets();
   await ensureCollateral();

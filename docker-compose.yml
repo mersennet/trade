@@ -114,6 +114,8 @@ services:
       # Quote for the MakerVault through agent delegation (effective only once
       # the vault has granted the maker key; see vault-manager).
       MM_OWNER: ${VAULT_ADDRESS:-}
+      # Ask-side size multiplier for MRSN/USD (1 = normal), e.g. depth for a known liquidation.
+      MM_ASK_MULT_MRSN: ${MM_ASK_MULT_MRSN:-1}
     depends_on:
       - indexer
     profiles: ["bots"]
