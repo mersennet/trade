@@ -152,14 +152,6 @@ export const api = {
   getChainHealth: () => memo('chain-health', 2_000, () => apiFetch<ChainHealth>('/health/chain')),
   getBalance: (addr: string) => apiFetch<{ balance: string }>(`/balance/${addr}`),
   getHealth: () => apiFetch<{ status: string }>('/health'),
-  getApiKeys: (address: string) =>
-    apiFetch<{ keys: ApiKey[] }>(`/api-keys/${address}`),
-  createApiKey: (address: string, label?: string) =>
-    apiFetch<{ key: string; label: string; permissions: string[] }>('/api-keys', {
-      method: 'POST', body: JSON.stringify({ address, label }),
-    }),
-  deleteApiKey: (id: number) =>
-    apiFetch<{ success: boolean }>(`/api-keys/${id}`, { method: 'DELETE' }),
   getProposals: (status?: string) =>
     apiFetch<{ proposals: GovernanceProposal[] }>(`/governance/proposals${status && status !== 'all' ? `?status=${status}` : ''}`),
   getProposal: (id: number) =>
@@ -391,8 +383,6 @@ export interface FundingRate { timestamp: string; rate: number; marketId: number
 export interface FeeTier { name: string; minVolume: number; makerFee: number; takerFee: number; }
 export interface GovernanceProposal { id: number; title: string; description: string; for_votes: number; against_votes: number; status: string; end_time: string; created_at: string; }
 export interface GovernanceVote { voter: string; direction: string; voting_power: number; created_at: string; }
-export interface ApiKey { id: number; label: string; permissions: string[]; rate_limit: number; active: boolean; created_at: string; last_used_at: string | null; }
-
 export interface TwapOrder { id: number; owner: string; market_id: number; side: string; total_size: number; executed_size: number; price_limit: number; slices: number; interval_ms: number; order_type: string; status: string; created_at: string; }
 export interface SpotMarket { id: number; pair: string; base: string; quote: string; status: string; }
 export interface SpotOrder { id: number; owner: string; pair: string; side: string; price: number; size: number; filled: number; status: string; created_at: string; }
