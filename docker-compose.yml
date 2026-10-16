@@ -134,6 +134,8 @@ services:
       RPC_URL: ${RPC_URL:-https://rpc.mersennet.com}
       BOT_SEED: ${BOT_SEED:-mersennet-bot-v1}
       CHAIN_ID: ${CHAIN_ID:-131071}
+      # Keeper key; unset = the one derived from BOT_SEED.
+      LIQ_PRIVATE_KEY: ${LIQ_PRIVATE_KEY:-}
     profiles: ["bots"]
 
   # Keeps the MakerVault wired to the maker: agent grant, deposits → collateral

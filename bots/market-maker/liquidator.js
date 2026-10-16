@@ -51,6 +51,31 @@ async function dislocatedMarkets() {
   return out;
 }
 
+// A liquidation closes the account's positions with an IOC at any price, so
+// whatever the book does not cover near the mid fills at the furthest order
+// resting on that side, possibly one placed there to catch it. Hold an account
+// until the side its sweep takes from (asks for a short, bids for a long)
+// holds the whole position within SWEEP_BAND of the mid.
+const SWEEP_BAND = Number(process.env.LIQ_SWEEP_BAND || 0.02);
+const thinLog = new Map(); // account -> last log
+async function uncovered(account) {
+  const acct = await rpcCall('mersennet_orders_getAccount', [account]);
+  for (const p of acct?.positions || []) {
+    const size = BigInt(p.size);
+    if (size === 0n) continue;
+    const need = Number(size < 0n ? -size : size);
+    const ob = await rpcCall('mersennet_orders_getOrderBook', [Number(p.marketId)]);
+    const levels = (side) => (ob?.[side] || []).map((l) => [Number(BigInt(l.price)), Number(BigInt(l.size))]);
+    const bids = levels('bids'), asks = levels('asks');
+    if (!bids.length || !asks.length) return { market: Number(p.marketId), need, near: 0 };
+    const mid = (Math.max(...bids.map(([q]) => q)) + Math.min(...asks.map(([q]) => q))) / 2;
+    const near = (size < 0n ? asks.filter(([q]) => q <= mid * (1 + SWEEP_BAND)) : bids.filter(([q]) => q >= mid * (1 - SWEEP_BAND)))
+      .reduce((s, [, n]) => s + n, 0);
+    if (near < need) return { market: Number(p.marketId), need, near };
+  }
+  return null;
+}
+
 async function marketsHeld(account) {
   const cached = held.get(account);
   if (cached && Date.now() - cached.at < 60_000) return cached.markets;
@@ -79,6 +104,14 @@ async function tick() {
     try {
       if (dislocated.size && [...(await marketsHeld(account))].some((m) => dislocated.has(m))) {
         skipped += 1;
+        continue;
+      }
+      const gap = await uncovered(account);
+      if (gap) {
+        if (Date.now() - (thinLog.get(account) || 0) > 300_000) {
+          thinLog.set(account, Date.now());
+          console.log(`[liq] holding ${account}: market ${gap.market} has ${gap.near} within ${SWEEP_BAND * 100}% of the mid, the position is ${gap.need}`);
+        }
         continue;
       }
       const tx = await keeper.liquidate(account);
