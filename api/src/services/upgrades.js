@@ -26,7 +26,7 @@ async function allSwitches() {
     chain.rpcCall('mersennet_validatorSet', []).catch(() => null),
   ]);
   if (!p) return null;
-  const all = { ...(p.switches || {}) };
+  const all = { ...chain.BUILTIN_SWITCHES, ...(p.switches || {}) };
   const vp = vset && vset.params;
   if (vp) for (const k of VSET_KEYS) if (typeof vp[k] === 'number' && vp[k] > 0) all[k] = vp[k];
   return { height: Number(p.height) || 0, all };
@@ -44,6 +44,10 @@ const META = {
   frameCallerHeight: ['Contracts own their CLOB accounts', 'Precompiles authorise the calling frame (msg.sender), not the transaction origin — contracts such as the Maker Vault act as themselves.'],
   settlementHeight: ['Settlement, margin and liquidations', 'One collateral unit = one MRSN, realized PnL settles into collateral at every fill, 10% initial / 5% maintenance margin, keeper liquidations, self-trade prevention.'],
   revertReasonsHeight: ['Order-book errors as reverts', 'A refused order-book or staking call returns its reason (Error(string)) and charges only its base gas, instead of failing silently and burning the whole gas limit. Wallets and the terminal show why an order was refused.'],
+  mrsnRepairHeight: ['MRSN/USD repair', 'Every node cancelled the MRSN/USD orders outside $34.50–$345, re-entered the positions opened on the broken book at $115 and reset the mark to $115.'],
+  rejoinWindowHeight: ['Liquidation accounting made one value on every node', 'Until block 2,850,900, a node whose liquidation accounting still carries the 26 units the 8 Oct repair left on some nodes gives them back, so every node holds the same state.'],
+  securityForkHeight: ['Signature checks on every block, order price band', "Every node checks the signature on every transaction in a block and that the block's hash matches its contents; a resting order whose owner cannot cover the fill is cancelled instead of blocking the book; orders priced more than 10x from the last trade are refused."],
+  usdcMarginOffHeight: ['Test USDC stops counting as margin', 'The test USDC is free to mint: from this block it counts 0 toward margin and new deposits of it are refused. USDC already deposited can be withdrawn any time.'],
   feeFloorHeight: ['Gas-price floor and fee split', 'The base fee never falls below 1 gwei (it still rises with usage). Of the base fee each block collects, 50% goes to the protocol treasury, 25% to the block proposer and 25% is burned. A transaction priced under the floor is refused; a block declaring a lower base fee is invalid.'],
 };
 const labelOf = (k) => (META[k] ? META[k][0] : k);

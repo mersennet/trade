@@ -656,6 +656,16 @@ async function observedBlockTime() {
  * Upcoming protocol switches with live ETAs: CLOB switches from getProtocol
  * plus the validator-set switches the node exposes. Sorted by height.
  */
+// Heights compiled into the node for chain 131071 rather than reported by
+// mersennet_orders_getProtocol's `switches`: without them the schedule (explorer
+// /upgrades, staking panel, alert reminders) showed nothing before these blocks.
+const BUILTIN_SWITCHES = Number(process.env.CHAIN_ID || 131071) === 131071 ? {
+  mrsnRepairHeight: 2324700,
+  rejoinWindowHeight: 2554100,
+  securityForkHeight: 2623500,
+  usdcMarginOffHeight: 2670700,
+} : {};
+
 async function upcomingSwitches() {
   const [p, vset, secPerBlock] = await Promise.all([
     getProtocol(),
@@ -675,8 +685,12 @@ async function upcomingSwitches() {
     revertReasonsHeight: 'Refused orders return their reason',
     feeFloorHeight: '1 gwei base-fee floor and fee split',
     maxValidatorsHeight: 'Up to 50 validators',
+    mrsnRepairHeight: 'MRSN/USD repair',
+    rejoinWindowHeight: 'Liquidation accounting made one value on every node',
+    securityForkHeight: 'Signature checks on every block, order price band',
+    usdcMarginOffHeight: 'Test USDC stops counting as margin',
   };
-  const all = { ...(p.switches || {}) };
+  const all = { ...BUILTIN_SWITCHES, ...(p.switches || {}) };
   const vp = vset && vset.params;
   if (vp) for (const k of ['benchHeight', 'jailEscalationHeight', 'rewardsToOperatorHeight', 'maxValidatorsHeight']) if (typeof vp[k] === 'number') all[k] = vp[k];
   const now = Date.now();
@@ -732,7 +746,7 @@ module.exports = {
   USDC_DECIMALS, SIZE_DECIMALS, PRICE_DECIMALS,
   weiPerCollateralUnit, unitsPerMrsn, collateralDecimals, unitsToMrsn, mrsnToUnits,
   maxLeverageFromProtocol, marginEnforced,
-  observedBlockTime, upcomingSwitches,
+  observedBlockTime, upcomingSwitches, BUILTIN_SWITCHES,
   USDC_UNIT, SIZE_UNIT, PRICE_UNIT,
   rawToUnits,
   // Reads
