@@ -20,7 +20,7 @@ import type { ClobProtocol } from '@/lib/api';
 
 // Test USDC stops counting as margin at this block (chain 131071); the chain
 // then reports its weight as zero and the row switches to withdraw-only.
-const USDC_MARGIN_OFF = { token: '0xa44b23d1d0c0133da71dece399d5d5ade6dd22d1', height: 2_670_700, when: '~Fri 16 Oct 11:30 UTC' };
+const USDC_MARGIN_OFF = { token: '0xa44b23d1d0c0133da71dece399d5d5ade6dd22d1', height: 2_670_700, when: '~Fri 16 Oct 11:10 UTC' };
 
 export default function AccountPanel() {
   const { positions } = useStore();
