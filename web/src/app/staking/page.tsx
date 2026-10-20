@@ -6,6 +6,7 @@ import { cn, shortenAddress } from '@/lib/utils';
 import { startPoll } from '@/lib/poll';
 import { getDefaultChain } from '@/lib/chain';
 import ValidatorSetPanel from '@/components/staking/ValidatorSetPanel';
+import TelegramAlerts from '@/components/shared/TelegramAlerts';
 import {
   claimRewards,
   delegate,
@@ -184,6 +185,10 @@ export default function StakingPage() {
           valueClass={unbonding && BigInt(unbonding.withdrawable) > 0n ? 'text-yellow' : undefined}
         />
       </div>
+
+      {(totalMine > 0n || (unbonding && BigInt(unbonding.total) > 0n)) && (
+        <TelegramAlerts kind="delegator" className="mb-6" />
+      )}
 
       {unbonding && BigInt(unbonding.withdrawable) > 0n && (
         <div className="mb-6 flex items-center justify-between bg-yellow/5 border border-yellow/20 rounded-xl px-4 py-3">
