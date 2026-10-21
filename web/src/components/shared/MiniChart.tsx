@@ -47,7 +47,12 @@ export default function MiniChart({ marketId, height = 64 }: { marketId: number;
         (c as { timeScale: () => { fitContent: () => void } }).timeScale().fitContent();
       } catch { /* sparkline is decorative */ }
     })();
-    return () => { disposed = true; try { chart?.remove(); } catch { /* already disposed */ } };
+    return () => {
+      disposed = true;
+      // Removed after the next frame: fitContent() queues a paint that throws on a removed chart.
+      const c = chart;
+      requestAnimationFrame(() => { try { c?.remove(); } catch { /* already disposed */ } });
+    };
   }, [marketId, height]);
 
   return (

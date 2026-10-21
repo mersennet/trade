@@ -8,6 +8,8 @@ const scales = {};
 // from ONE getProtocol answer (so they cannot disagree about the era).
 let scalesAsOfHeight = 0;
 let priceScaleHeight = 0;
+// The mark switch relists ARB on a 100x finer scale (see relist.js).
+let markPriceHeight = 0;
 // Blocks before the rescale during which no new order is submitted: an order
 // built with the old scale that lands after the switch is priced 100x off
 // (a $115 ask becomes $1.15 and is lifted at once). Cancels are scale-agnostic
@@ -29,18 +31,22 @@ async function refreshScales(rpcCall) {
     }
     scalesAsOfHeight = Number(p.height) || scalesAsOfHeight;
     priceScaleHeight = Number(p.switches?.priceScaleHeight || 0);
+    markPriceHeight = Number(p.switches?.markPriceHeight || 0);
   } catch (e) {
     console.warn('[scale] getProtocol failed (keeping previous scales):', e.message);
   }
 }
 
-/** True while new orders must not be submitted around the price-scale switch. */
+const nearing = (h) => h > 0 && scalesAsOfHeight >= h - QUIET_BEFORE && scalesAsOfHeight < h;
+
+/** True while new orders must not be submitted around a switch that rescales a market. */
 function quietForSwitch() {
-  if (!priceScaleHeight || !scalesAsOfHeight) return false;
-  return scalesAsOfHeight >= priceScaleHeight - QUIET_BEFORE && scalesAsOfHeight < priceScaleHeight;
+  if (!scalesAsOfHeight) return false;
+  return nearing(priceScaleHeight) || nearing(markPriceHeight);
 }
 function quietReason() {
-  return `price-scale switch at ${priceScaleHeight} (scales as of ${scalesAsOfHeight}): no new orders until the post-switch scale is read`;
+  const what = nearing(priceScaleHeight) ? `price-scale switch at ${priceScaleHeight}` : `mark switch (ARB relist) at ${markPriceHeight}`;
+  return `${what} (scales as of ${scalesAsOfHeight}): no new orders until the post-switch scale is read`;
 }
 
 const scaleOf = (id) => scales[Number(id)] || 1;

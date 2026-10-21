@@ -79,7 +79,7 @@ export default function OTCPage() {
     <div className="page-shell space-y-4">
       <div className="text-center mb-8">
         <h1 className="page-title">OTC / Request for Quote</h1>
-        <p className="page-sub">Execute large block trades with minimal slippage. Designed for 50K+ MRSN orders with institutional-grade execution.</p>
+        <p className="page-sub mx-auto">Execute large block trades with minimal slippage. Designed for 50K+ MRSN orders with institutional-grade execution.</p>
       </div>
 
       {/* RFQ settlement runs in the API's database, not on-chain — say so

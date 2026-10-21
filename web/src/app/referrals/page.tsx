@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useWallet } from '@/hooks/useWallet';
 import { useToast } from '@/components/shared/Toast';
 import { api, type BuilderCode, type ReferralStatus } from '@/lib/api';
-import { shortenAddress, formatNumber } from '@/lib/utils';
+import { formatNumber } from '@/lib/utils';
 
 export default function ReferralsPage() {
   const { address, isConnected } = useWallet();
@@ -46,11 +46,24 @@ export default function ReferralsPage() {
     toast('Referral link copied!', 'info');
   };
 
+  // The referral link is any of the wallet's builder codes as ?ref=.
+  const refCode = myCodes[0]?.code;
+  const [creatingLink, setCreatingLink] = useState(false);
+  const createLink = async () => {
+    if (!address) return;
+    setCreatingLink(true);
+    try {
+      await api.createBuilderCode(address);
+      await loadMyCodes(address);
+    } catch (e) { toast(`Failed: ${(e as Error).message}`, 'error'); }
+    finally { setCreatingLink(false); }
+  };
+
   return (
     <div className="page-shell space-y-6">
       <div className="text-center mb-6">
         <h1 className="page-title">Referrals & Builder Codes</h1>
-        <p className="page-sub">Earn revenue share by referring traders or building integrations</p>
+        <p className="page-sub mx-auto">Earn revenue share by referring traders or building integrations</p>
       </div>
 
       {/* How attribution works: the referee signs a one-line statement once
@@ -58,13 +71,28 @@ export default function ReferralsPage() {
           their trading points to the referrer every few minutes. */}
       <div className="max-w-2xl mx-auto px-4 py-3 rounded-lg bg-primary/[0.06] border border-primary/20">
         <p className="text-xs text-foreground/85 leading-relaxed">
-          <span className="text-primary font-semibold">How it works.</span> Share your link. When a trader opens it and connects a wallet, the terminal asks them to
+          <span className="text-primary font-semibold">How it works:</span> Share your link. When a trader opens it and connects a wallet, the terminal asks them to
           confirm the referral with one signature — that is what makes it trustworthy. From then on you earn <span className="font-mono">10%</span> of their trading points
           as a bonus (nothing is deducted from them), updated every few minutes. First code wins; self-referrals do not count.
           {referralStatus?.referredBy && (
             <> You were referred by code <span className="font-mono text-primary">{referralStatus.referredBy.code}</span>.</>
           )}
         </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs" data-testid="referral-link-row">
+          <span className="text-primary font-semibold">Your link:</span>
+          {!isConnected ? (
+            <span className="text-foreground/85">connect your wallet to get it.</span>
+          ) : refCode ? (
+            <>
+              <span className="font-mono text-foreground break-all select-all">https://trade.mersennet.com/?ref={refCode}</span>
+              <button onClick={() => copyLink(refCode)} className="px-2.5 py-1 bg-surface-2 border border-border rounded text-foreground hover:border-primary transition-colors duration-200">Copy</button>
+            </>
+          ) : (
+            <button onClick={createLink} disabled={creatingLink} className="px-3 py-1 bg-primary hover:bg-primary-hover text-white rounded font-medium transition-colors duration-200 disabled:opacity-50">
+              {creatingLink ? 'Creating…' : 'Create my link'}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid md:grid-cols-2 gap-4">

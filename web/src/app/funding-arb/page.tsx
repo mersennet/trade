@@ -48,7 +48,7 @@ export default function FundingArbPage() {
     <div className="page-shell space-y-6">
       <div className="text-center mb-8">
         <h1 className="page-title">Funding Rate Arbitrage</h1>
-        <p className="page-sub">Cross-exchange funding rate comparison and arbitrage opportunities</p>
+        <p className="page-sub mx-auto">Cross-exchange funding rate comparison and arbitrage opportunities</p>
       </div>
 
       {/* External-venue rates (Hyperliquid / dYdX / Binance) are not yet wired to live

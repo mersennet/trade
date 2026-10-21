@@ -403,9 +403,20 @@ async function getMarkPrice(marketId) {
   return (last > 0n ? last : bid > 0n ? bid : ask).toString();
 }
 
+// Markets with no external listing are priced off their own book, so a swept
+// or polluted book became "the price" (6 Oct: MRSN/USD shown at $16,472, and
+// bots quoting off this feed kept it there). Outside 0.3x-3x of the seed the
+// display falls back to the seed.
+const DISPLAY_REFERENCE_USD = { 1: 115, 5: 100 };
+
 /** Display-only price with age. Mersennet matches on-chain, so mid is never stale. */
 async function getOraclePriceForDisplay(marketId) {
   const price = await getMarkPrice(marketId);
+  const ref = DISPLAY_REFERENCE_USD[Number(marketId)];
+  const human = toHumanPrice(marketId, price);
+  if (ref && human > 0 && (human > ref * 3 || human < ref * 0.3)) {
+    return { price: toChainPrice(marketId, ref).toString(), age: 0, clamped: true };
+  }
   return { price, age: 0 };
 }
 
@@ -533,9 +544,21 @@ async function getBalance(address) {
   return BigInt(r).toString();
 }
 
+// The head is shared for a second, so a burst of requests makes one call, and
+// a refused call (the RPC's per-IP rate limit) is answered from a head under
+// 30 s old instead of failing the request (and the health check).
+let _head = { number: null, at: 0 };
 async function getBlockNumber() {
-  const r = await rpcCall('eth_blockNumber');
-  return Number(BigInt(r));
+  const now = Date.now();
+  if (_head.number != null && now - _head.at < 1000) return _head.number;
+  try {
+    const r = await rpcCall('eth_blockNumber');
+    _head = { number: Number(BigInt(r)), at: now };
+    return _head.number;
+  } catch (e) {
+    if (_head.number != null && now - _head.at < 30_000) return _head.number;
+    throw e;
+  }
 }
 
 // Deposit / withdraw collateral via the precompile.
@@ -633,6 +656,16 @@ async function observedBlockTime() {
  * Upcoming protocol switches with live ETAs: CLOB switches from getProtocol
  * plus the validator-set switches the node exposes. Sorted by height.
  */
+// Heights compiled into the node for chain 131071 rather than reported by
+// mersennet_orders_getProtocol's `switches`: without them the schedule (explorer
+// /upgrades, staking panel, alert reminders) showed nothing before these blocks.
+const BUILTIN_SWITCHES = Number(process.env.CHAIN_ID || 131071) === 131071 ? {
+  mrsnRepairHeight: 2324700,
+  rejoinWindowHeight: 2554100,
+  securityForkHeight: 2623500,
+  usdcMarginOffHeight: 2670700,
+} : {};
+
 async function upcomingSwitches() {
   const [p, vset, secPerBlock] = await Promise.all([
     getProtocol(),
@@ -652,8 +685,12 @@ async function upcomingSwitches() {
     revertReasonsHeight: 'Refused orders return their reason',
     feeFloorHeight: '1 gwei base-fee floor and fee split',
     maxValidatorsHeight: 'Up to 50 validators',
+    mrsnRepairHeight: 'MRSN/USD repair',
+    rejoinWindowHeight: 'Liquidation accounting made one value on every node',
+    securityForkHeight: 'Signature checks on every block, order price band',
+    usdcMarginOffHeight: 'Test USDC stops counting as margin',
   };
-  const all = { ...(p.switches || {}) };
+  const all = { ...BUILTIN_SWITCHES, ...(p.switches || {}) };
   const vp = vset && vset.params;
   if (vp) for (const k of ['benchHeight', 'jailEscalationHeight', 'rewardsToOperatorHeight', 'maxValidatorsHeight']) if (typeof vp[k] === 'number') all[k] = vp[k];
   const now = Date.now();
@@ -709,7 +746,7 @@ module.exports = {
   USDC_DECIMALS, SIZE_DECIMALS, PRICE_DECIMALS,
   weiPerCollateralUnit, unitsPerMrsn, collateralDecimals, unitsToMrsn, mrsnToUnits,
   maxLeverageFromProtocol, marginEnforced,
-  observedBlockTime, upcomingSwitches,
+  observedBlockTime, upcomingSwitches, BUILTIN_SWITCHES,
   USDC_UNIT, SIZE_UNIT, PRICE_UNIT,
   rawToUnits,
   // Reads

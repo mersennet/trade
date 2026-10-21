@@ -152,14 +152,6 @@ export const api = {
   getChainHealth: () => memo('chain-health', 2_000, () => apiFetch<ChainHealth>('/health/chain')),
   getBalance: (addr: string) => apiFetch<{ balance: string }>(`/balance/${addr}`),
   getHealth: () => apiFetch<{ status: string }>('/health'),
-  getApiKeys: (address: string) =>
-    apiFetch<{ keys: ApiKey[] }>(`/api-keys/${address}`),
-  createApiKey: (address: string, label?: string) =>
-    apiFetch<{ key: string; label: string; permissions: string[] }>('/api-keys', {
-      method: 'POST', body: JSON.stringify({ address, label }),
-    }),
-  deleteApiKey: (id: number) =>
-    apiFetch<{ success: boolean }>(`/api-keys/${id}`, { method: 'DELETE' }),
   getProposals: (status?: string) =>
     apiFetch<{ proposals: GovernanceProposal[] }>(`/governance/proposals${status && status !== 'all' ? `?status=${status}` : ''}`),
   getProposal: (id: number) =>
@@ -360,7 +352,7 @@ export interface AdoptionStats {
   wallets: { fundedByFaucet: number | null; sendersTotal: number | null; activeSenders24h: number | null; activeSenders7d: number | null; activeSenders30d: number | null; humanTradersTotal: number | null; humanTraders24h: number | null; humanTraders7d: number | null; humanTraders30d: number | null; botWallets: number | null; vaultDepositors: number | null; pointsHolders: number | null; referrals: number | null; fundedPerDay: { day: string; wallets: number }[] };
   trading: { trades24h: number | null; humanTrades24h: number | null; volume24h: number | null; humanVolume24h: number | null; trades7d: number | null; humanTrades7d: number | null; volume7d: number | null; humanVolume7d: number | null; tradesTotal: number | null; humanTradesTotal: number | null; volumeTotal: number | null; humanVolumeTotal: number | null; markets: number | null };
   tvl: { orderBookCollateralMrsn: number | null; orderBookAccounts: number | null; makerVaultNavMrsn: number | null; stakedMrsn: number | null; totalMrsn: number | null };
-  network: { height: number | null; blockTimeSec: number | null; tx24h: number | null; txTotal: number | null; contractsDeployed: number | null; validators: { registered: number; active: number | null; community: number; jailed: number; networkStakeMrsn: number; delegatedMrsn: number; epoch: number | null; height: number | null } | null; verifiedNodes: number | null; verifiedNodesOnline: number | null; nodeOperators: number | null; uptime: { monitors: number; avg24h: number | null; avg30d: number | null } | null };
+  network: { height: number | null; blockTimeSec: number | null; tx24h: number | null; txTotal: number | null; contractsDeployed: number | null; validators: { registered: number; active: number | null; genesis?: number; community: number; jailed: number; benched?: number; statuses?: Record<string, number>; unregisteredNodesOnline?: number | null; networkStakeMrsn: number; delegatedMrsn: number; epoch: number | null; height: number | null } | null; verifiedNodes: number | null; verifiedNodesOnline: number | null; nodeOperators: number | null; uptime: { monitors: number; avg24h: number | null; avg30d: number | null } | null };
   community: { telegramMembers: number | null; github: { repos: number; stars: number; forks: number } | null };
   daily: { day: string; humanTrades: number; humanVolume: number; humanTraders: number; botTrades: number; botVolume: number; newTraders: number; faucetTxs: number | null; blocks: number | null; verifiedNodes: number | null; validators: number | null }[];
 }
@@ -391,8 +383,6 @@ export interface FundingRate { timestamp: string; rate: number; marketId: number
 export interface FeeTier { name: string; minVolume: number; makerFee: number; takerFee: number; }
 export interface GovernanceProposal { id: number; title: string; description: string; for_votes: number; against_votes: number; status: string; end_time: string; created_at: string; }
 export interface GovernanceVote { voter: string; direction: string; voting_power: number; created_at: string; }
-export interface ApiKey { id: number; label: string; permissions: string[]; rate_limit: number; active: boolean; created_at: string; last_used_at: string | null; }
-
 export interface TwapOrder { id: number; owner: string; market_id: number; side: string; total_size: number; executed_size: number; price_limit: number; slices: number; interval_ms: number; order_type: string; status: string; created_at: string; }
 export interface SpotMarket { id: number; pair: string; base: string; quote: string; status: string; }
 export interface SpotOrder { id: number; owner: string; pair: string; side: string; price: number; size: number; filled: number; status: string; created_at: string; }

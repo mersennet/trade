@@ -164,7 +164,8 @@ async function computeFast() {
     pool.query(`
       SELECT COUNT(*)::int AS total,
              COUNT(*) FILTER (WHERE consecutive_failures < 3 AND last_seen_at > now() - interval '1 hour')::int AS online,
-             COUNT(DISTINCT operator)::int AS operators
+             COUNT(DISTINCT operator)::int AS operators,
+             COALESCE(array_agg(lower(identity)) FILTER (WHERE consecutive_failures < 3 AND last_seen_at > now() - interval '1 hour'), '{}') AS online_ids
       FROM verified_nodes`).then((r) => r.rows[0]).catch(() => ({})),
     chain.rpcCall('mersennet_validatorSet', []).catch(() => null),
     chain.getProtocol().catch(() => null),
@@ -195,11 +196,22 @@ async function computeFast() {
   if (validatorSet && Array.isArray(validatorSet.validators)) {
     const vs = validatorSet.validators;
     const stake = vs.reduce((s, v) => s + wei(v.selfStake) + wei(v.delegated), 0);
+    const statuses = {};
+    for (const v of vs) {
+      const st = String(v.status || 'unknown').toLowerCase();
+      statuses[st] = (statuses[st] || 0) + 1;
+    }
+    const ids = new Set(vs.map((v) => String(v.identity || '').toLowerCase()));
     validators = {
       registered: vs.length,
       active: Array.isArray(validatorSet.activeSet) ? validatorSet.activeSet.length : null,
+      genesis: vs.filter((v) => v.genesis).length,
       community: vs.filter((v) => !v.genesis).length,
       jailed: vs.filter((v) => v.status && /jail/i.test(String(v.status))).length,
+      benched: vs.filter((v) => v.benched).length,
+      statuses,
+      // Verified nodes online that no registered validator runs.
+      unregisteredNodesOnline: Array.isArray(nodes.online_ids) ? nodes.online_ids.filter((id) => !ids.has(id)).length : null,
       networkStakeMrsn: stake,
       delegatedMrsn: vs.reduce((s, v) => s + wei(v.delegated), 0),
       epoch: num(validatorSet.epoch),

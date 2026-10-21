@@ -272,8 +272,7 @@ export default function VaultPage() {
       {error && <p className="text-[12px] text-red">{error}</p>}
 
       <div className="text-[11px] text-dim leading-relaxed">
-        <span className="text-foreground font-medium">How it works.</span> The vault is a contract on Mersennet ({' '}
-        <a href={`${EXPLORER}/address/${MAKER_VAULT_ADDRESS}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">view on the explorer</a>). It holds the pool as collateral on the orders precompile in its own name and grants the market-maker key permission to place and cancel orders for it — never to withdraw. Shares are minted and burned at NAV, so fills the maker earns (or loses) show up in the share price. Testnet: the manager can pause deposits and cap the pool; MRSN has no monetary value here.
+        <span className="text-foreground font-medium">How it works:</span> The vault is a contract on Mersennet (<a href={`${EXPLORER}/address/${MAKER_VAULT_ADDRESS}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">view on block explorer</a>). It holds the pool as collateral on the orders precompile in its own name and grants the market-maker key permission to place and cancel orders for it — never to withdraw. Shares are minted and burned at NAV, so fills the maker earns (or loses) show up in the share price. Testnet: the manager can pause deposits and cap the pool; MRSN has no monetary value here.
       </div>
     </div>
   );

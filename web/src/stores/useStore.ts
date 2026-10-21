@@ -122,6 +122,8 @@ interface AppState {
   wallet: WalletState;
   trade: TradeState;
   positions: Position[];
+  /** Wallet `positions` were fetched for (lowercase); null until a fetch lands. */
+  positionsOwner: string | null;
   orders: Order[];
   pendingOrders: PendingOrder[];
   favorites: number[];
@@ -164,7 +166,7 @@ interface AppState {
   updateTicker: (id: number, t: Ticker) => void;
   setWallet: (w: Partial<WalletState>) => void;
   setTrade: (t: Partial<TradeState>) => void;
-  setPositions: (p: Position[]) => void;
+  setPositions: (p: Position[], owner?: string | null) => void;
   setOrders: (o: Order[]) => void;
   addPendingOrder: (o: PendingOrder) => void;
   removePendingOrder: (tempId: string) => void;
@@ -213,6 +215,7 @@ export const useStore = create<AppState>()(
         tif: 'gtc', reduceOnly: false, tpEnabled: false, tpPrice: '', slPrice: '',
       },
       positions: [],
+      positionsOwner: null,
       orders: [],
       pendingOrders: [],
       favorites: [],
@@ -249,7 +252,7 @@ export const useStore = create<AppState>()(
       updateTicker: (id, t) => set((s) => ({ tickers: { ...s.tickers, [id]: t } })),
       setWallet: (w) => set((s) => ({ wallet: { ...s.wallet, ...w } })),
       setTrade: (t) => set((s) => ({ trade: { ...s.trade, ...t } })),
-      setPositions: (positions) => set({ positions }),
+      setPositions: (positions, owner = null) => set({ positions, positionsOwner: owner ? owner.toLowerCase() : null }),
       setOrders: (orders) => set({ orders }),
       addPendingOrder: (o) => set((s) => ({ pendingOrders: [...s.pendingOrders, o] })),
       removePendingOrder: (tempId) => set((s) => ({ pendingOrders: s.pendingOrders.filter((o) => o.tempId !== tempId) })),

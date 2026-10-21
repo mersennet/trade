@@ -6,6 +6,7 @@ import { cn, shortenAddress } from '@/lib/utils';
 import { startPoll } from '@/lib/poll';
 import { getDefaultChain } from '@/lib/chain';
 import ValidatorSetPanel from '@/components/staking/ValidatorSetPanel';
+import TelegramAlerts from '@/components/shared/TelegramAlerts';
 import {
   claimRewards,
   delegate,
@@ -20,6 +21,7 @@ import {
   weiToMrsn,
   withdrawUnbonded,
   type UnbondingView,
+  type ValidatorSetEntry,
 } from '@/lib/staking';
 
 interface ValidatorRow {
@@ -62,12 +64,18 @@ export default function StakingPage() {
   const [ownSlot, setOwnSlot] = useState<HTMLDivElement | null>(null);
   // Validators this wallet operates → the matching rows are labelled "your node".
   const [myIdentities, setMyIdentities] = useState<Set<string>>(new Set());
+  // Status and genesis flag of every validator, by identity (the staking RPC
+  // behind the rows carries stakes only).
+  const [setEntries, setSetEntries] = useState<Record<string, ValidatorSetEntry>>({});
   const amountRefs = useRef<Record<string, HTMLInputElement | null>>({});
   useEffect(() => {
-    if (!address) { setMyIdentities(new Set()); return; }
     let alive = true;
     const load = () => getValidatorSet().then((v) => {
-      if (alive) setMyIdentities(new Set(v.validators.filter((x) => x.operator.toLowerCase() === address.toLowerCase()).map((x) => x.identity.toLowerCase())));
+      if (!alive) return;
+      setSetEntries(Object.fromEntries(v.validators.map((x) => [x.identity.toLowerCase(), x])));
+      setMyIdentities(address
+        ? new Set(v.validators.filter((x) => x.operator.toLowerCase() === address.toLowerCase()).map((x) => x.identity.toLowerCase()))
+        : new Set());
     }).catch(() => {});
     load();
     const stop = startPoll(load, 60_000);
@@ -138,6 +146,9 @@ export default function StakingPage() {
     }
   };
 
+  const entries = Object.values(setEntries);
+  const activeCount = entries.length ? entries.filter((x) => x.status === 'active').length : null;
+
   // Largest stake first, as the validator set below ranks them (the chain lists
   // validators in registration order).
   const sortedRows = [...rows].sort((a, b) => {
@@ -175,6 +186,10 @@ export default function StakingPage() {
         />
       </div>
 
+      {(totalMine > 0n || (unbonding && BigInt(unbonding.total) > 0n)) && (
+        <TelegramAlerts kind="delegator" className="mb-6" />
+      )}
+
       {unbonding && BigInt(unbonding.withdrawable) > 0n && (
         <div className="mb-6 flex items-center justify-between bg-yellow/5 border border-yellow/20 rounded-xl px-4 py-3">
           <p className="text-sm text-foreground">
@@ -197,7 +212,7 @@ export default function StakingPage() {
         <table className="w-full min-w-[720px] text-sm">
           <thead>
             <tr className="text-[10px] text-dim uppercase tracking-wider border-b border-border">
-              <th className="text-left font-medium px-3 py-3">Validator</th>
+              <th className="text-left font-medium px-3 py-3">Validator{activeCount != null && <span className="text-dim"> ({activeCount} active)</span>}</th>
               <th className="text-right font-medium px-3 py-3" title="Bonded by the operator">Self-stake (MRSN)</th>
               <th className="text-right font-medium px-3 py-3" title="Staked behind the validator by delegators">Delegated (MRSN)</th>
               <th className="text-right font-medium px-3 py-3" title="Share of delegators' rewards the operator keeps">Commission</th>
@@ -227,9 +242,16 @@ export default function StakingPage() {
               const m = mode[r.address] ?? 'delegate';
               const amt = amounts[r.address] ?? '';
               const own = myIdentities.has(r.address.toLowerCase());
+              const info = setEntries[r.address.toLowerCase()];
               return (
                 <tr key={r.address} id={`delegate-${r.address.toLowerCase()}`} className={cn('border-b border-border/50 last:border-0', own && 'bg-primary/5')}>
-                  <td className="px-3 py-3 font-mono text-foreground">{shortenAddress(r.address)}{own && <span className="text-primary"> · your node</span>}</td>
+                  <td className="px-3 py-3 font-mono text-foreground">
+                    {shortenAddress(r.address)}
+                    {info?.genesis && <span className="text-dim"> · genesis</span>}
+                    {info && info.status !== 'active' && <span className={info.status === 'jailed' ? 'text-down' : 'text-dim'}> · {info.status}</span>}
+                    {info?.benched && <span className="text-yellow"> · benched</span>}
+                    {own && <span className="text-primary"> · your node</span>}
+                  </td>
                   {/* Both stake columns in fixed decimals so they read as one unit:
                       0.00 · 1,004.91 · 41,002.00 (community feedback). Exact value on hover. */}
                   <td className="px-3 py-3 text-right font-mono tabular-nums" title={`${fmtMrsnWei(r.selfStake, 18)} MRSN`}>{fmtMrsnWei(r.selfStake, 2, true)}</td>
@@ -328,7 +350,7 @@ export default function StakingPage() {
           {(loading || rows.length > 0) && (
             <tfoot>
               <tr className="border-t-2 border-border bg-surface-2/40">
-                <td className="px-3 py-3 text-xs font-semibold text-foreground">Grand total <span className="text-dim font-normal">· {loading ? '—' : rows.length} validators</span></td>
+                <td className="px-3 py-3 text-xs font-semibold text-foreground">Grand total <span className="text-dim font-normal">· {loading ? '—' : rows.length} validators{activeCount != null && ` (${activeCount} active)`}</span></td>
                 <td className="px-3 py-3 text-right font-mono tabular-nums font-semibold" title="Grand total staked (MRSN)">
                   {loading ? '—' : fmtMrsnWei(rows.reduce((s, r) => s + BigInt(r.selfStake), 0n), 2, true)}
                   <div className="text-[10px] text-dim font-normal">staked (MRSN)</div>

@@ -208,9 +208,9 @@ export default function TestnetPage() {
         <p className="text-[11px] text-dim leading-relaxed">
           Mersennet is a test network. Tokens hold no monetary value and the network may be reset.
           Native collateral is <span className="text-foreground">MRSN</span> (18 decimals). Test
-          USDC is also accepted as margin collateral on-chain (90% weight) via the CLOB
-          precompile&apos;s <span className="font-mono">depositTokenCollateral</span> — claim it
-          from the faucet.
+          USDC counted as margin (90% weight) until block 2,670,700 on 16 Oct 2026; it is free to
+          mint, so from that block it counts 0 and new deposits are refused. USDC already deposited
+          can be withdrawn any time.
         </p>
       </div>
       </div>

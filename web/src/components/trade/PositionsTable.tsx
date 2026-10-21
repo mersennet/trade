@@ -60,7 +60,7 @@ export default function PositionsTable() {
           api.getOrders(address),
         ]);
         if (!alive) return;
-        setPositions(posRes.positions || []);
+        setPositions(posRes.positions || [], address);
         setOrders(ordRes.orders || []);
       } catch (e) {
         console.error('[positions] fetch error:', e);

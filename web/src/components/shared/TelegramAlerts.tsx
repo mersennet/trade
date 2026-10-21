@@ -5,14 +5,16 @@ import { useToast } from '@/components/shared/Toast';
 import { API_BASE } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
-type Kind = 'operator' | 'trader';
+type Kind = 'operator' | 'trader' | 'delegator';
 interface Status { linked: boolean; bot: string; chats: { kind: Kind; username: string | null; linkedAt: string }[] }
 
 /**
  * "Telegram alerts" control. One wallet signature (no transaction) proves the
  * address; the API answers a one-time deep link to @mersennet_alerts_bot.
  * Pressing /start in Telegram completes the link — this component polls until
- * it sees it. Operators get validator alerts, traders liquidation alerts.
+ * it sees it. Operators get validator alerts, traders liquidation alerts,
+ * delegators the health of the validators they back. Each kind links and
+ * unlinks on its own: one wallet can be an operator and a delegator.
  */
 export default function TelegramAlerts({ kind, compact = false, className }: { kind: Kind; compact?: boolean; className?: string }) {
   const { address, signer, isConnected } = useWallet();
@@ -21,6 +23,8 @@ export default function TelegramAlerts({ kind, compact = false, className }: { k
   const [link, setLink] = useState<{ deepLink: string; code: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mine = (status?.chats ?? []).filter((c) => c.kind === kind);
+  const linked = mine.length > 0;
 
   const load = useCallback(async () => {
     if (!address) { setStatus(null); return; }
@@ -57,7 +61,7 @@ export default function TelegramAlerts({ kind, compact = false, className }: { k
       toast(/user rejected|denied|ACTION_REJECTED/i.test(m) ? 'Signature cancelled in the wallet.' : m.slice(0, 140), 'error');
     } finally { setBusy(false); }
   };
-  useEffect(() => { if (status?.linked && pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; setLink(null); } }, [status?.linked]);
+  useEffect(() => { if (linked && pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; setLink(null); } }, [linked]);
 
   const stop = async () => {
     if (!address || !signer) return;
@@ -65,7 +69,7 @@ export default function TelegramAlerts({ kind, compact = false, className }: { k
     setBusy(true);
     try {
       const signature = await (signer as { signMessage: (m: string) => Promise<string> }).signMessage(message(kind));
-      const r = await fetch(`${API_BASE}/alerts/unlink`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ address, signature }) });
+      const r = await fetch(`${API_BASE}/alerts/unlink`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ address, signature, kind }) });
       if (!r.ok) throw new Error((await r.json()).error || 'Could not unlink');
       toast('Telegram alerts off', 'info');
       await load();
@@ -74,8 +78,7 @@ export default function TelegramAlerts({ kind, compact = false, className }: { k
   };
 
   if (!isConnected) return null;
-  const linked = !!status?.linked;
-  const who = status?.chats.map((c) => (c.username ? `@${c.username}` : 'Telegram')).join(', ');
+  const who = mine.map((c) => (c.username ? `@${c.username}` : 'Telegram')).join(', ');
 
   if (compact) {
     return (
@@ -110,9 +113,11 @@ export default function TelegramAlerts({ kind, compact = false, className }: { k
         )}
       </div>
       <p className="text-[11px] text-dim mt-1.5 leading-relaxed">
-        {kind === 'operator'
-          ? 'A message when your validator misses slots, is benched or jailed, falls behind the chain, goes silent, runs an outdated build — and 24 h / 6 h / 1 h before every protocol switch. One wallet signature, no transaction; /stop in the chat ends it.'
-          : 'A message when a position gets within 1.6× of maintenance margin, and when it becomes liquidatable. One wallet signature, no transaction; /stop in the chat ends it.'}
+        {{
+          operator: 'A message when your validator misses slots, is benched or jailed, falls behind the chain, goes silent, runs an outdated build — and 24 h / 6 h / 1 h before every protocol switch.',
+          trader: 'A message when a position gets within 1.6× of maintenance margin, and when it becomes liquidatable.',
+          delegator: 'A message when a validator you delegate to is benched or jailed (and stops earning), goes standby or exits, comes back, or changes its commission — and when MRSN you undelegated can be withdrawn.',
+        }[kind]}{' '}One wallet signature, no transaction; /stop in the chat ends it.
         {link && <> Waiting for you to press <b>Start</b> in Telegram (code <code className="font-mono">{link.code}</code>, valid 15 min)…</>}
       </p>
     </div>

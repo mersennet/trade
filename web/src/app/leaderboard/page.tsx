@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { api, type LeaderboardEntry, type PointsEntry, type SprintStatus } from '@/lib/api';
 import { formatNumber, formatPoints, formatUsd, shortenAddress, cn } from '@/lib/utils';
 import AddressAvatar from '@/components/AddressAvatar';
+import YouBadge, { isSameAddress } from '@/components/YouBadge';
+import { useWallet } from '@/hooks/useWallet';
 
 const PERIODS = ['daily', 'weekly', 'monthly', 'alltime'] as const;
 const SORTS = ['pnl', 'volume', 'trade_count'] as const;
@@ -52,6 +54,7 @@ function fmtCountdown(iso: string): string {
 }
 
 export default function LeaderboardPage() {
+  const { address } = useWallet();
   const [traders, setTraders] = useState<LeaderboardEntry[]>([]);
   const [period, setPeriod] = useState<string>('alltime');
   const [sort, setSort] = useState<string>('pnl');
@@ -106,28 +109,32 @@ export default function LeaderboardPage() {
             <p className="text-[11px] text-dim mt-0.5">Week resets Monday 00:00 UTC · next award in {fmtCountdown(sprint.awardAt)} · bots excluded</p>
           </div>
           <div className="flex-1 min-w-[240px]">
+            <p className="text-[10px] uppercase tracking-wider text-dim">Current week</p>
             {sprint.standings.length > 0 ? (
-              <ol className="text-[11.5px] font-mono space-y-0.5">
+              <ol className="text-[11.5px] leading-[18px] font-mono mt-0.5 space-y-0.5">
                 {sprint.standings.slice(0, 3).map((s) => (
                   <li key={s.address} className="flex items-center justify-between gap-3">
                     <span className="text-dim w-4">{s.rank}</span>
-                    <Link href={`/trader/${s.address}`} className="text-foreground hover:text-primary flex-1">{shortenAddress(s.address, 6)}</Link>
+                    <span className="flex-1 flex items-center">
+                      <Link href={`/trader/${s.address}`} className="text-foreground hover:text-primary">{shortenAddress(s.address, 6)}</Link>
+                      {isSameAddress(s.address, address) && <YouBadge />}
+                    </span>
                     <span className="text-foreground/80 tabular-nums">{formatUsd(s.volume)}</span>
                     <span className="text-primary tabular-nums w-16 text-right">+{sprint.prizes[s.rank - 1]?.toLocaleString()}</span>
                   </li>
                 ))}
               </ol>
             ) : (
-              <p className="text-[12px] text-dim">Nobody has traded yet this week — the first trade takes the lead. <Link href="/trade" className="text-primary hover:underline">Trade →</Link></p>
+              <p className="text-[12px] text-dim mt-0.5">Nobody has traded yet this week — the first trade takes the lead. <Link href="/trade" className="text-primary hover:underline">Trade →</Link></p>
             )}
           </div>
           {sprint.lastWinners.length > 0 && (
             <div className="min-w-[200px]">
               <p className="text-[10px] uppercase tracking-wider text-dim">Last week</p>
-              <ol className="text-[11px] font-mono mt-0.5 space-y-0.5">
+              <ol className="text-[11.5px] leading-[18px] font-mono mt-0.5 space-y-0.5">
                 {sprint.lastWinners.map((w) => (
                   <li key={`${w.week_start}-${w.address}`} className="flex justify-between gap-3">
-                    <span className="text-foreground/80">{w.rank}. {shortenAddress(w.address, 4)}</span>
+                    <span className="text-foreground/80 flex items-center">{w.rank}. {shortenAddress(w.address, 4)}{isSameAddress(w.address, address) && <YouBadge />}</span>
                     <span className="text-primary">+{Number(w.points).toLocaleString()}</span>
                   </li>
                 ))}
@@ -159,15 +166,18 @@ export default function LeaderboardPage() {
               ) : points.map((p) => {
                 const rb = rankBadge(p.rank);
                 return (
-                  <tr key={p.address} className="border-b border-border last:border-0 hover:bg-surface-2/40 transition-colors">
+                  <tr key={p.address} className={cn('border-b border-border last:border-0 hover:bg-surface-2/40 transition-colors', isSameAddress(p.address, address) && 'bg-primary/[0.04]')}>
                     <td className="px-4 py-2.5">
                       <span className={cn('inline-flex items-center justify-center w-7 h-7 rounded-md font-mono font-bold text-[12px]', rb ? rb.tone : 'text-dim bg-surface-2')}>{rb ? rb.label : p.rank}</span>
                     </td>
                     <td className="px-4 py-2.5">
-                      <Link href={`/trader/${p.address}`} className="flex items-center gap-2.5 hover:opacity-80 transition-opacity">
-                        <AddressAvatar address={p.address} size={26} />
-                        <span className="text-foreground font-mono text-[12.5px]">{shortenAddress(p.address, 6)}</span>
-                      </Link>
+                      <div className="flex items-center">
+                        <Link href={`/trader/${p.address}`} className="flex items-center gap-2.5 hover:opacity-80 transition-opacity">
+                          <AddressAvatar address={p.address} size={26} />
+                          <span className="text-foreground font-mono text-[12.5px]">{shortenAddress(p.address, 6)}</span>
+                        </Link>
+                        {isSameAddress(p.address, address) && <YouBadge />}
+                      </div>
                     </td>
                     <td className="px-4 py-2.5 text-right font-mono font-semibold tabular-nums text-primary">{formatPoints(p.totalPoints)}</td>
                     <td className="px-4 py-2.5 text-right font-mono tabular-nums text-foreground/70 hidden md:table-cell">{formatPoints(p.tradingPoints || 0)}</td>
@@ -213,7 +223,7 @@ export default function LeaderboardPage() {
             <Link
               key={t.address}
               href={`/trader/${t.address}`}
-              className="flex items-center justify-between px-3 py-3 bg-surface border border-border rounded-lg active:bg-surface-2 transition-colors"
+              className={cn('flex items-center justify-between px-3 py-3 bg-surface border border-border rounded-lg active:bg-surface-2 transition-colors', isSameAddress(t.address, address) && 'border-primary/30')}
             >
               <div className="flex items-center gap-2.5 min-w-0">
                 <span className={cn(
@@ -224,7 +234,7 @@ export default function LeaderboardPage() {
                 </span>
                 <AddressAvatar address={t.address} size={26} />
                 <div className="min-w-0">
-                  <div className="text-[12px] text-foreground font-mono">{shortenAddress(t.address, 4)}</div>
+                  <div className="text-[12px] text-foreground font-mono flex items-center">{shortenAddress(t.address, 4)}{isSameAddress(t.address, address) && <YouBadge />}</div>
                   <div className="text-[10px] text-dim font-mono">{formatNumber(t.trades, 0)} trades · {t.winRate}% win</div>
                 </div>
               </div>
@@ -258,7 +268,7 @@ export default function LeaderboardPage() {
             {loading ? placeholderRows(6) : traders.length > 0 ? traders.map((t) => {
               const rb = rankBadge(t.rank);
               return (
-                <tr key={t.address} className="border-b border-border last:border-0 hover:bg-surface-2/40 transition-colors">
+                <tr key={t.address} className={cn('border-b border-border last:border-0 hover:bg-surface-2/40 transition-colors', isSameAddress(t.address, address) && 'bg-primary/[0.04]')}>
                   <td className="px-4 py-2.5">
                     <span className={cn(
                       'inline-flex items-center justify-center w-7 h-7 rounded-md font-mono font-bold text-[12px]',
@@ -268,10 +278,13 @@ export default function LeaderboardPage() {
                     </span>
                   </td>
                   <td className="px-4 py-2.5">
-                    <Link href={`/trader/${t.address}`} className="flex items-center gap-2.5 hover:opacity-80 transition-opacity">
-                      <AddressAvatar address={t.address} size={26} />
-                      <span className="text-foreground font-mono text-[12.5px] hover:text-primary transition-colors">{shortenAddress(t.address, 6)}</span>
-                    </Link>
+                    <div className="flex items-center">
+                      <Link href={`/trader/${t.address}`} className="flex items-center gap-2.5 hover:opacity-80 transition-opacity">
+                        <AddressAvatar address={t.address} size={26} />
+                        <span className="text-foreground font-mono text-[12.5px] hover:text-primary transition-colors">{shortenAddress(t.address, 6)}</span>
+                      </Link>
+                      {isSameAddress(t.address, address) && <YouBadge />}
+                    </div>
                   </td>
                   <td className={cn('px-4 py-2.5 text-right font-mono font-semibold tabular-nums', t.pnl >= 0 ? 'text-green' : 'text-red')}>
                     {t.pnl >= 0 ? '+' : ''}{formatNumber(t.pnl, 2)} <span className="text-[10px] font-normal text-dim">MRSN</span>

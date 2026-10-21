@@ -508,17 +508,19 @@ export default function Chart() {
 
     return () => {
       ro.disconnect();
-      // lightweight-charts throws "Object is disposed" if a queued resize or
-      // paint lands after the chart is gone, and if remove() runs twice.
-      try { chart.remove(); } catch { /* already disposed */ }
-      if (chartRef.current === chart) chartRef.current = null;
+      if (chartRef.current === chart) { chartRef.current = null; seriesRefs.current = {}; }
+      // lightweight-charts throws "Object is disposed" when a paint queued by the
+      // last update or resize lands after the chart is gone: remove it after that frame.
+      requestAnimationFrame(() => { try { chart.remove(); } catch { /* already disposed */ } });
     };
   }, [theme, chartType, showMA, showRSI, showBB, showMACD, showVWAP, showStoch, showATR, showIchi, isDark, drawingTool]);
 
   useEffect(() => {
     let cleanup: (() => void) | undefined;
-    buildChart().then((fn) => { cleanup = fn; });
-    return () => { cleanup?.(); };
+    let gone = false;
+    // A build still awaiting its candles when the page is left must be torn down when it lands.
+    buildChart().then((fn) => { if (gone) fn?.(); else cleanup = fn; });
+    return () => { gone = true; cleanup?.(); };
   }, [buildChart]);
 
   useEffect(() => {
@@ -585,9 +587,11 @@ export default function Chart() {
     return () => {
       cancelled = true;
       if (retry) clearInterval(retry);
-      const series = seriesRefs.current.main;
-      for (const ref of overlayRefs.current) {
-        try { (series as { removePriceLine: (r: unknown) => void })?.removePriceLine(ref); } catch { /* gone */ }
+      // Once the chart is removed its lines went with it, and touching its series
+      // queues a repaint that throws "Object is disposed" on the next frame.
+      const series = chartRef.current ? seriesRefs.current.main : null;
+      for (const ref of series ? overlayRefs.current : []) {
+        try { (series as { removePriceLine: (r: unknown) => void }).removePriceLine(ref); } catch { /* gone */ }
       }
       overlayRefs.current = [];
     };

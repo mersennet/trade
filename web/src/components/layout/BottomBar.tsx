@@ -64,6 +64,7 @@ const MORE_LINKS = [
   { href: '/staking', label: 'Staking', tKey: 'nav.staking' },
   { href: '/leaderboard', label: 'Leaderboard', tKey: 'nav.leaderboard' },
   { href: '/points', label: 'Points', tKey: 'nav.points' },
+  { href: '/referrals', label: 'Referrals', tKey: 'nav.referrals' },
   { href: '/api', label: 'API', tKey: 'nav.api' },
   { href: '/feedback', label: 'Feedback' },
 ];

@@ -6,6 +6,7 @@ import { useWallet } from '@/hooks/useWallet';
 import { api, type PointsResponse, type PointsEntry } from '@/lib/api';
 import { formatPoints, shortenAddress, cn } from '@/lib/utils';
 import AddressAvatar from '@/components/AddressAvatar';
+import YouBadge, { isSameAddress } from '@/components/YouBadge';
 import NodeRunnerCard from '@/components/points/NodeRunnerCard';
 
 const TIERS = [
@@ -145,9 +146,9 @@ export default function PointsPage() {
             { action: 'Trading',     desc: '1 point per $1 traded — both sides of a fill, maker and taker',       mult: 'Live',   tone: 'text-primary', live: true  },
             { action: 'Node runner', desc: '500 points a day per operator wallet with a verified, online node (one node counts per operator)', mult: 'Live', tone: 'text-primary', live: true },
             { action: 'Vault LP',    desc: '0.1 point per MRSN per day deposited in the maker vault (1,000 MRSN for a day = 100 points), credited every few minutes. Deposits opened September 20, 2026 (block 1,605,600).', mult: 'Live', tone: 'text-primary', live: true },
-            { action: 'Referrals',   desc: '10% of referee trading points — share your code from the Referrals page; the referee confirms with one signature', mult: 'Live', tone: 'text-primary', live: true },
+            { action: 'Referrals',   desc: <>10% of referee trading points — share your code from the <Link href="/referrals" className="text-primary hover:underline">Referrals page</Link>; the referee confirms with one signature</>, mult: 'Live', tone: 'text-primary', live: true },
             { action: 'Weekly sprint', desc: 'Top 3 by volume each week (Monday 00:00 UTC): 3,000 / 2,000 / 1,000 bonus points', mult: 'Live', tone: 'text-primary', live: true },
-            { action: 'Bug bounty', desc: 'A security issue reported privately to security@mersennet.com: 50,000 / 20,000 / 5,000 / 1,000 bonus points by severity — rules in the docs (Points — Season 1)', mult: 'Live', tone: 'text-primary', live: true },
+            { action: 'Bug bounty', desc: <>A security issue reported privately to <a href="mailto:security@mersennet.com" className="text-primary hover:underline">security@mersennet.com</a>: 50,000 / 20,000 / 5,000 / 1,000 bonus points by severity — rules in the docs (Points — Season 1)</>, mult: 'Live', tone: 'text-primary', live: true },
           ].map((e) => (
             <div key={e.action} className="flex items-center justify-between px-4 py-3">
               <div>
@@ -179,7 +180,7 @@ export default function PointsPage() {
           </thead>
           <tbody>
             {leaderboard.length > 0 ? leaderboard.map((e) => (
-              <tr key={e.address} className="border-b border-border last:border-0 hover:bg-surface-2/40 transition-colors">
+              <tr key={e.address} className={cn('border-b border-border last:border-0 hover:bg-surface-2/40 transition-colors', isSameAddress(e.address, address) && 'bg-primary/[0.04]')}>
                 <td className="px-4 py-2.5">
                   <span className={cn(
                     'inline-flex items-center justify-center w-7 h-7 rounded-md font-mono font-bold text-[12px]',
@@ -192,6 +193,7 @@ export default function PointsPage() {
                   <div className="flex items-center gap-2.5">
                     <AddressAvatar address={e.address} size={22} />
                     <span className="text-foreground font-mono text-[12.5px]">{shortenAddress(e.address, 6)}</span>
+                    {isSameAddress(e.address, address) && <YouBadge />}
                   </div>
                 </td>
                 <td className="px-4 py-2.5 text-right text-foreground font-mono font-semibold tabular-nums">{formatPoints(e.totalPoints)}</td>

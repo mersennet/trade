@@ -11,10 +11,12 @@
 const RPC_URL = process.env.RPC_URL || 'https://rpc.mersennet.com';
 
 // Seeds must match the market maker's so the outlier filter anchors on the
-// same price regime (ARB in particular quotes around 100, not 1).
+// same price regime (ARB quotes around 100 until the mark switch relists it at
+// its real price, see relist.js).
 // `seed` and `tick` are HUMAN prices, converted to chain units with the
 // market's live priceScale (see scale.js).
 const { refreshScales, toChain, chainTick, scaleOf, quietForSwitch, quietReason } = require('./scale');
+const { followArbRelist } = require('./relist');
 const { refreshProtocol, ensureUnits } = require('./settlement');
 const MARKETS = {
   1:  { symbol: 'MRSN',  weight: 3.0, seed: 115,   tick: 0.05, sizeRange: [1, 10]  },
@@ -80,8 +82,20 @@ function toHex(v) { return '0x' + BigInt(Math.max(1, Math.round(v))).toString(16
 function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
 function randEl(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
+// A resting bid far above the seed band, or an ask far below it, is matched
+// first by any order on the other side, so a market with one is not traded:
+// on 6 Oct one sweep left MRSN/USD bids up to 1.65M (143x the seed) and every
+// sell printed there.
+function dislocated(id) {
+  const top = rawTop[id];
+  if (!top) return false;
+  const seed = toChain(MARKETS[id].seed, id);
+  return top.bid > seed * 3 || (top.ask > 0 && top.ask < seed * 0.3);
+}
+
 function pickMarket() {
-  const entries = Object.entries(MARKETS);
+  const entries = Object.entries(MARKETS).filter(([id]) => !dislocated(Number(id)));
+  if (entries.length === 0) return null;
   const totalW = entries.reduce((s, [, m]) => s + m.weight, 0);
   let r = Math.random() * totalW;
   for (const [id, m] of entries) {
@@ -125,6 +139,11 @@ refreshScales(rpcCall).catch(() => {});
 setInterval(() => refreshScales(rpcCall).catch(() => {}), 5_000);
 
 async function fetchMidPrices() {
+  // ~$190-$1,520 per order at ~$0.19, like SOL and MRSN.
+  if (followArbRelist(MARKETS, REF_SYMBOLS, { seed: 0.19, tick: 0.0001, sizeRange: [1_000, 8_000] })) {
+    console.log('[taker] ARB relisted: trading its real price on $0.0001 ticks');
+    refreshReferencePrices().catch(() => {});
+  }
   for (const [id, m] of Object.entries(MARKETS)) {
     try {
       const ob = await rpcCall('mersennet_orders_getOrderBook', [Number(id)]);
@@ -190,6 +209,7 @@ async function refreshInventory() {
 
 function generateTrade() {
   const marketId = pickMarket();
+  if (marketId === null) return null;
   const m = MARKETS[marketId];
   const taker = randEl(TAKERS);
   const mid = liveMid[marketId] || toChain(m.seed, marketId);
@@ -269,7 +289,7 @@ async function runWave() {
   }
   submitErrLogged = false;
   const waveSize = randInt(CONFIG.waveSizeMin, CONFIG.waveSizeMax);
-  const trades = Array.from({ length: waveSize }, () => generateTrade());
+  const trades = Array.from({ length: waveSize }, () => generateTrade()).filter(Boolean);
 
   const start = Date.now();
   const results = await Promise.allSettled(trades.map(t => submitTrade(t)));

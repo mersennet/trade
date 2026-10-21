@@ -295,6 +295,10 @@ function priceScaleSql(col = 'market_id') {
 async function ensurePriceScaleSchema() {
   await pool.query(`CREATE TABLE IF NOT EXISTS market_price_scales (
     market_id INT PRIMARY KEY, scale BIGINT NOT NULL DEFAULT 1, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+  // A relisted market's chart starts at its relist block: trades before it
+  // stay in the history but are kept out of candles.
+  await pool.query(`CREATE TABLE IF NOT EXISTS market_relists (
+    market_id INT PRIMARY KEY, height BIGINT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
   const r = await pool.query('SELECT market_id, scale FROM market_price_scales');
   for (const row of r.rows) PRICE_SCALES.set(Number(row.market_id), Number(row.scale));
 }
@@ -305,7 +309,12 @@ async function syncPriceScales() {
   // Rows written after the switch block already carry the new scale (the WS
   // feed keeps inserting while we run); only rows from before it are rescaled.
   let switchHeight = 0;
-  try { switchHeight = Number((await rpc('mersennet_orders_getProtocol', []))?.switches?.priceScaleHeight || 0); } catch { /* fall back to all rows */ }
+  let markHeight = 0;
+  try {
+    const sw = (await rpc('mersennet_orders_getProtocol', []))?.switches || {};
+    switchHeight = Number(sw.priceScaleHeight || 0);
+    markHeight = Number(sw.markPriceHeight || 0);
+  } catch { /* fall back to all rows */ }
   for (const m of live) {
     const id = Number(m.id);
     let chainScale = 1;
@@ -316,26 +325,44 @@ async function syncPriceScales() {
       console.error(`[scale] market ${id}: chain scale ${chainScale} not a multiple of stored ${stored}; refusing to migrate`);
       continue;
     }
+    // A market already rescaled once grows again only when the mark switch
+    // relists it (ARB): rows before that block are rescaled and its chart
+    // restarts there.
+    const relist = stored > 1;
+    const cut = relist ? markHeight : switchHeight;
+    if (relist && !(markHeight > 0)) {
+      console.error(`[scale] market ${id}: rescaled again but the mark switch height is unknown; refusing to migrate`);
+      continue;
+    }
     const k = chainScale / stored;
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
       // Serialize against concurrent inserts for this market while rows are rescaled.
       await client.query('LOCK TABLE trades, orders_history, candles IN SHARE ROW EXCLUSIVE MODE');
-      const t = switchHeight > 0
-        ? await client.query('UPDATE trades SET price = price * $2 WHERE market_id = $1 AND block_number < $3', [id, k, switchHeight])
+      const t = cut > 0
+        ? await client.query('UPDATE trades SET price = price * $2 WHERE market_id = $1 AND block_number < $3', [id, k, cut])
         : await client.query('UPDATE trades SET price = price * $2 WHERE market_id = $1', [id, k]);
-      const o = switchHeight > 0
-        ? await client.query('UPDATE orders_history SET price = price * $2 WHERE market_id = $1 AND block_number < $3', [id, k, switchHeight])
+      const o = cut > 0
+        ? await client.query('UPDATE orders_history SET price = price * $2 WHERE market_id = $1 AND block_number < $3', [id, k, cut])
         : await client.query('UPDATE orders_history SET price = price * $2 WHERE market_id = $1', [id, k]);
       // Candles: multiply everything; the last day is re-aggregated from
       // trades within a minute (authoritative), older buckets keep the factor.
-      const c = await client.query('UPDATE candles SET open = open * $2, high = high * $2, low = low * $2, close = close * $2 WHERE market_id = $1', [id, k]);
+      // A relisted market's candles are dropped instead (see aggregateCandles).
+      const c = relist
+        ? await client.query('DELETE FROM candles WHERE market_id = $1', [id])
+        : await client.query('UPDATE candles SET open = open * $2, high = high * $2, low = low * $2, close = close * $2 WHERE market_id = $1', [id, k]);
+      if (relist) {
+        await client.query(`INSERT INTO market_relists (market_id, height, updated_at) VALUES ($1, $2, NOW())
+          ON CONFLICT (market_id) DO UPDATE SET height = EXCLUDED.height, updated_at = NOW()`, [id, cut]);
+      }
       await client.query(`INSERT INTO market_price_scales (market_id, scale, updated_at) VALUES ($1, $2, NOW())
         ON CONFLICT (market_id) DO UPDATE SET scale = EXCLUDED.scale, updated_at = NOW()`, [id, chainScale]);
       await client.query('COMMIT');
       PRICE_SCALES.set(id, chainScale);
-      console.log(`[scale] market ${id}: ${stored} -> ${chainScale} (×${k}); rescaled ${t.rowCount} trades, ${o.rowCount} orders, ${c.rowCount} candles`);
+      console.log(`[scale] market ${id}: ${stored} -> ${chainScale} (×${k}); rescaled ${t.rowCount} trades, ${o.rowCount} orders; ${relist ? `relisted at ${cut}, dropped` : 'rescaled'} ${c.rowCount} candles`);
+      const oracle = relist && ORACLE_MARKETS.find((om) => om.id === id);
+      if (oracle) backfillMarket(oracle, 0).catch((e) => console.error(`[backfill] ${oracle.symbol} after relist:`, e.message));
     } catch (e) {
       await client.query('ROLLBACK').catch(() => {});
       console.error(`[scale] market ${id} migration failed:`, e.message);
@@ -572,6 +599,8 @@ async function aggregateCandles() {
           COUNT(*) as trade_count
         FROM trades
         WHERE block_timestamp IS NOT NULL AND block_timestamp > NOW() - interval '1 day'
+          AND NOT EXISTS (SELECT 1 FROM market_relists r
+                           WHERE r.market_id = trades.market_id AND trades.block_number < r.height)
         GROUP BY market_id, open_time
         ON CONFLICT (market_id, resolution, open_time)
         DO UPDATE SET
@@ -686,6 +715,13 @@ async function updateLeaderboard() {
 // double-count. A `points` history row is written only for the positive delta
 // since the last run, so the points page shows recent activity.
 const POINTS_PER_USD = 1; // 1 point per $1 of notional volume, credited to the taker and to the maker of each fill
+// Counted volume per wallet per UTC day is capped, and markets without a real
+// price count nothing: a flat market is a riskless place to trade with oneself
+// (21 Oct: 50 wallets made 4.5B points that way on ARB). Both apply to all
+// trades on every run, so a change of either rewrites the board.
+const POINTS_DAILY_CAP_USD = Number(process.env.POINTS_DAILY_CAP_USD || 100_000);
+const POINTS_ZERO_MARKETS = (process.env.POINTS_ZERO_MARKETS ?? '5')
+  .split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0);
 function pointsTier(total) {
   if (total >= 1_000_000) return 'Diamond';
   if (total >= 100_000) return 'Platinum';
@@ -696,53 +732,74 @@ function pointsTier(total) {
 async function awardPoints() {
   const season = 1;
   try {
-    // Bot wallets never hold trading points. Zero any that accrued before an
-    // address joined the exclusion list (node points, if the wallet also runs a
-    // verified node, are real and stay), and drop rows left with nothing.
+    // Bots and excluded wallets hold only node points (a verified node is real
+    // work). Zero the rest that accrued before an address joined the exclusion
+    // list: the referral and vault runs skip excluded wallets instead of
+    // recomputing them, so their old values would otherwise stay.
+    const excluded = `(LOWER(address) = ANY($1::text[]) OR LOWER(address) IN (SELECT address FROM excluded_addresses))`;
+    const kept = `COALESCE(node_points, 0)`;
     await pool.query(
       `UPDATE points_balance
           SET trading_points = 0,
-              total_points = COALESCE(node_points, 0) + COALESCE(lp_points, 0) + COALESCE(referral_points, 0) + COALESCE(bonus_points, 0),
+              bonus_points = 0,
+              referral_points = 0,
+              lp_points = 0,
+              total_points = ${kept},
               tier = CASE
-                WHEN COALESCE(node_points, 0) + COALESCE(lp_points, 0) + COALESCE(referral_points, 0) + COALESCE(bonus_points, 0) >= 1000000 THEN 'Diamond'
-                WHEN COALESCE(node_points, 0) + COALESCE(lp_points, 0) + COALESCE(referral_points, 0) + COALESCE(bonus_points, 0) >= 100000 THEN 'Platinum'
-                WHEN COALESCE(node_points, 0) + COALESCE(lp_points, 0) + COALESCE(referral_points, 0) + COALESCE(bonus_points, 0) >= 10000 THEN 'Gold'
-                WHEN COALESCE(node_points, 0) + COALESCE(lp_points, 0) + COALESCE(referral_points, 0) + COALESCE(bonus_points, 0) >= 1000 THEN 'Silver'
+                WHEN ${kept} >= 1000000 THEN 'Diamond'
+                WHEN ${kept} >= 100000 THEN 'Platinum'
+                WHEN ${kept} >= 10000 THEN 'Gold'
+                WHEN ${kept} >= 1000 THEN 'Silver'
                 ELSE 'Bronze' END,
               updated_at = NOW()
-        WHERE LOWER(address) = ANY($1::text[]) AND trading_points <> 0`,
+        WHERE ${excluded} AND (trading_points <> 0 OR COALESCE(bonus_points, 0) <> 0 OR COALESCE(referral_points, 0) <> 0 OR COALESCE(lp_points, 0) <> 0)`,
       [BOT_ADDRESSES]
-    ).catch((e) => console.error('[points] bot purge (balance):', e.message));
+    ).catch((e) => console.error('[points] exclusion purge (balance):', e.message));
     await pool.query(
-      `DELETE FROM points WHERE LOWER(address) = ANY($1::text[]) AND point_type = 'trading'`,
+      `DELETE FROM points WHERE ${excluded} AND point_type = 'trading'`,
       [BOT_ADDRESSES]
-    ).catch((e) => console.error('[points] bot purge (history):', e.message));
+    ).catch((e) => console.error('[points] exclusion purge (history):', e.message));
     await pool.query(
       `DELETE FROM points_balance WHERE LOWER(address) = ANY($1::text[]) AND total_points = 0`,
       [BOT_ADDRESSES]
     ).catch((e) => console.error('[points] bot purge (empty rows):', e.message));
     const vol = await pool.query(
-      `SELECT address, SUM(volume)::numeric AS volume
+      `SELECT address, SUM(LEAST(day_volume, $3::numeric))::numeric AS volume
        FROM (
-         SELECT LOWER(taker) AS address, price * size / ${priceScaleSql('market_id')} AS volume
-           FROM trades WHERE taker IS NOT NULL AND block_timestamp IS NOT NULL
-         UNION ALL
-         SELECT LOWER(maker) AS address, price * size / ${priceScaleSql('market_id')} AS volume
-           FROM trades WHERE maker IS NOT NULL AND block_timestamp IS NOT NULL
-       ) sides
-       -- Exclude legacy zero-prefixed accounts AND configured bot wallets
-       -- so points reflect real traders only, matching the leaderboard.
-       WHERE address NOT LIKE '0x00000000000000000000000000000000000000%'
-         AND address <> ALL($1::text[])
+         SELECT address, block_timestamp::date AS day, SUM(volume) AS day_volume
+         FROM (
+           SELECT LOWER(taker) AS address, block_timestamp, price * size / ${priceScaleSql('market_id')} AS volume
+             FROM trades WHERE taker IS NOT NULL AND block_timestamp IS NOT NULL AND market_id <> ALL($2::int[])
+           UNION ALL
+           SELECT LOWER(maker) AS address, block_timestamp, price * size / ${priceScaleSql('market_id')} AS volume
+             FROM trades WHERE maker IS NOT NULL AND block_timestamp IS NOT NULL AND market_id <> ALL($2::int[])
+         ) sides
+         -- Exclude legacy zero-prefixed accounts, configured bot wallets and
+         -- every address in excluded_addresses (bots, forfeited accounts), so
+         -- points reflect real traders only, matching the leaderboard.
+         WHERE address NOT LIKE '0x00000000000000000000000000000000000000%'
+           AND address <> ALL($1::text[])
+           AND address NOT IN (SELECT address FROM excluded_addresses)
+         GROUP BY address, block_timestamp::date
+       ) days
        GROUP BY address`,
-      [BOT_ADDRESSES]
+      [BOT_ADDRESSES, POINTS_ZERO_MARKETS, POINTS_DAILY_CAP_USD]
     );
+    // A wallet whose counted volume is now nothing (only zero-point markets)
+    // drops out of the query above: reset its trading points here.
+    await pool.query(
+      `UPDATE points_balance
+          SET trading_points = 0,
+              total_points = COALESCE(node_points, 0) + COALESCE(lp_points, 0) + COALESCE(referral_points, 0) + COALESCE(bonus_points, 0),
+              updated_at = NOW()
+        WHERE season = $2 AND trading_points <> 0 AND LOWER(address) <> ALL($1::text[])`,
+      [vol.rows.map((r) => r.address), season]
+    ).catch((e) => console.error('[points] reset uncounted:', e.message));
     let updated = 0;
     for (const row of vol.rows) {
       const address = row.address;
       const volumeUsd = Number(row.volume) || 0;
       const trading = Math.floor((volumeUsd * POINTS_PER_USD) / TRADE_USD_SCALE);
-      if (trading <= 0) continue;
 
       const existing = await pool.query(
         `SELECT trading_points, lp_points, referral_points, COALESCE(node_points, 0) AS node_points, COALESCE(bonus_points, 0) AS bonus_points FROM points_balance
@@ -755,7 +812,9 @@ async function awardPoints() {
       ));
       const prev = existing.rows[0] || {};
       const prevTrading = Number(prev.trading_points) || 0;
-      if (trading <= prevTrading) continue; // no new volume since last run
+      // Equal: no new counted volume. Lower: a rule change (cap, zero-point
+      // market) counts less of the past, and the balance follows it down.
+      if (trading === prevTrading) continue;
 
       const lp = Number(prev.lp_points) || 0;
       const ref = Number(prev.referral_points) || 0;
@@ -774,11 +833,13 @@ async function awardPoints() {
            updated_at = NOW()`,
         [address, season, total, trading, lp, ref, pointsTier(total)]
       );
-      await pool.query(
-        `INSERT INTO points (address, season, point_type, amount, reason)
-         VALUES ($1, $2, 'trading', $3, 'Trading volume')`,
-        [address, season, trading - prevTrading]
-      );
+      if (trading > prevTrading) {
+        await pool.query(
+          `INSERT INTO points (address, season, point_type, amount, reason)
+           VALUES ($1, $2, 'trading', $3, 'Trading volume')`,
+          [address, season, trading - prevTrading]
+        );
+      }
       updated++;
     }
     if (updated > 0) console.log(`[points] awarded trading points to ${updated} trader(s)`);
@@ -836,6 +897,7 @@ async function awardReferralPoints(season) {
          FROM referrals r
          LEFT JOIN points_balance pb ON LOWER(pb.address) = LOWER(r.referee) AND pb.season = $1
         WHERE LOWER(r.referrer) <> LOWER(r.referee)
+          AND LOWER(r.referrer) NOT IN (SELECT address FROM excluded_addresses)
         GROUP BY LOWER(r.referrer)`,
       [season]
     );
@@ -889,17 +951,18 @@ async function awardWeeklySprint(season) {
       `SELECT address, SUM(volume)::numeric AS volume
          FROM (
            SELECT LOWER(taker) AS address, price * size / ${priceScaleSql('market_id')} AS volume
-             FROM trades WHERE taker IS NOT NULL AND block_timestamp >= $1 AND block_timestamp < $2
+             FROM trades WHERE taker IS NOT NULL AND block_timestamp >= $1 AND block_timestamp < $2 AND market_id <> ALL($4::int[])
            UNION ALL
            SELECT LOWER(maker) AS address, price * size / ${priceScaleSql('market_id')} AS volume
-             FROM trades WHERE maker IS NOT NULL AND block_timestamp >= $1 AND block_timestamp < $2
+             FROM trades WHERE maker IS NOT NULL AND block_timestamp >= $1 AND block_timestamp < $2 AND market_id <> ALL($4::int[])
          ) sides
         WHERE address NOT LIKE '0x00000000000000000000000000000000000000%'
           AND address <> ALL($3::text[])
+          AND address NOT IN (SELECT address FROM excluded_addresses)
         GROUP BY address
         ORDER BY volume DESC
         LIMIT 3`,
-      [weekStart.toISOString(), weekEnd.toISOString(), BOT_ADDRESSES]
+      [weekStart.toISOString(), weekEnd.toISOString(), BOT_ADDRESSES, POINTS_ZERO_MARKETS]
     );
     if (top.rowCount === 0) {
       // Nobody traded that week: record a marker row so we do not re-query forever.

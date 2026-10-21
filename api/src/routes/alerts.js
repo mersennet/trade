@@ -30,7 +30,7 @@ router.post('/link', strictLimiter, async (req, res) => {
   try {
     const { address, kind = 'operator', signature } = req.body || {};
     if (!ETH_ADDR_RE.test(String(address || ''))) return res.status(400).json({ error: 'Invalid address' });
-    if (!alerts.KINDS.has(kind)) return res.status(400).json({ error: 'kind must be operator or trader' });
+    if (!alerts.KINDS.has(kind)) return res.status(400).json({ error: 'kind must be operator, trader or delegator' });
     if (typeof signature !== 'string' || !alerts.verifyLinkSignature(address, kind, signature)) {
       return res.status(401).json({ error: 'Signature does not match the address (or is older than 10 minutes)' });
     }
@@ -39,14 +39,18 @@ router.post('/link', strictLimiter, async (req, res) => {
   } catch (e) { sendError(res, e, 'alerts'); }
 });
 
-/** POST /alerts/unlink { address, signature } — same proof; removes every chat for the address. */
+/**
+ * POST /alerts/unlink { address, signature, kind? } — same proof; removes the
+ * address's links of `kind`, or every link when no kind is given.
+ */
 router.post('/unlink', strictLimiter, async (req, res) => {
   try {
-    const { address, signature } = req.body || {};
+    const { address, signature, kind } = req.body || {};
     if (!ETH_ADDR_RE.test(String(address || ''))) return res.status(400).json({ error: 'Invalid address' });
-    const ok = ['operator', 'trader'].some((k) => typeof signature === 'string' && alerts.verifyLinkSignature(address, k, signature));
+    if (kind !== undefined && !alerts.KINDS.has(kind)) return res.status(400).json({ error: 'kind must be operator, trader or delegator' });
+    const ok = [...alerts.KINDS].some((k) => typeof signature === 'string' && alerts.verifyLinkSignature(address, k, signature));
     if (!ok) return res.status(401).json({ error: 'Signature does not match the address (or is older than 10 minutes)' });
-    await alerts.unlinkAddress(address);
+    await alerts.unlinkAddress(address, kind);
     res.json({ unlinked: true });
   } catch (e) { sendError(res, e, 'alerts'); }
 });

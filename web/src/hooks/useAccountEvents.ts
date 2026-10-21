@@ -12,13 +12,16 @@ import { useWallet } from '@/hooks/useWallet';
  *    per position until it moves back out of the band,
  *  - a position closing → "Position closed".
  *
- * The first snapshot after connecting is a baseline, not an event.
+ * The first snapshot fetched for the connected wallet is a baseline, not an
+ * event: the store starts empty and still holds the previous wallet's
+ * positions right after a switch, and neither is a fill.
  */
 const LIQ_WARN_BAND = 0.05;
 
 export function useAccountEvents() {
   const { address } = useWallet();
   const positions = useStore((s) => s.positions);
+  const positionsOwner = useStore((s) => s.positionsOwner);
   const prev = useRef<Map<number, { size: number; symbol: string }> | null>(null);
   const warned = useRef<Set<number>>(new Set());
   const forAddress = useRef<string | null>(null);
@@ -36,6 +39,7 @@ export function useAccountEvents() {
       prev.current = null;
       warned.current.clear();
     }
+    if (positionsOwner !== address.toLowerCase()) return;
     const now = new Map<number, { size: number; symbol: string }>();
     for (const p of positions) now.set(p.marketId, { size: Number(p.size) || 0, symbol: p.symbol });
 
@@ -76,5 +80,5 @@ export function useAccountEvents() {
         warned.current.delete(p.marketId);
       }
     }
-  }, [address, positions]);
+  }, [address, positions, positionsOwner]);
 }

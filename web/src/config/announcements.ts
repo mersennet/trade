@@ -26,10 +26,37 @@ export interface Announcement {
 // never rotates (motion on a trading screen costs attention). Newest first.
 export const ANNOUNCEMENTS: Announcement[] = [
   {
+    // The day after test USDC stops counting as margin (block 2,670,700).
+    id: 'usdc-margin-off-live-2026-10-16',
+    text: 'Test USDC no longer counts as margin on the order book (since block 2,670,700). USDC you deposited can be withdrawn any time from the Withdraw panel.',
+    showWhen: (p) => !!p && p.height >= 2670700 && p.height < 2670700 + 43_200,
+  },
+  {
+    // Until the switch.
+    id: 'usdc-margin-off-2026-10-16',
+    lead: 'Test USDC:',
+    text: 'from block 2,670,700 (about 11:10 UTC on Fri 16 Oct) it no longer counts as margin and new USDC deposits are refused. If your positions rely on USDC, deposit MRSN or reduce them before then; USDC you deposited can be withdrawn any time.',
+    link: { href: 'https://faucet.mersennet.com', label: 'Get MRSN' },
+    showWhen: (p) => !!p && p.height < 2670700,
+  },
+  {
+    // The day after the MRSN/USD repair (block 2,324,700).
+    id: 'mrsn-repaired-2026-10-08',
+    text: 'MRSN/USD is repaired: orders at the broken prices were cancelled and positions opened at them were reset to $115. Trading is back to normal.',
+    showWhen: (p) => !!p && p.height >= 2324700 && p.height < 2324700 + 43_200,
+  },
+  {
+    // From the 6 Oct sweep until the repair.
+    id: 'mrsn-repair-2026-10-08',
+    lead: 'MRSN/USD:',
+    text: 'the market has been stuck around $16,500 since one order swept its book on 6 Oct, so accounts holding MRSN/USD can\'t place orders or withdraw. The network repairs it on {eta:2324700}: orders at the broken prices are cancelled and positions opened at them are reset to $115. No positions were liquidated; Maker Vault deposits are paused until then.',
+    showWhen: (p) => !!p && p.height < 2324700,
+  },
+  {
     // After the 3 Oct switch.
     id: 'validators-50-live-2026-10-03',
-    text: 'The validator set now has 50 slots: register a node with 1,000 MRSN self-stake and it produces blocks from the next hourly epoch. Node runners earn 500 points a day.',
-    link: { href: '/staking', label: 'Become a validator' },
+    text: 'Validator set limit: 50 slots | register a node with 1,000 MRSN self-stake and it produces blocks from the next hourly epoch. Node operators earn 500 points a day.',
+    link: { href: 'https://docs.mersennet.com/validators/run-a-node/', label: 'Become a validator' },
     showWhen: (p) => !!p && p.height >= 2127600,
   },
   {
@@ -83,8 +110,8 @@ export const ANNOUNCEMENTS: Announcement[] = [
   },
   {
     id: 'validators-open-2026-09',
-    text: 'The validator set is open — run a node in one command, bond 1,000 MRSN and produce blocks from the next epoch. Node runners earn 500 points a day.',
-    link: { href: '/staking', label: 'Become a validator' },
+    text: 'The validator set is open — run a node in one command, bond 1,000 MRSN and produce blocks from the next epoch. Node operators earn 500 points a day.',
+    link: { href: 'https://docs.mersennet.com/validators/run-a-node/', label: 'Become a validator' },
   },
   {
     id: 'staking-live-2026-08',

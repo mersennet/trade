@@ -2,7 +2,7 @@
 import { useEffect, useRef } from 'react';
 
 /** Compact equity/PnL line chart (lightweight-charts), green when the final
- * value is up, red when down. Shared by Analytics and Portfolio. */
+ * value is up, red when down. Shared by Analytics, Portfolio and trader pages. */
 export default function EquityCurve({ data, height = 180 }: { data: { time: number; value: number }[]; height?: number }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<unknown>(null);
@@ -69,8 +69,11 @@ export default function EquityCurve({ data, height = 180 }: { data: { time: numb
     return () => {
       disposed = true;
       ro?.disconnect();
-      try { chart?.remove(); } catch { /* already disposed */ }
       if (chartRef.current === chart) chartRef.current = null;
+      // A paint queued by the last update runs on the next frame and throws
+      // "Object is disposed" if the chart is already gone: remove it after that frame.
+      const c = chart;
+      requestAnimationFrame(() => { try { c?.remove(); } catch { /* already disposed */ } });
     };
   }, [data, height]);
 
@@ -82,5 +85,7 @@ export default function EquityCurve({ data, height = 180 }: { data: { time: numb
     );
   }
 
-  return <div ref={containerRef} className="w-full" />;
+  // The chart's height is held from the first paint: the canvas arrives after a
+  // dynamic import and would otherwise push what is below it down.
+  return <div ref={containerRef} className="w-full" style={{ height }} />;
 }

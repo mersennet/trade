@@ -9,7 +9,8 @@
  *
  * Engine (primary only, every 60 s):
  *   operators  benched · missed slots with none proposed · jailed · status
- *              change · node behind the head · node silent · outdated build
+ *              change · node behind the head · node silent · outdated build ·
+ *              upgrade landed, or went wrong (other build, behind, silent)
  *              (+ 24 h / 6 h / 1 h before every protocol switch)
  *   traders    equity within 1.6× of maintenance margin, or below it (the
  *              keeper liquidates) — only once settlement is active
@@ -36,8 +37,16 @@ async function initTables() {
     kind TEXT NOT NULL DEFAULT 'operator',
     username TEXT,
     linked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (chat_id, address)
+    PRIMARY KEY (chat_id, address, kind)
   )`);
+  // One chat may follow one wallet as operator and as delegator: links made
+  // before 20 Oct are keyed by (chat_id, address) only.
+  const pk = await pool.query(
+    `SELECT a.attname FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+      WHERE i.indrelid = 'alert_links'::regclass AND i.indisprimary`);
+  if (!pk.rows.some((r) => r.attname === 'kind')) {
+    await pool.query('ALTER TABLE alert_links DROP CONSTRAINT alert_links_pkey, ADD PRIMARY KEY (chat_id, address, kind)');
+  }
   await pool.query(`CREATE TABLE IF NOT EXISTS alert_link_codes (
     code TEXT PRIMARY KEY,
     address TEXT NOT NULL,
@@ -81,7 +90,7 @@ async function botName() {
 }
 
 // ─── linking ───────────────────────────────────────────────────────────────
-const KINDS = new Set(['operator', 'trader']);
+const KINDS = new Set(['operator', 'trader', 'delegator']);
 function linkMessage(address, kind, minute) {
   return `Mersennet alerts · link Telegram to ${address.toLowerCase()} · ${kind} · ${minute}`;
 }
@@ -108,8 +117,10 @@ async function linksFor(address) {
   const r = await pool.query('SELECT chat_id, kind, username, linked_at FROM alert_links WHERE address = $1 ORDER BY linked_at', [address.toLowerCase()]);
   return r.rows;
 }
-async function unlinkAddress(address) {
-  await pool.query('DELETE FROM alert_links WHERE address = $1', [address.toLowerCase()]);
+/** Remove the address's links, of one kind when given. */
+async function unlinkAddress(address, kind) {
+  if (kind) await pool.query('DELETE FROM alert_links WHERE address = $1 AND kind = $2', [address.toLowerCase(), kind]);
+  else await pool.query('DELETE FROM alert_links WHERE address = $1', [address.toLowerCase()]);
 }
 
 // ─── bot poller (/start <code>, /status, /stop) ────────────────────────────
@@ -138,11 +149,14 @@ async function pollOnce() {
         const { address, kind } = r.rows[0];
         await pool.query(
           `INSERT INTO alert_links (chat_id, address, kind, username) VALUES ($1, $2, $3, $4)
-           ON CONFLICT (chat_id, address) DO UPDATE SET kind = EXCLUDED.kind, username = EXCLUDED.username, linked_at = NOW()`,
+           ON CONFLICT (chat_id, address, kind) DO UPDATE SET username = EXCLUDED.username, linked_at = NOW()`,
           [chatId, address, kind, username]);
-        await send(chatId, `Linked to <code>${short(address)}</code> (${kind}). You will hear from me when ${kind === 'operator'
-          ? 'your validator misses slots, is benched or jailed, falls behind the chain, goes silent, runs an outdated build, or a protocol switch is 24 h / 6 h / 1 h away'
-          : 'a position gets within reach of liquidation (equity under 1.6× maintenance margin) or is liquidatable'}.\n\n/status — where things stand now\n/stop — unlink everything`);
+        const when = {
+          operator: 'your validator misses slots, is benched or jailed, falls behind the chain, goes silent, runs an outdated build, finishes an upgrade (or the upgrade goes wrong), or a protocol switch is 24 h / 6 h / 1 h away',
+          trader: 'a position gets within reach of liquidation (equity under 1.6× maintenance margin) or is liquidatable',
+          delegator: 'a validator you delegate to is benched or jailed, goes standby or exits, becomes active again or changes its commission, and when MRSN you undelegated can be withdrawn',
+        }[kind];
+        await send(chatId, `Linked to <code>${short(address)}</code> (${kind}). You will hear from me when ${when}.\n\n/status — where things stand now\n/stop — unlink everything`);
         await send(chatId, await statusText(chatId));
       } else if (cmd === '/status') {
         await send(chatId, await statusText(chatId));
@@ -199,13 +213,16 @@ async function verifiedNodesOf(addresses) {
 }
 
 // ─── dedup ─────────────────────────────────────────────────────────────────
-/** Send `text` to every chat linked to `address` unless (address,key) fired within ttlMs. */
-async function fireOnce(address, key, ttlMs, text, value) {
+/**
+ * Send `text` to every chat that links `address` as one of `kinds` unless
+ * (address,key) fired within ttlMs. Delegator alerts reach delegator links only.
+ */
+async function fireOnce(address, key, ttlMs, text, value, kinds = ['operator', 'trader']) {
   const r = await pool.query('SELECT fired_at, value FROM alert_state WHERE address = $1 AND key = $2', [address, key]);
   const prev = r.rows[0];
   if (prev && value !== undefined && prev.value === String(value) && Date.now() - new Date(prev.fired_at).getTime() < ttlMs) return false;
   if (prev && value === undefined && Date.now() - new Date(prev.fired_at).getTime() < ttlMs) return false;
-  const chats = await pool.query('SELECT chat_id FROM alert_links WHERE address = $1', [address]);
+  const chats = await pool.query('SELECT DISTINCT chat_id FROM alert_links WHERE address = $1 AND kind = ANY($2)', [address, kinds]);
   let sent = false;
   for (const c of chats.rows) sent = (await send(c.chat_id, text)) || sent;
   await pool.query(
@@ -253,19 +270,26 @@ async function operatorTick(address, snap, verified) {
     // live node facts: build registry (whoami) and the verified_nodes recheck
     const b = knownBuildOf ? knownBuildOf(v.identity) : null;
     const vn = verified.find((n) => n.identity.toLowerCase() === id);
-    if (b && head && b.height && head - b.height > 300) {
-      await fireOnce(address, `behind:${id}`, 6 * HOUR, `⚠️ Node ${tag} is <b>${fmt(head - b.height)} blocks behind</b> the chain (node ${fmt(b.height)}, head ${fmt(head)}); it cannot propose while it catches up. If it does not recover within a few minutes, re-run the installer with <code>--reset-state</code>.`);
+    // whoami reported b.height at b.seenAt and the registry re-asks every 5 minutes:
+    // compare with where the chain was then, and only while the answer is recent
+    // (a node that stopped answering is silent, not behind).
+    const fresh = !!(b && b.seenAt && Date.now() - b.seenAt < 12 * 60_000);
+    const lag = fresh && b.height != null && head ? Math.max(0, head - Math.floor((Date.now() - b.seenAt) / BLOCK_MS) - b.height) : null;
+    const build = (b && b.build) || (vn && vn.version ? String(vn.version).split('-').pop() : null);
+    if (latest && build && build !== latest) {
+      await fireOnce(address, `outdated:${id}:${latest}`, 7 * 24 * HOUR, `🔧 Node ${tag} runs build <code>${build}</code>; the current release is <code>${latest}</code>. Upgrade keeps keys and data:\n<code>curl -fsSL https://mersennet.com/downloads/install.sh | sudo bash -s -- --operator ${address}</code>`);
+    }
+    // Right after an upgrade the watch reports on the node instead, allowing for the catch-up minute.
+    const watching = await upgradeWatch(address, { id, tag, b, fresh, lag, latest });
+    if (!watching && lag != null && lag > 300) {
+      await fireOnce(address, `behind:${id}`, 6 * HOUR, `⚠️ Node ${tag} is <b>${fmt(lag)} blocks behind</b> the chain (node at ${fmt(b.height)}); it cannot propose while it catches up. If it does not recover within a few minutes, re-run the installer with <code>--reset-state</code>.`);
       await setState(address, `wasbehind:${id}`, '1');
-    } else if (b && head && (await stateValue(address, `wasbehind:${id}`)) === '1') {
+    } else if (lag != null && lag <= 20 && (await stateValue(address, `wasbehind:${id}`)) === '1') {
       await setState(address, `wasbehind:${id}`, '0');
       await fireOnce(address, `insync:${id}:${Math.floor(Date.now() / HOUR)}`, HOUR, `✅ Node ${tag} is back in sync (height ${fmt(b.height)}).`);
     }
     if (vn && vn.last_seen_at && Date.now() - new Date(vn.last_seen_at).getTime() > 45 * 60_000 && v.status === 'active') {
       await fireOnce(address, `silent:${id}`, 6 * HOUR, `⚠️ Node ${tag} has not answered the network's probe for ${fmt((Date.now() - new Date(vn.last_seen_at).getTime()) / 60_000)} minutes. Is the server up and port 8545 open to the app host?`);
-    }
-    const build = (b && b.build) || (vn && vn.version ? String(vn.version).split('-').pop() : null);
-    if (latest && build && build !== latest) {
-      await fireOnce(address, `outdated:${id}:${latest}`, 7 * 24 * HOUR, `🔧 Node ${tag} runs build <code>${build}</code>; the current release is <code>${latest}</code>. Upgrade keeps keys and data:\n<code>curl -fsSL https://mersennet.com/downloads/install.sh | sudo bash -s -- --operator ${address}</code>`);
     }
     // protocol switches: 24 h, 6 h, 1 h before each height
     for (const sw of switches) {
@@ -278,6 +302,49 @@ async function operatorTick(address, snap, verified) {
       }
     }
   }
+}
+
+// ─── upgrades ──────────────────────────────────────────────────────────────
+const BLOCK_MS = 2022;
+const UPGRADE_WATCH_MS = 45 * 60_000;
+/**
+ * Confirms an upgrade once the node answers whoami on the current release, and
+ * reports the ways one goes wrong: a build that is not the current release, a
+ * node that stays behind, one that stops answering. Only the whoami registry
+ * counts here: verified_nodes' version can lag by 30 minutes and would read as
+ * a build change back and forth. True while an upgrade is being watched.
+ */
+async function upgradeWatch(address, { id, tag, b, fresh, lag, latest }) {
+  if (!b || !b.build || !b.seenAt) return false;
+  const now = Date.now();
+  const prev = await stateValue(address, `build:${id}`);
+  if (fresh && prev !== b.build) {
+    await setState(address, `build:${id}`, b.build);
+    if (prev && latest && b.build === latest) {
+      await setState(address, `upgrade:${id}`, JSON.stringify({ build: b.build, at: now }));
+      await setState(address, `wasbehind:${id}`, '0'); // the confirmation below says where it stands
+      const height = lag == null ? '' : `Block height ${fmt(b.height)} — ${lag <= 20 ? 'in sync' : `catching up, ${fmt(lag)} blocks behind`}\n`;
+      await fireOnce(address, `upgraded:${id}:${b.build}`, 30 * 24 * HOUR,
+        `✅ <b>Node ${tag} upgraded</b> and running as a systemd service.\nBinary <code>${b.build}</code> — up to date (was <code>${prev}</code>)\n${height}Keys, state and operator were kept; nothing else to do. If it falls behind or stops answering in the next 45 minutes, I will tell you here.`);
+    } else if (prev && latest && b.build !== latest) {
+      await fireOnce(address, `upgrade-other:${id}:${b.build}`, 7 * 24 * HOUR,
+        `⚠️ Node ${tag} changed build from <code>${prev}</code> to <code>${b.build}</code>, but the current release is <code>${latest}</code>. Re-run the installer to get it (keeps keys and data):\n<code>curl -fsSL https://mersennet.com/downloads/install.sh | sudo bash -s -- --operator ${address}</code>`);
+    }
+  }
+  let up = null;
+  try { up = JSON.parse((await stateValue(address, `upgrade:${id}`)) || 'null'); } catch { /* none recorded */ }
+  if (!up || up.build !== b.build) return false;
+  const since = now - up.at;
+  if (since >= UPGRADE_WATCH_MS) return false;
+  if (lag != null && lag > 60 && since >= 5 * 60_000) {
+    await setState(address, `wasbehind:${id}`, '1'); // the "back in sync" message follows
+    await fireOnce(address, `upgrade-behind:${id}:${b.build}`, 7 * 24 * HOUR,
+      `⚠️ <b>Node ${tag} upgraded but is not keeping up</b>: ${fmt(lag)} blocks behind the chain ${Math.round(since / 60_000)} minutes after the upgrade (it should be in sync within a minute). On the server:\n<code>mersennet-check</code>\n<code>journalctl -u mersennet -n 50 --no-pager</code>\nIf the log shows <code>RESTORED STATE ROOT MISMATCH</code> or <code>FORK DETECTED</code>, reset the state (keeps keys and operator):\n<code>curl -fsSL https://mersennet.com/downloads/install.sh | sudo bash -s -- --reset-state --operator ${address}</code>`);
+  } else if (!fresh) {
+    await fireOnce(address, `upgrade-silent:${id}:${b.build}`, 7 * 24 * HOUR,
+      `⚠️ <b>Node ${tag} stopped answering</b> after its upgrade: no reply for ${Math.round((now - b.seenAt) / 60_000)} minutes. On the server:\n<code>systemctl status mersennet</code>\n<code>journalctl -u mersennet -n 50 --no-pager</code>\nIf the service keeps restarting, send those log lines in https://discord.gg/aJSQ63PUes (#run-a-node) or https://t.me/Mersennet.`);
+  }
+  return true;
 }
 
 // ─── trader rules ──────────────────────────────────────────────────────────
@@ -310,6 +377,88 @@ async function traderTick(address, snap) {
   }
 }
 
+// ─── delegator rules ───────────────────────────────────────────────────────
+const STAKING_PRECOMPILE = '0x0000000000000000000000000000000000000400';
+const stakingIface = new ethers.Interface([
+  'function getDelegation(address delegator, address validator) view returns (uint256 amount, uint256 pending)',
+  'function getUnbonding(address delegator) view returns (uint256 total, uint256 withdrawable, uint256 nextUnlock)',
+]);
+async function stakingView(fn, args) {
+  const ret = await chain.rpcCall('eth_call', [{ to: STAKING_PRECOMPILE, data: stakingIface.encodeFunctionData(fn, args) }, 'latest']);
+  return stakingIface.decodeFunctionResult(fn, ret);
+}
+/**
+ * What `address` has delegated: [{ v, amount, pending }] (wei) per validator of
+ * the set, plus its unbonding. The precompile has no per-delegator list, so
+ * every registered validator is asked; null when any read fails (no verdict).
+ */
+async function delegationsOf(address, vset) {
+  try {
+    const rows = await Promise.all(vset.validators.map(async (v) => {
+      const [amount, pending] = await stakingView('getDelegation', [address, v.identity]);
+      return { v, amount, pending };
+    }));
+    const [total, withdrawable, nextUnlock] = await stakingView('getUnbonding', [address]);
+    return { delegations: rows.filter((r) => r.amount > 0n), unbonding: { total, withdrawable, nextUnlock: Number(nextUnlock) } };
+  } catch {
+    return null;
+  }
+}
+const pct = (bps) => `${fmt(Number(bps) / 100, 2)}%`;
+
+async function delegatorTick(address, snap) {
+  const { vset } = snap;
+  if (!vset || !Array.isArray(vset.validators)) return;
+  const d = await delegationsOf(address, vset);
+  if (!d) return;
+  const epoch = vset.epoch;
+  const stakingUrl = 'https://trade.mersennet.com/staking';
+  const fire = (key, ttl, text, value) => fireOnce(address, key, ttl, text, value, ['delegator']);
+  for (const { v, amount } of d.delegations) {
+    const id = v.identity.toLowerCase();
+    const tag = `<code>${short(v.identity)}</code>`;
+    const yours = `${fmt(mrsn(amount), 2)} MRSN`;
+    const lastStatus = await stateValue(address, `dlg-status:${id}`);
+    if (lastStatus !== null && lastStatus !== v.status && v.status !== 'jailed') {
+      const what = {
+        active: `✅ Validator ${tag} is <b>active</b> again and earning; so is your delegation of ${yours}.`,
+        standby: `⚠️ Validator ${tag} is now <b>standby</b>: it ranks below the active set by stake, so it earns no block rewards and neither does your delegation of ${yours}. More stake at the next epoch boundary puts it back; to keep earning now, move your delegation to an active validator: ${stakingUrl}`,
+        exiting: `⚠️ Validator ${tag} is <b>exiting</b> the set at the next epoch boundary. Move your delegation of ${yours} to an active validator to keep earning: ${stakingUrl}`,
+      }[v.status] || `Validator ${tag} is now <b>${v.status}</b> (was ${lastStatus}); your delegation: ${yours}. ${stakingUrl}`;
+      await fire(`dlg-statuschange:${id}:${v.status}:${epoch}`, 6 * HOUR, what);
+    }
+    await setState(address, `dlg-status:${id}`, v.status);
+    if (v.status === 'jailed') {
+      await fire(`dlg-jailed:${id}:${v.jailedUntilEpoch}`, 7 * 24 * HOUR, `⛔ Validator ${tag}, where you delegate ${yours}, is <b>jailed</b> until epoch ${v.jailedUntilEpoch} (current ${epoch}): it earns no rewards until then, and neither does your delegation. It rejoins by itself; to keep earning now, undelegate (about 4 h of unbonding) and delegate to an active validator: ${stakingUrl}`);
+    } else if (v.benched) {
+      await fire(`dlg-benched:${id}:${epoch}`, 24 * HOUR, `⚠️ Validator ${tag}, where you delegate ${yours}, is <b>benched</b> for the rest of epoch ${epoch}: it missed 3 leader slots. If it misses more than 20% of its slots it is jailed next epoch and stops earning.`);
+    }
+    const lastCommission = await stateValue(address, `dlg-commission:${id}`);
+    if (lastCommission !== null && Number(lastCommission) !== Number(v.commissionBps)) {
+      await fire(`dlg-commission:${id}:${v.commissionBps}`, 7 * 24 * HOUR, `Validator ${tag} changed its commission from ${pct(lastCommission)} to <b>${pct(v.commissionBps)}</b> of your rewards (delegation ${yours}).`);
+    }
+    await setState(address, `dlg-commission:${id}`, v.commissionBps);
+  }
+  if (d.unbonding.withdrawable > 0n) {
+    await fire('dlg-withdrawable', 7 * 24 * HOUR, `✅ <b>${fmt(mrsn(d.unbonding.withdrawable), 2)} MRSN</b> finished unbonding and can be withdrawn: ${stakingUrl} → Withdraw.`, d.unbonding.withdrawable.toString());
+  }
+}
+
+async function delegatorStatusLines(address, snap) {
+  const d = snap.vset && Array.isArray(snap.vset.validators) ? await delegationsOf(address, snap.vset) : null;
+  if (!d) return [`Delegator <code>${short(address)}</code> — delegations unavailable right now.`];
+  if (!d.delegations.length && d.unbonding.total === 0n) return [`Delegator <code>${short(address)}</code> — no delegations yet: https://trade.mersennet.com/staking`];
+  const out = [`Delegator <code>${short(address)}</code>:`];
+  for (const { v, amount, pending } of d.delegations) {
+    out.push(`· ${fmt(mrsn(amount), 2)} MRSN with <code>${short(v.identity)}</code> — <b>${v.status}</b>${v.benched ? ' (benched)' : ''} · commission ${pct(v.commissionBps)} · rewards to claim ${fmt(mrsn(pending), 4)} MRSN`);
+  }
+  if (d.unbonding.total > 0n) {
+    const left = d.unbonding.nextUnlock && snap.head ? Math.max(0, d.unbonding.nextUnlock - snap.head) : 0;
+    out.push(`· unbonding ${fmt(mrsn(d.unbonding.total), 2)} MRSN, withdrawable now ${fmt(mrsn(d.unbonding.withdrawable), 2)}${left ? ` · next unlock in ~${fmt(left * BLOCK_MS / 3_600_000, 1)} h` : ''}`);
+  }
+  return out;
+}
+
 // ─── /status text ──────────────────────────────────────────────────────────
 async function statusText(chatId) {
   const links = await pool.query('SELECT address, kind FROM alert_links WHERE chat_id = $1 ORDER BY linked_at', [chatId]);
@@ -325,6 +474,8 @@ async function statusText(chatId) {
         const rank = snap.vset.validators.slice().sort((a, c) => (wei(c.votingStake) > wei(a.votingStake) ? 1 : -1)).findIndex((x) => x.identity === v.identity) + 1;
         out.push(`Validator <code>${short(v.identity)}</code> — <b>${v.status}</b>${v.benched ? ' (benched)' : ''} · rank #${rank} · self-stake ${fmt(mrsn(v.selfStake))} · delegated ${fmt(mrsn(v.delegated))} MRSN · epoch ${snap.vset.epoch}: ${v.proposedSlots} proposed / ${v.missedSlots} missed${b ? ` · build ${b.build}${snap.latest && b.build !== snap.latest ? ` (current ${snap.latest} ❗)` : ' ✅'} · height ${fmt(b.height)}${snap.head ? ` (head ${fmt(snap.head)})` : ''}` : ''}`);
       }
+    } else if (l.kind === 'delegator') {
+      out.push(...(await delegatorStatusLines(l.address, snap)));
     } else {
       const p = snap.protocol;
       let n = 0; for (const m of chain.MARKETS) { try { const pos = await chain.getPosition(m.id, l.address); if (Number(pos.size)) n++; } catch { /* none */ } }
@@ -346,6 +497,7 @@ async function tick() {
   for (const l of links.rows) {
     try {
       if (l.kind === 'operator') await operatorTick(l.address, snap, verified);
+      else if (l.kind === 'delegator') await delegatorTick(l.address, snap);
       else await traderTick(l.address, snap);
     } catch (e) { console.error('[alerts] tick', l.address, e.message); }
   }
@@ -360,4 +512,4 @@ function start() {
   }).catch((e) => console.error('[alerts] init:', e.message));
 }
 
-module.exports = { start, initTables, botName, linkMessage, verifyLinkSignature, createLinkCode, linksFor, unlinkAddress, KINDS, statusText, tick };
+module.exports = { start, initTables, botName, linkMessage, verifyLinkSignature, createLinkCode, linksFor, unlinkAddress, KINDS, statusText, tick, delegationsOf, delegatorStatusLines };
