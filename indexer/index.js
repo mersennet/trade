@@ -703,16 +703,18 @@ function pointsTier(total) {
 async function awardPoints() {
   const season = 1;
   try {
-    // Bots and excluded wallets never hold trading points or sprint prizes.
-    // Zero any that accrued before an address joined the exclusion list (node
-    // points, if the wallet also runs a verified node, are real and stay), and
-    // drop rows left with nothing.
+    // Bots and excluded wallets hold only node points (a verified node is real
+    // work). Zero the rest that accrued before an address joined the exclusion
+    // list: the referral and vault runs skip excluded wallets instead of
+    // recomputing them, so their old values would otherwise stay.
     const excluded = `(LOWER(address) = ANY($1::text[]) OR LOWER(address) IN (SELECT address FROM excluded_addresses))`;
-    const kept = `COALESCE(node_points, 0) + COALESCE(lp_points, 0) + COALESCE(referral_points, 0)`;
+    const kept = `COALESCE(node_points, 0)`;
     await pool.query(
       `UPDATE points_balance
           SET trading_points = 0,
               bonus_points = 0,
+              referral_points = 0,
+              lp_points = 0,
               total_points = ${kept},
               tier = CASE
                 WHEN ${kept} >= 1000000 THEN 'Diamond'
@@ -721,7 +723,7 @@ async function awardPoints() {
                 WHEN ${kept} >= 1000 THEN 'Silver'
                 ELSE 'Bronze' END,
               updated_at = NOW()
-        WHERE ${excluded} AND (trading_points <> 0 OR COALESCE(bonus_points, 0) <> 0)`,
+        WHERE ${excluded} AND (trading_points <> 0 OR COALESCE(bonus_points, 0) <> 0 OR COALESCE(referral_points, 0) <> 0 OR COALESCE(lp_points, 0) <> 0)`,
       [BOT_ADDRESSES]
     ).catch((e) => console.error('[points] exclusion purge (balance):', e.message));
     await pool.query(
