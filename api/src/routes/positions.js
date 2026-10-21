@@ -5,9 +5,12 @@ const { sendError } = require('../middleware/httpError');
 const router = Router();
 const ETH_ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
 
-// Mark price: the oracle, or the book mid when both sides exist and sit within
-// 5% of it. Prices are human quote units.
+// Mark price: the chain's bounded mark once the mark switch is live; before it
+// the oracle, or the book mid when both sides exist and sit within 5% of it.
+// Prices are human quote units.
 async function markPriceOf(m, entryPrice) {
+  const live = await chain.chainMarkOf(m.id).catch(() => null);
+  if (live) return live.usd;
   let oracleUsd = 0;
   try {
     const o = await chain.getOraclePriceForDisplay(m.id);

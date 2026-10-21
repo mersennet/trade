@@ -385,9 +385,46 @@ async function lastTradePrice(marketId) {
   return m && m.lastPrice ? BigInt(m.lastPrice) : 0n;
 }
 
+// From the mark switch the chain marks every position at its bounded mark (a
+// halted market at its epoch's opening mark), so margin, PnL and liquidations
+// follow that number. Before the switch its `markPrice` is the last trade,
+// which the oracle-checked marks below deliberately do not follow.
+let chainMarksCache = { at: 0, value: null };
+async function chainMarks() {
+  if (Date.now() - chainMarksCache.at < 2000) return chainMarksCache.value;
+  let value = null;
+  try {
+    const p = await getProtocol();
+    const from = p && p.switches ? p.switches.markPriceHeight : null;
+    if (typeof from === 'number' && from > 0 && Number(p.height) >= from) {
+      const res = await rpcCall('mersennet_orders_getMarkets', []);
+      const list = Array.isArray(res) ? res : (res && res.markets) || [];
+      value = {};
+      for (const m of list) {
+        if (m.markPrice == null) continue;
+        value[Number(m.id)] = { raw: BigInt(m.markPrice), halted: m.breaker === true };
+      }
+    }
+  } catch {
+    value = chainMarksCache.value;
+  }
+  chainMarksCache = { at: Date.now(), value };
+  return value;
+}
+
+/** The chain's bounded mark once the mark switch is live: { raw, usd, halted }, else null. */
+async function chainMarkOf(marketId) {
+  const marks = await chainMarks();
+  const m = marks && marks[Number(marketId)];
+  if (!m || m.raw <= 0n) return null;
+  return { raw: m.raw, usd: toHumanPrice(marketId, '0x' + m.raw.toString(16)), halted: m.halted };
+}
+
 /** Mark price in raw chain units (see markFromBook); '0' when there is no price at all. */
 async function getMarkPrice(marketId) {
   const id = Number(marketId);
+  const live = await chainMarkOf(id).catch(() => null);
+  if (live) return live.raw.toString();
   const { bestBid, bestAsk } = await getBestBidAsk(id);
   const bid = BigInt(bestBid);
   const ask = BigInt(bestAsk);
@@ -689,6 +726,7 @@ async function upcomingSwitches() {
     rejoinWindowHeight: 'Liquidation accounting made one value on every node',
     securityForkHeight: 'Signature checks on every block, order price band',
     usdcMarginOffHeight: 'Test USDC stops counting as margin',
+    markPriceHeight: 'Bounded mark price, circuit breaker; liquidations within 5% of the mark',
   };
   const all = { ...BUILTIN_SWITCHES, ...(p.switches || {}) };
   const vp = vset && vset.params;
@@ -746,7 +784,7 @@ module.exports = {
   USDC_DECIMALS, SIZE_DECIMALS, PRICE_DECIMALS,
   weiPerCollateralUnit, unitsPerMrsn, collateralDecimals, unitsToMrsn, mrsnToUnits,
   maxLeverageFromProtocol, marginEnforced,
-  observedBlockTime, upcomingSwitches, BUILTIN_SWITCHES,
+  observedBlockTime, upcomingSwitches, BUILTIN_SWITCHES, chainMarkOf,
   USDC_UNIT, SIZE_UNIT, PRICE_UNIT,
   rawToUnits,
   // Reads
