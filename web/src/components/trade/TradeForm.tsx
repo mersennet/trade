@@ -74,6 +74,7 @@ export default function TradeForm() {
   }, [firstOrderRequestTs]);
   const tradeMode = useStore((s) => s.tradeMode);
   const isSpot = tradeMode === 'spot';
+  const halted = !isSpot && !!tickers[market.id]?.halted;
   const privateMode = useStore((s) => s.privateMode);
   const privacyForkActive = useStore((s) => s.privacyForkActive);
   const shieldedActive = privateMode && privacyForkActive && !isSpot;
@@ -1205,12 +1206,17 @@ export default function TradeForm() {
           )}
         </div>
       )}
+      {halted && (
+        <div className="rounded-lg border border-red/30 bg-red/5 px-3 py-2 text-[11px] leading-relaxed text-foreground/85" data-testid="market-halted-hint">
+          {market.symbol} is halted: its mark moved 3x from the epoch&apos;s opening. New orders are refused until a repair reopens the market; positions are held at {formatPrice(tickers[market.id]?.markPrice ?? 0)}.
+        </div>
+      )}
       <button
         data-submit-order
         // Without collateral the button is not dead: it opens the deposit panel
         // (a disabled button with a not-allowed cursor explained nothing).
         onClick={(!isSpot && collateral <= 0 && !trade.reduceOnly) ? () => requestDeposit() : handleSubmit}
-        disabled={loading || !isConnected}
+        disabled={loading || !isConnected || halted}
         className={cn(
           // On phones the form lives in a bottom sheet: keep the action in view
           // while the fields above scroll (sticky within the sheet's scroller).
@@ -1226,9 +1232,11 @@ export default function TradeForm() {
           ? t('trade.placing', 'Placing…')
           : !isConnected
             ? t('common.connectWallet', 'Connect Wallet')
-            : (!isSpot && collateral <= 0 && !trade.reduceOnly)
-              ? 'Deposit collateral first'
-              : t('trade.placeOrder', 'Place Order')}
+            : halted
+              ? 'Market halted'
+              : (!isSpot && collateral <= 0 && !trade.reduceOnly)
+                ? 'Deposit collateral first'
+                : t('trade.placeOrder', 'Place Order')}
       </button>
 
       {/* Order Summary — notional is the headline number (how traders actually

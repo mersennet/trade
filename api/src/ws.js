@@ -149,6 +149,8 @@ function setupWebSocket(server) {
           } else {
             markPrice = oracleUsd || bid || ask;
           }
+          const live = await chain.chainMarkOf(m.id).catch(() => null);
+          if (live) markPrice = live.usd;
 
           // trades.price and trades.size are plain integer chain units.
           const [volR, chgR] = await Promise.all([
@@ -197,7 +199,8 @@ function setupWebSocket(server) {
           const oi = await getOiStats(m.id, markPrice);
           const ticker = {
             type: 'ticker', marketId: m.id, bestBid: bid, bestAsk: ask,
-            markPrice, volume24h, trades24h, change24h,
+            markPrice, ...(live && live.halted ? { halted: true } : {}),
+            volume24h, trades24h, change24h,
             oracleMarkUsd: oracleUsd, oracleAgeSec: oraclePx.age,
             openInterest: oi.openInterest,
             longAccounts: oi.longAccounts,

@@ -128,6 +128,8 @@ router.get('/:marketId/ticker', async (req, res) => {
     } else {
       markPrice = oracleMarkUsd || wsMark || bestBid || bestAsk;
     }
+    const live = await chain.chainMarkOf(marketId).catch(() => null);
+    if (live) markPrice = live.usd;
 
     // 24h change: prefer the real public-exchange feed (BTC/ETH/SOL/ARB).
     // For MRSN (no external feed) derive it from our own candles using a
@@ -150,6 +152,7 @@ router.get('/:marketId/ticker', async (req, res) => {
 
     res.json({
       marketId, bestBid, bestAsk, markPrice,
+      ...(live && live.halted ? { halted: true } : {}),
       oracleMarkUsd, oracleAgeSec: oraclePx.age,
       volume24h, trades24h,
       openInterest, longAccounts, shortAccounts,
