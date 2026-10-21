@@ -176,7 +176,7 @@ export default function CopyTradingPage() {
     <div className="page-shell space-y-6">
       <div className="text-center mb-8">
         <h1 className="page-title">Copy Trading</h1>
-        <p className="page-sub">Follow top traders and automatically mirror their positions</p>
+        <p className="page-sub mx-auto">Follow top traders and automatically mirror their positions</p>
       </div>
 
       {/* Preview banner */}

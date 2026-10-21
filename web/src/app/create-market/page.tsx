@@ -121,7 +121,7 @@ export default function CreateMarketPage() {
     <div className="page-shell space-y-6">
       <div className="text-center mb-8">
         <h1 className="page-title">Create Market</h1>
-        <p className="page-sub">Permissionless listing — create a market directly on-chain, or rally support through a proposal</p>
+        <p className="page-sub mx-auto">Permissionless listing — create a market directly on-chain, or rally support through a proposal</p>
       </div>
 
       {/* On-chain instant listing */}

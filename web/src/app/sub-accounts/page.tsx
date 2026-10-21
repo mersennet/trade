@@ -62,7 +62,7 @@ export default function SubAccountsPage() {
       <div className="page-shell space-y-6">
         <div className="text-center mb-8">
           <h1 className="page-title">Sub-Accounts</h1>
-          <p className="page-sub">Track and switch between your wallet accounts</p>
+          <p className="page-sub mx-auto">Track and switch between your wallet accounts</p>
         </div>
         <div className="bg-surface border border-border rounded-xl p-10 text-center">
           <h3 className="text-sm font-medium text-foreground mb-1">Connect Wallet</h3>
@@ -80,7 +80,7 @@ export default function SubAccountsPage() {
     <div className="page-shell space-y-6">
       <div className="text-center mb-8">
         <h1 className="page-title">Sub-Accounts</h1>
-        <p className="page-sub">Each wallet account is an independent trading identity</p>
+        <p className="page-sub mx-auto">Each wallet account is an independent trading identity</p>
       </div>
 
       <div className="bg-surface-2 border border-border rounded-lg p-3 text-[11.5px] text-dim leading-relaxed">

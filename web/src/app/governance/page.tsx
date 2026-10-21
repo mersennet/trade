@@ -114,7 +114,7 @@ export default function GovernancePage() {
     <div className="page-shell space-y-6">
       <div className="text-center mb-6">
         <h1 className="page-title">Governance</h1>
-        <p className="page-sub">Vote on proposals to shape the future of Mersennet Trade</p>
+        <p className="page-sub mx-auto">Vote on proposals to shape the future of Mersennet Trade</p>
       </div>
 
       {/* Voting power reads real on-chain delegations, but votes themselves
