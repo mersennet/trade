@@ -295,6 +295,10 @@ function priceScaleSql(col = 'market_id') {
 async function ensurePriceScaleSchema() {
   await pool.query(`CREATE TABLE IF NOT EXISTS market_price_scales (
     market_id INT PRIMARY KEY, scale BIGINT NOT NULL DEFAULT 1, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+  // A relisted market's chart starts at its relist block: trades before it
+  // stay in the history but are kept out of candles.
+  await pool.query(`CREATE TABLE IF NOT EXISTS market_relists (
+    market_id INT PRIMARY KEY, height BIGINT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
   const r = await pool.query('SELECT market_id, scale FROM market_price_scales');
   for (const row of r.rows) PRICE_SCALES.set(Number(row.market_id), Number(row.scale));
 }
@@ -305,7 +309,12 @@ async function syncPriceScales() {
   // Rows written after the switch block already carry the new scale (the WS
   // feed keeps inserting while we run); only rows from before it are rescaled.
   let switchHeight = 0;
-  try { switchHeight = Number((await rpc('mersennet_orders_getProtocol', []))?.switches?.priceScaleHeight || 0); } catch { /* fall back to all rows */ }
+  let markHeight = 0;
+  try {
+    const sw = (await rpc('mersennet_orders_getProtocol', []))?.switches || {};
+    switchHeight = Number(sw.priceScaleHeight || 0);
+    markHeight = Number(sw.markPriceHeight || 0);
+  } catch { /* fall back to all rows */ }
   for (const m of live) {
     const id = Number(m.id);
     let chainScale = 1;
@@ -316,26 +325,44 @@ async function syncPriceScales() {
       console.error(`[scale] market ${id}: chain scale ${chainScale} not a multiple of stored ${stored}; refusing to migrate`);
       continue;
     }
+    // A market already rescaled once grows again only when the mark switch
+    // relists it (ARB): rows before that block are rescaled and its chart
+    // restarts there.
+    const relist = stored > 1;
+    const cut = relist ? markHeight : switchHeight;
+    if (relist && !(markHeight > 0)) {
+      console.error(`[scale] market ${id}: rescaled again but the mark switch height is unknown; refusing to migrate`);
+      continue;
+    }
     const k = chainScale / stored;
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
       // Serialize against concurrent inserts for this market while rows are rescaled.
       await client.query('LOCK TABLE trades, orders_history, candles IN SHARE ROW EXCLUSIVE MODE');
-      const t = switchHeight > 0
-        ? await client.query('UPDATE trades SET price = price * $2 WHERE market_id = $1 AND block_number < $3', [id, k, switchHeight])
+      const t = cut > 0
+        ? await client.query('UPDATE trades SET price = price * $2 WHERE market_id = $1 AND block_number < $3', [id, k, cut])
         : await client.query('UPDATE trades SET price = price * $2 WHERE market_id = $1', [id, k]);
-      const o = switchHeight > 0
-        ? await client.query('UPDATE orders_history SET price = price * $2 WHERE market_id = $1 AND block_number < $3', [id, k, switchHeight])
+      const o = cut > 0
+        ? await client.query('UPDATE orders_history SET price = price * $2 WHERE market_id = $1 AND block_number < $3', [id, k, cut])
         : await client.query('UPDATE orders_history SET price = price * $2 WHERE market_id = $1', [id, k]);
       // Candles: multiply everything; the last day is re-aggregated from
       // trades within a minute (authoritative), older buckets keep the factor.
-      const c = await client.query('UPDATE candles SET open = open * $2, high = high * $2, low = low * $2, close = close * $2 WHERE market_id = $1', [id, k]);
+      // A relisted market's candles are dropped instead (see aggregateCandles).
+      const c = relist
+        ? await client.query('DELETE FROM candles WHERE market_id = $1', [id])
+        : await client.query('UPDATE candles SET open = open * $2, high = high * $2, low = low * $2, close = close * $2 WHERE market_id = $1', [id, k]);
+      if (relist) {
+        await client.query(`INSERT INTO market_relists (market_id, height, updated_at) VALUES ($1, $2, NOW())
+          ON CONFLICT (market_id) DO UPDATE SET height = EXCLUDED.height, updated_at = NOW()`, [id, cut]);
+      }
       await client.query(`INSERT INTO market_price_scales (market_id, scale, updated_at) VALUES ($1, $2, NOW())
         ON CONFLICT (market_id) DO UPDATE SET scale = EXCLUDED.scale, updated_at = NOW()`, [id, chainScale]);
       await client.query('COMMIT');
       PRICE_SCALES.set(id, chainScale);
-      console.log(`[scale] market ${id}: ${stored} -> ${chainScale} (×${k}); rescaled ${t.rowCount} trades, ${o.rowCount} orders, ${c.rowCount} candles`);
+      console.log(`[scale] market ${id}: ${stored} -> ${chainScale} (×${k}); rescaled ${t.rowCount} trades, ${o.rowCount} orders; ${relist ? `relisted at ${cut}, dropped` : 'rescaled'} ${c.rowCount} candles`);
+      const oracle = relist && ORACLE_MARKETS.find((om) => om.id === id);
+      if (oracle) backfillMarket(oracle, 0).catch((e) => console.error(`[backfill] ${oracle.symbol} after relist:`, e.message));
     } catch (e) {
       await client.query('ROLLBACK').catch(() => {});
       console.error(`[scale] market ${id} migration failed:`, e.message);
@@ -572,6 +599,8 @@ async function aggregateCandles() {
           COUNT(*) as trade_count
         FROM trades
         WHERE block_timestamp IS NOT NULL AND block_timestamp > NOW() - interval '1 day'
+          AND NOT EXISTS (SELECT 1 FROM market_relists r
+                           WHERE r.market_id = trades.market_id AND trades.block_number < r.height)
         GROUP BY market_id, open_time
         ON CONFLICT (market_id, resolution, open_time)
         DO UPDATE SET
