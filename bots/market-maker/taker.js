@@ -11,10 +11,12 @@
 const RPC_URL = process.env.RPC_URL || 'https://rpc.mersennet.com';
 
 // Seeds must match the market maker's so the outlier filter anchors on the
-// same price regime (ARB in particular quotes around 100, not 1).
+// same price regime (ARB quotes around 100 until the mark switch relists it at
+// its real price, see relist.js).
 // `seed` and `tick` are HUMAN prices, converted to chain units with the
 // market's live priceScale (see scale.js).
 const { refreshScales, toChain, chainTick, scaleOf, quietForSwitch, quietReason } = require('./scale');
+const { followArbRelist } = require('./relist');
 const { refreshProtocol, ensureUnits } = require('./settlement');
 const MARKETS = {
   1:  { symbol: 'MRSN',  weight: 3.0, seed: 115,   tick: 0.05, sizeRange: [1, 10]  },
@@ -137,6 +139,11 @@ refreshScales(rpcCall).catch(() => {});
 setInterval(() => refreshScales(rpcCall).catch(() => {}), 5_000);
 
 async function fetchMidPrices() {
+  // ~$190-$1,520 per order at ~$0.19, like SOL and MRSN.
+  if (followArbRelist(MARKETS, REF_SYMBOLS, { seed: 0.19, tick: 0.0001, sizeRange: [1_000, 8_000] })) {
+    console.log('[taker] ARB relisted: trading its real price on $0.0001 ticks');
+    refreshReferencePrices().catch(() => {});
+  }
   for (const [id, m] of Object.entries(MARKETS)) {
     try {
       const ob = await rpcCall('mersennet_orders_getOrderBook', [Number(id)]);

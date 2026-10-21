@@ -34,6 +34,7 @@ const maker = new BotWallet(RPC_URL, 'maker', process.env.MM_PRIVATE_KEY);
 // with the market's live priceScale (a $0.05 tick is 1 unit at scale 1 and
 // 5 units once the market trades on $0.01 ticks).
 const { refreshScales, scaleOf, toChain, chainTick, quietForSwitch, quietReason } = require('./scale');
+const { followArbRelist } = require('./relist');
 const { refreshProtocol, ensureUnits, marginBps } = require('./settlement');
 const { deriveKey } = require('./signer');
 const { ethers: ethersLib } = require('ethers');
@@ -79,9 +80,10 @@ const liveMid = {};
 
 // ---- Live reference prices ------------------------------------------------
 // The CLOB quotes in integer USD ticks, so BTC/ETH/SOL can track their real
-// prices; MRSN has no external market and ARB (~$0.14) is below one tick, so
-// both keep their seeds. Median of Coinbase + Binance spot, refreshed every
-// 30s; a source older than 5 min is ignored and the market falls back to seed.
+// prices; MRSN has no external market and keeps its seed, and so does ARB
+// (~$0.19, where a $0.01 tick is ~5% of the price) until the mark switch
+// relists it on $0.0001 ticks (relist.js). Median of Coinbase + Binance spot, refreshed every 30s; a
+// source older than 5 min is ignored and the market falls back to seed.
 const REF_SYMBOLS = { 2: { coinbase: 'BTC-USD', binance: 'BTCUSDT' }, 3: { coinbase: 'ETH-USD', binance: 'ETHUSDT' }, 4: { coinbase: 'SOL-USD', binance: 'SOLUSDT' } };
 const REF_TTL_MS = 5 * 60_000;
 const STALE_BAND = 0.02;        // resting liquidity >2% through our mid is treated as stale
@@ -513,6 +515,11 @@ async function refreshQuotes() {
   const start = Date.now();
 
   try {
+    // ~$9.5k per level at ~$0.19, like SOL's depth.
+    if (followArbRelist(MARKETS, REF_SYMBOLS, { seed: 0.19, tick: 0.0001, baseSize: 50_000 })) {
+      console.log('[mm] ARB relisted: quoting its real price on $0.0001 ticks');
+      await refreshReferencePrices().catch(() => {});
+    }
     // Anchor each market to its live reference price (or seed), blended
     // 70/30 with the chain's own mid so the book follows reality without
     // whipsawing on a single print. A jump of >5% in the anchor (first live
@@ -647,7 +654,7 @@ async function main() {
   console.log(`[mm] price scales: ${CONFIG.markets.map((id) => `${MARKETS[id].symbol}=${scaleOf(id)}`).join(' ')}`);
   await refreshReferencePrices().catch(() => {});
   setInterval(() => refreshReferencePrices().catch(() => {}), 30_000);
-  console.log(`[mm] reference prices: ${Object.keys(REF_SYMBOLS).map((id) => `${MARKETS[id].symbol}=${refPrice[id] ? Math.round(refPrice[id].price) : 'seed'}`).join(' ')}`);
+  console.log(`[mm] reference prices: ${Object.keys(REF_SYMBOLS).map((id) => `${MARKETS[id].symbol}=${refPrice[id] ? Number(refPrice[id].price.toPrecision(5)) : 'seed'}`).join(' ')}`);
 
   await refreshQuotes();
   setInterval(refreshQuotes, CONFIG.refreshInterval);
