@@ -722,6 +722,14 @@ const POINTS_PER_USD = 1; // 1 point per $1 of notional volume, credited to the 
 const POINTS_DAILY_CAP_USD = Number(process.env.POINTS_DAILY_CAP_USD || 100_000);
 const POINTS_ZERO_MARKETS = (process.env.POINTS_ZERO_MARKETS ?? '5')
   .split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0);
+/** Trades that earn points: a zero-rated market counts once it is relisted at
+ *  a real price, and a relisted market only from its relist block
+ *  (market_relists, written by syncPriceScales). `zeroParam` is the query's
+ *  POINTS_ZERO_MARKETS placeholder. */
+function countedTradeSql(zeroParam) {
+  return `NOT EXISTS (SELECT 1 FROM market_relists r WHERE r.market_id = trades.market_id AND trades.block_number < r.height)
+     AND (trades.market_id <> ALL(${zeroParam}::int[]) OR EXISTS (SELECT 1 FROM market_relists r WHERE r.market_id = trades.market_id))`;
+}
 function pointsTier(total) {
   if (total >= 1_000_000) return 'Diamond';
   if (total >= 100_000) return 'Platinum';
@@ -769,10 +777,10 @@ async function awardPoints() {
          SELECT address, block_timestamp::date AS day, SUM(volume) AS day_volume
          FROM (
            SELECT LOWER(taker) AS address, block_timestamp, price * size / ${priceScaleSql('market_id')} AS volume
-             FROM trades WHERE taker IS NOT NULL AND block_timestamp IS NOT NULL AND market_id <> ALL($2::int[])
+             FROM trades WHERE taker IS NOT NULL AND block_timestamp IS NOT NULL AND ${countedTradeSql('$2')}
            UNION ALL
            SELECT LOWER(maker) AS address, block_timestamp, price * size / ${priceScaleSql('market_id')} AS volume
-             FROM trades WHERE maker IS NOT NULL AND block_timestamp IS NOT NULL AND market_id <> ALL($2::int[])
+             FROM trades WHERE maker IS NOT NULL AND block_timestamp IS NOT NULL AND ${countedTradeSql('$2')}
          ) sides
          -- Exclude legacy zero-prefixed accounts, configured bot wallets and
          -- every address in excluded_addresses (bots, forfeited accounts), so
@@ -951,10 +959,10 @@ async function awardWeeklySprint(season) {
       `SELECT address, SUM(volume)::numeric AS volume
          FROM (
            SELECT LOWER(taker) AS address, price * size / ${priceScaleSql('market_id')} AS volume
-             FROM trades WHERE taker IS NOT NULL AND block_timestamp >= $1 AND block_timestamp < $2 AND market_id <> ALL($4::int[])
+             FROM trades WHERE taker IS NOT NULL AND block_timestamp >= $1 AND block_timestamp < $2 AND ${countedTradeSql('$4')}
            UNION ALL
            SELECT LOWER(maker) AS address, price * size / ${priceScaleSql('market_id')} AS volume
-             FROM trades WHERE maker IS NOT NULL AND block_timestamp >= $1 AND block_timestamp < $2 AND market_id <> ALL($4::int[])
+             FROM trades WHERE maker IS NOT NULL AND block_timestamp >= $1 AND block_timestamp < $2 AND ${countedTradeSql('$4')}
          ) sides
         WHERE address NOT LIKE '0x00000000000000000000000000000000000000%'
           AND address <> ALL($3::text[])
