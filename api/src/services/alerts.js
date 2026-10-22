@@ -14,20 +14,45 @@
  *              (+ 24 h / 6 h / 1 h before every protocol switch)
  *   traders    equity within 1.6× of maintenance margin, or below it (the
  *              keeper liquidates) — only once settlement is active
+ *   delegators validator benched · jailed · status change · commission ·
+ *              unbonded MRSN withdrawable; a daily, weekly (default) or
+ *              monthly report of each delegation (/daily /weekly /monthly)
  * Every alert is de-duplicated through alert_state so a stuck condition
  * pages once per window, not once per minute.
+ *
+ * Bots: "Mersennet Node Alert" (operators, traders) and, once
+ * STAKING_TELEGRAM_BOT_TOKEN is set, "Mersennet Staking Alert" (delegators).
+ * A bot can only write to chats that started it, so each link keeps the bot
+ * it was made through; delegators linked before the staking bot stay on the
+ * node bot until they link again.
  */
 const crypto = require('crypto');
 const { ethers } = require('ethers');
 const pool = require('../db/pool');
 const chain = require('./chain');
 
-const TOKEN = process.env.ALERTS_TELEGRAM_BOT_TOKEN || process.env.FEEDBACK_TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || '';
-const API = `https://api.telegram.org/bot${TOKEN}`;
+const BOTS = {
+  node: {
+    id: 'node',
+    token: process.env.ALERTS_TELEGRAM_BOT_TOKEN || process.env.FEEDBACK_TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || '',
+    fallbackName: process.env.ALERTS_BOT_USERNAME || 'mersennet_alerts_bot',
+    username: null,
+    offset: 0,
+  },
+  staking: {
+    id: 'staking',
+    token: process.env.STAKING_TELEGRAM_BOT_TOKEN || '',
+    fallbackName: process.env.STAKING_BOT_USERNAME || 'mersennet_staking_bot',
+    username: null,
+    offset: 0,
+  },
+};
+/** The bot new links of `kind` are made through. */
+const botFor = (kind) => (kind === 'delegator' && BOTS.staking.token ? BOTS.staking : BOTS.node);
+const botById = (id) => (BOTS[id] && BOTS[id].token ? BOTS[id] : BOTS.node);
 const LINK_TTL_MS = 15 * 60_000;
 const TICK_MS = 60_000;
 const HOUR = 3_600_000;
-let botUsername = null;
 
 // ─── schema ────────────────────────────────────────────────────────────────
 async function initTables() {
@@ -47,6 +72,14 @@ async function initTables() {
   if (!pk.rows.some((r) => r.attname === 'kind')) {
     await pool.query('ALTER TABLE alert_links DROP CONSTRAINT alert_links_pkey, ADD PRIMARY KEY (chat_id, address, kind)');
   }
+  await pool.query(`ALTER TABLE alert_links ADD COLUMN IF NOT EXISTS bot TEXT NOT NULL DEFAULT 'node'`);
+  // Report frequency per chat and bot (delegators): daily, weekly or monthly; off stops them.
+  await pool.query(`CREATE TABLE IF NOT EXISTS alert_digests (
+    chat_id BIGINT NOT NULL,
+    bot TEXT NOT NULL,
+    freq TEXT NOT NULL DEFAULT 'weekly',
+    PRIMARY KEY (chat_id, bot)
+  )`);
   await pool.query(`CREATE TABLE IF NOT EXISTS alert_link_codes (
     code TEXT PRIMARY KEY,
     address TEXT NOT NULL,
@@ -64,29 +97,29 @@ async function initTables() {
 }
 
 // ─── telegram ──────────────────────────────────────────────────────────────
-async function tg(method, body) {
-  if (!TOKEN) throw new Error('alerts: no bot token');
-  const r = await fetch(`${API}/${method}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}) });
+async function tg(bot, method, body) {
+  if (!bot.token) throw new Error('alerts: no bot token');
+  const r = await fetch(`https://api.telegram.org/bot${bot.token}/${method}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}) });
   const j = await r.json().catch(() => ({}));
   if (!j.ok) throw new Error(`telegram ${method}: ${j.description || r.status}`);
   return j.result;
 }
-async function send(chatId, html) {
+async function send(chatId, html, bot = BOTS.node) {
   try {
-    await tg('sendMessage', { chat_id: chatId, text: html, parse_mode: 'HTML', disable_web_page_preview: true });
+    await tg(bot, 'sendMessage', { chat_id: chatId, text: html, parse_mode: 'HTML', disable_web_page_preview: true });
     return true;
   } catch (e) {
-    // 403 = the user blocked the bot: forget the link so we stop trying.
+    // 403 = the user blocked this bot: forget its links so we stop trying (the other bot's stay).
     if (/bot was blocked|chat not found|user is deactivated/i.test(e.message)) {
-      await pool.query('DELETE FROM alert_links WHERE chat_id = $1', [chatId]).catch(() => {});
+      await pool.query('DELETE FROM alert_links WHERE chat_id = $1 AND bot = $2', [chatId, bot.id]).catch(() => {});
     } else console.error('[alerts]', e.message);
     return false;
   }
 }
-async function botName() {
-  if (botUsername) return botUsername;
-  try { botUsername = (await tg('getMe')).username; } catch { botUsername = process.env.ALERTS_BOT_USERNAME || 'mersennet_alerts_bot'; }
-  return botUsername;
+async function botName(bot = BOTS.node) {
+  if (bot.username) return bot.username;
+  try { bot.username = (await tg(bot, 'getMe')).username; } catch { return bot.fallbackName; }
+  return bot.username;
 }
 
 // ─── linking ───────────────────────────────────────────────────────────────
@@ -111,10 +144,10 @@ function verifyLinkSignature(address, kind, signature) {
 async function createLinkCode(address, kind) {
   const code = crypto.randomBytes(6).toString('base64url').replace(/[^A-Za-z0-9]/g, 'x').slice(0, 8);
   await pool.query('INSERT INTO alert_link_codes (code, address, kind) VALUES ($1, $2, $3)', [code, address.toLowerCase(), kind]);
-  return { code, deepLink: `https://t.me/${await botName()}?start=${code}` };
+  return { code, deepLink: `https://t.me/${await botName(botFor(kind))}?start=${code}` };
 }
 async function linksFor(address) {
-  const r = await pool.query('SELECT chat_id, kind, username, linked_at FROM alert_links WHERE address = $1 ORDER BY linked_at', [address.toLowerCase()]);
+  const r = await pool.query('SELECT chat_id, kind, bot, username, linked_at FROM alert_links WHERE address = $1 ORDER BY linked_at', [address.toLowerCase()]);
   return r.rows;
 }
 /** Remove the address's links, of one kind when given. */
@@ -123,12 +156,12 @@ async function unlinkAddress(address, kind) {
   else await pool.query('DELETE FROM alert_links WHERE address = $1', [address.toLowerCase()]);
 }
 
-// ─── bot poller (/start <code>, /status, /stop) ────────────────────────────
-let offset = 0;
-async function pollOnce() {
-  const updates = await tg('getUpdates', { offset, timeout: 25, allowed_updates: ['message'] });
+// ─── bot poller (/start <code>, /status, /stop, report frequency) ──────────
+const FREQS = { '/daily': 'daily', '/weekly': 'weekly', '/monthly': 'monthly', '/noreport': 'off' };
+async function pollOnce(bot) {
+  const updates = await tg(bot, 'getUpdates', { offset: bot.offset, timeout: 25, allowed_updates: ['message'] });
   for (const u of updates) {
-    offset = u.update_id + 1;
+    bot.offset = u.update_id + 1;
     const msg = u.message;
     if (!msg || !msg.text || !msg.chat) continue;
     // Groups, supergroups and channels: the bot only *posts* there (announcements);
@@ -140,42 +173,60 @@ async function pollOnce() {
     const username = msg.from && msg.from.username ? msg.from.username : null;
     const [rawCmd, arg] = msg.text.trim().split(/\s+/);
     const cmd = rawCmd.replace(/@\w+$/, '').toLowerCase(); // "/status@MersennetAlertsBot" → "/status"
+    const say = (html) => send(chatId, html, bot);
+    const staking = bot.id === 'staking';
+    const help = staking
+      ? '/status — your delegations now\n/daily · /weekly · /monthly — how often the report comes (weekly by default)\n/noreport — no reports, alerts only\n/stop — unlink'
+      : '/status — current state of your linked addresses\n/stop — unlink';
     try {
       if (cmd === '/start' && arg) {
-        const r = await pool.query(
-          `UPDATE alert_link_codes SET used_at = NOW() WHERE code = $1 AND used_at IS NULL AND created_at > NOW() - INTERVAL '15 minutes' RETURNING address, kind`,
-          [arg]);
-        if (!r.rows[0]) { await send(chatId, 'That link has expired or was already used. Open the terminal again and press <b>Telegram alerts</b> for a fresh one.'); continue; }
-        const { address, kind } = r.rows[0];
+        const c = await pool.query(
+          `SELECT address, kind FROM alert_link_codes WHERE code = $1 AND used_at IS NULL AND created_at > NOW() - INTERVAL '15 minutes'`, [arg]);
+        if (!c.rows[0]) { await say('That link has expired or was already used. Open the terminal again and press <b>Telegram alerts</b> for a fresh one.'); continue; }
+        const { address, kind } = c.rows[0];
+        const home = botFor(kind);
+        if (home.id !== bot.id) { await say(`This link is for @${await botName(home)}: open it there.`); continue; }
+        await pool.query('UPDATE alert_link_codes SET used_at = NOW() WHERE code = $1', [arg]);
         await pool.query(
-          `INSERT INTO alert_links (chat_id, address, kind, username) VALUES ($1, $2, $3, $4)
-           ON CONFLICT (chat_id, address, kind) DO UPDATE SET username = EXCLUDED.username, linked_at = NOW()`,
-          [chatId, address, kind, username]);
+          `INSERT INTO alert_links (chat_id, address, kind, username, bot) VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (chat_id, address, kind) DO UPDATE SET username = EXCLUDED.username, bot = EXCLUDED.bot, linked_at = NOW()`,
+          [chatId, address, kind, username, bot.id]);
         const when = {
           operator: 'your validator misses slots, is benched or jailed, falls behind the chain, goes silent, runs an outdated build, finishes an upgrade (or the upgrade goes wrong), or a protocol switch is 24 h / 6 h / 1 h away',
           trader: 'a position gets within reach of liquidation (equity under 1.6× maintenance margin) or is liquidatable',
-          delegator: 'a validator you delegate to is benched or jailed, goes standby or exits, becomes active again or changes its commission, and when MRSN you undelegated can be withdrawn',
+          delegator: `a validator you delegate to is benched or jailed, goes standby or exits, becomes active again or changes its commission, and when MRSN you undelegated can be withdrawn${staking ? '. A report of your delegations comes every Monday' : ''}`,
         }[kind];
-        await send(chatId, `Linked to <code>${short(address)}</code> (${kind}). You will hear from me when ${when}.\n\n/status — where things stand now\n/stop — unlink everything`);
-        await send(chatId, await statusText(chatId));
+        await say(`Linked to <code>${short(address)}</code> (${kind}). You will hear from me when ${when}.\n\n${help}`);
+        await say(await statusText(chatId, bot));
       } else if (cmd === '/status') {
-        await send(chatId, await statusText(chatId));
+        await say(await statusText(chatId, bot));
       } else if (cmd === '/stop') {
-        await pool.query('DELETE FROM alert_links WHERE chat_id = $1', [chatId]);
-        await send(chatId, 'Unlinked. Nothing more will be sent here; relink any time from the terminal.');
+        await pool.query('DELETE FROM alert_links WHERE chat_id = $1 AND bot = $2', [chatId, bot.id]);
+        await pool.query('DELETE FROM alert_digests WHERE chat_id = $1 AND bot = $2', [chatId, bot.id]);
+        await say('Unlinked. Nothing more will be sent here; relink any time from the terminal.');
+      } else if (FREQS[cmd]) {
+        const freq = FREQS[cmd];
+        await pool.query(
+          `INSERT INTO alert_digests (chat_id, bot, freq) VALUES ($1, $2, $3) ON CONFLICT (chat_id, bot) DO UPDATE SET freq = EXCLUDED.freq`,
+          [chatId, bot.id, freq]);
+        await say(freq === 'off'
+          ? 'No more reports; alerts still come when something changes. /weekly turns them back on.'
+          : `Reports now come ${{ daily: 'every day', weekly: 'every Monday', monthly: 'on the 1st of each month' }[freq]} at 09:00 UTC.`);
       } else if (cmd === '/start') {
-        await send(chatId, `This bot sends Mersennet validator and position alerts. Link it from <a href="https://trade.mersennet.com/staking">trade.mersennet.com/staking</a> (operators) or the account panel on <a href="https://trade.mersennet.com/trade">/trade</a> (traders) — press <b>Telegram alerts</b> there.`);
+        await say(staking
+          ? 'This bot follows your Mersennet delegations: alerts when a validator you back is benched, jailed or changes its commission, and a regular report. Link it from <a href="https://trade.mersennet.com/staking">trade.mersennet.com/staking</a>: press <b>Telegram alerts</b> under your delegations.'
+          : `This bot sends Mersennet validator and position alerts. Link it from <a href="https://trade.mersennet.com/staking">trade.mersennet.com/staking</a> (operators) or the account panel on <a href="https://trade.mersennet.com/trade">/trade</a> (traders) — press <b>Telegram alerts</b> there.`);
       } else if (cmd.startsWith('/')) {
-        await send(chatId, '/status — current state of your linked addresses\n/stop — unlink');
+        await say(help);
       }
       // Plain text in a private chat gets no reply: the bot is not a conversation.
     } catch (e) { console.error('[alerts] update:', e.message); }
   }
 }
-async function pollLoop() {
+async function pollLoop(bot) {
   for (;;) {
-    try { await pollOnce(); }
-    catch (e) { console.error('[alerts] poll:', e.message); await sleep(5000); }
+    try { await pollOnce(bot); }
+    catch (e) { console.error(`[alerts] poll (${bot.id}):`, e.message); await sleep(5000); }
   }
 }
 
@@ -222,9 +273,9 @@ async function fireOnce(address, key, ttlMs, text, value, kinds = ['operator', '
   const prev = r.rows[0];
   if (prev && value !== undefined && prev.value === String(value) && Date.now() - new Date(prev.fired_at).getTime() < ttlMs) return false;
   if (prev && value === undefined && Date.now() - new Date(prev.fired_at).getTime() < ttlMs) return false;
-  const chats = await pool.query('SELECT DISTINCT chat_id FROM alert_links WHERE address = $1 AND kind = ANY($2)', [address, kinds]);
+  const chats = await pool.query('SELECT DISTINCT chat_id, bot FROM alert_links WHERE address = $1 AND kind = ANY($2)', [address, kinds]);
   let sent = false;
-  for (const c of chats.rows) sent = (await send(c.chat_id, text)) || sent;
+  for (const c of chats.rows) sent = (await send(c.chat_id, text, botById(c.bot))) || sent;
   await pool.query(
     `INSERT INTO alert_state (address, key, value, fired_at) VALUES ($1, $2, $3, NOW())
      ON CONFLICT (address, key) DO UPDATE SET value = EXCLUDED.value, fired_at = NOW()`,
@@ -466,9 +517,105 @@ async function delegatorStatusLines(address, snap) {
   return out;
 }
 
+// ─── delegator reports (daily / weekly / monthly at 09:00 UTC) ─────────────
+const REPORT_HOUR_UTC = 9;
+/** The report period `freq` is in once its 09:00 UTC start has passed: { key, startMs }, else null. */
+function reportPeriod(freq, now = new Date()) {
+  const day = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const start = {
+    daily: day,
+    weekly: day - ((new Date(day).getUTCDay() + 6) % 7) * 86_400_000, // Monday
+    monthly: Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+  }[freq];
+  if (start === undefined) return null;
+  const startMs = start + REPORT_HOUR_UTC * HOUR;
+  return now.getTime() >= startMs ? { key: new Date(start).toISOString().slice(0, 10), startMs } : null;
+}
+async function countFired(address, prefix, sinceMs) {
+  const r = await pool.query('SELECT COUNT(*)::int AS n FROM alert_state WHERE address = $1 AND key LIKE $2 AND fired_at > to_timestamp($3 / 1000.0)',
+    [address, `${prefix}%`, sinceMs]);
+  return r.rows[0].n;
+}
+/**
+ * The report for one delegator, measured against the previous one for the same
+ * chat, bot and frequency (kept per validator in alert_state). Null when the
+ * delegations cannot be read this minute.
+ */
+async function reportText(address, freq, snap, chatId, botId) {
+  const d = await delegationsOf(address, snap.vset);
+  if (!d) return null;
+  const lines = [`📊 <b>${{ daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' }[freq]} staking report</b> · <code>${short(address)}</code>`];
+  if (!d.delegations.length && d.unbonding.total === 0n) {
+    lines.push('No delegations right now: https://trade.mersennet.com/staking');
+    return lines.join('\n');
+  }
+  let amountAll = 0n, pendingAll = 0n, earnedAll = 0n, earnedKnown = true, sinceMs = null;
+  for (const { v, amount, pending } of d.delegations) {
+    const id = v.identity.toLowerCase();
+    const snapKey = `report-snap:${chatId}:${botId}:${freq}:${id}`;
+    let prev = null;
+    try { prev = JSON.parse((await stateValue(address, snapKey)) || 'null'); } catch { /* first report */ }
+    const proposed = Number(v.totalProposed || 0);
+    const parts = [`<b>${v.status}</b>${v.benched ? ' (benched)' : ''}`, `commission ${pct(v.commissionBps)}`];
+    if (prev) {
+      sinceMs = sinceMs === null ? prev.at : Math.min(sinceMs, prev.at);
+      parts.push(`${fmt(Math.max(0, proposed - prev.proposed))} blocks proposed`);
+      const before = BigInt(prev.pending);
+      if (pending >= before) {
+        earnedAll += pending - before;
+        parts.push(`+${fmt(mrsn(pending - before), 2)} MRSN earned`);
+      } else {
+        earnedKnown = false;
+        parts.push('rewards claimed since the last report');
+      }
+      const jailed = await countFired(address, `dlg-jailed:${id}:`, prev.at);
+      const benched = await countFired(address, `dlg-benched:${id}:`, prev.at);
+      if (jailed) parts.push(`jailed ${jailed}×`);
+      if (benched) parts.push(`benched ${benched}×`);
+    } else {
+      earnedKnown = false;
+    }
+    parts.push(`${fmt(mrsn(pending), 2)} MRSN to claim`);
+    lines.push(`· ${fmt(mrsn(amount), 2)} MRSN with <code>${short(v.identity)}</code>: ${parts.join(' · ')}`);
+    amountAll += amount;
+    pendingAll += pending;
+    await setState(address, snapKey, JSON.stringify({ pending: pending.toString(), proposed, at: Date.now() }));
+  }
+  if (d.delegations.length > 1 || earnedKnown) {
+    const days = sinceMs ? (Date.now() - sinceMs) / 86_400_000 : 0;
+    const pace = earnedKnown && days > 0.5 && amountAll > 0n
+      ? ` (about ${fmt(mrsn(earnedAll) / mrsn(amountAll) * (365 / days) * 100, 1)}% a year at this pace)` : '';
+    lines.push(`Total: ${fmt(mrsn(amountAll), 2)} MRSN delegated${earnedKnown ? ` · +${fmt(mrsn(earnedAll), 2)} MRSN earned${pace}` : ''} · ${fmt(mrsn(pendingAll), 2)} MRSN to claim`);
+  }
+  if (d.unbonding.total > 0n) lines.push(`Unbonding ${fmt(mrsn(d.unbonding.total), 2)} MRSN, ${fmt(mrsn(d.unbonding.withdrawable), 2)} withdrawable now.`);
+  lines.push('https://trade.mersennet.com/staking · /daily /weekly /monthly /noreport');
+  return lines.join('\n');
+}
+async function reportTick(snap, now = new Date()) {
+  if (!snap.vset || !Array.isArray(snap.vset.validators)) return;
+  const rows = await pool.query(
+    `SELECT l.chat_id, l.bot, l.address, COALESCE(d.freq, 'weekly') AS freq
+       FROM alert_links l LEFT JOIN alert_digests d ON d.chat_id = l.chat_id AND d.bot = l.bot
+      WHERE l.kind = 'delegator' AND l.bot = 'staking'`);
+  for (const r of rows.rows) {
+    const period = reportPeriod(r.freq, now);
+    if (!period) continue;
+    const doneKey = `report:${r.chat_id}:${r.bot}:${r.freq}:${period.key}`;
+    if ((await stateValue(r.address, doneKey)) !== null) continue;
+    const baseKey = `report-base:${r.chat_id}:${r.bot}:${r.freq}`;
+    const first = (await stateValue(r.address, baseKey)) === null;
+    const text = await reportText(r.address, r.freq, snap, r.chat_id, r.bot);
+    if (!text) continue;
+    // The first period only records where things stand, so the first report measures a whole period.
+    if (!first) await send(r.chat_id, text, botById(r.bot));
+    else await setState(r.address, baseKey, String(Date.now()));
+    await setState(r.address, doneKey, '1');
+  }
+}
+
 // ─── /status text ──────────────────────────────────────────────────────────
-async function statusText(chatId) {
-  const links = await pool.query('SELECT address, kind FROM alert_links WHERE chat_id = $1 ORDER BY linked_at', [chatId]);
+async function statusText(chatId, bot = BOTS.node) {
+  const links = await pool.query('SELECT address, kind FROM alert_links WHERE chat_id = $1 AND bot = $2 ORDER BY linked_at', [chatId, bot.id]);
   if (!links.rows.length) return 'Nothing linked here yet. Press <b>Telegram alerts</b> in the terminal to link a wallet.';
   const snap = await snapshot();
   const out = [];
@@ -508,15 +655,18 @@ async function tick() {
       else await traderTick(l.address, snap);
     } catch (e) { console.error('[alerts] tick', l.address, e.message); }
   }
+  await reportTick(snap).catch((e) => console.error('[alerts] reports', e.message));
 }
 
 function start() {
-  if (!TOKEN) { console.log('[alerts] no bot token — disabled'); return; }
+  if (!BOTS.node.token) { console.log('[alerts] no bot token — disabled'); return; }
   initTables().then(() => {
-    botName().then((n) => console.log(`[alerts] bot @${n}, poller + engine started`));
-    pollLoop();
+    for (const bot of Object.values(BOTS).filter((b) => b.token)) {
+      botName(bot).then((n) => console.log(`[alerts] ${bot.id} bot @${n}, poller started`));
+      pollLoop(bot);
+    }
     setTimeout(() => { tick().catch(() => {}); setInterval(() => tick().catch(() => {}), TICK_MS); }, 15_000);
   }).catch((e) => console.error('[alerts] init:', e.message));
 }
 
-module.exports = { start, initTables, botName, linkMessage, verifyLinkSignature, createLinkCode, linksFor, unlinkAddress, KINDS, statusText, tick, delegationsOf, delegatorStatusLines };
+module.exports = { start, initTables, botName, botFor, linkMessage, verifyLinkSignature, createLinkCode, linksFor, unlinkAddress, KINDS, statusText, tick, delegationsOf, delegatorStatusLines, reportPeriod, reportTick, pollOnce, fireOnce, BOTS };
