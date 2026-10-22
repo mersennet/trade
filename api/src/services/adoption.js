@@ -91,22 +91,33 @@ function slowCached() {
 
 // ---------------------------------------------------------------- fast set
 
-/** Order-book collateral held by every address we know about, as the chain counts it. */
+// The maker vault keeps its MRSN as order-book collateral; it is reported as makerVaultNavMrsn.
+const VAULT = (process.env.VAULT_ADDRESS || '0xe77F94c4Bf7D6d2E2371aFdE440a0b9b8a567725').toLowerCase();
+
+/** Order-book collateral held by every address we know about, as the chain counts it (the vault's apart). */
 async function orderBookTvl(addresses) {
+  addresses = addresses.filter((a) => String(a).toLowerCase() !== VAULT);
   if (!addresses.length) return { collateralMrsn: 0, accounts: 0 };
   const assets = await chain.getCollateralAssets().catch(() => []);
-  const batch = addresses.map((a, i) => ({ jsonrpc: '2.0', id: i + 1, method: 'mersennet_orders_getAccount', params: [a] }));
-  const c = new AbortController();
-  const t = setTimeout(() => c.abort(), 8000);
-  let results = [];
-  try {
-    const r = await fetch(process.env.RPC_URL || 'https://rpc.mersennet.com', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(batch), signal: c.signal,
-    });
-    results = await r.json();
-  } finally { clearTimeout(t); }
+  // The node refuses batches over 100 calls; one refused batch made the total read 0.
+  const BATCH = 100;
+  const results = [];
+  for (let i = 0; i < addresses.length; i += BATCH) {
+    const batch = addresses.slice(i, i + BATCH).map((a, j) => ({ jsonrpc: '2.0', id: j + 1, method: 'mersennet_orders_getAccount', params: [a] }));
+    const c = new AbortController();
+    const t = setTimeout(() => c.abort(), 8000);
+    let answer;
+    try {
+      const r = await fetch(process.env.RPC_URL || 'https://rpc.mersennet.com', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(batch), signal: c.signal,
+      });
+      answer = await r.json();
+    } finally { clearTimeout(t); }
+    if (!Array.isArray(answer)) throw new Error(`getAccount batch: ${answer && answer.error ? answer.error.message : 'not a batch answer'}`);
+    results.push(...answer);
+  }
   let units = 0n; let accounts = 0;
-  for (const res of Array.isArray(results) ? results : []) {
+  for (const res of results) {
     const acct = res && res.result; if (!acct) continue;
     let mine = 0n;
     try { mine += BigInt(acct.collateral || 0); } catch { /* skip */ }
