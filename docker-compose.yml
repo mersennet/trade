@@ -8,6 +8,8 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    # Parallel queries share /dev/shm; Docker's 64 MB ran out when the API's start-up burst hit it.
+    shm_size: 256mb
     environment:
       POSTGRES_DB: mersennet_trade
       POSTGRES_USER: mersennet
