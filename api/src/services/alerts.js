@@ -260,7 +260,14 @@ async function operatorTick(address, snap, verified) {
     }
     await setState(address, `status:${id}`, v.status);
     if (v.benched) {
-      await fireOnce(address, `benched:${id}:${epoch}`, 24 * HOUR, `⚠️ Validator ${tag} is <b>benched</b> for the rest of epoch ${epoch}: it missed 3 leader slots. It still votes; the epoch boundary will jail it for the next epoch unless the node recovers. Check <code>systemctl status mersennet</code> and <code>mersennet-check</code> on the server.`);
+      // The bench freezes the epoch's counts, so the boundary's verdict is already known:
+      // jailed when more than 20% of its slots were missed (genesis validators never are).
+      const slots = v.proposedSlots + v.missedSlots;
+      const jail = !v.genesis && v.missedSlots * 10_000 > slots * 2_000;
+      const verdict = jail
+        ? `With ${v.missedSlots} of ${slots} slots missed (more than 20%), the epoch boundary will jail it for the next epoch whatever the node does now; keep it running and it rejoins by itself after the jail.`
+        : `With ${v.missedSlots} of ${slots} slots missed (under the 20% jail line), it is back in the rotation next epoch if the node is up.`;
+      await fireOnce(address, `benched:${id}:${epoch}`, 24 * HOUR, `⚠️ Validator ${tag} is <b>benched</b> for the rest of epoch ${epoch}: it missed ${v.missedSlots} leader slots. It still votes. ${verdict} Check <code>systemctl status mersennet</code> and <code>mersennet-check</code> on the server.`);
     } else if (v.status === 'active' && v.missedSlots >= 2 && v.proposedSlots === 0) {
       await fireOnce(address, `missed:${id}:${epoch}`, 24 * HOUR, `⚠️ Validator ${tag} has missed ${v.missedSlots} leader slots this epoch and proposed none. Each miss delays the network by a failover round; more than 20% missed jails it for the next epoch. Check the node now.`);
     }
@@ -277,7 +284,7 @@ async function operatorTick(address, snap, verified) {
     const lag = fresh && b.height != null && head ? Math.max(0, head - Math.floor((Date.now() - b.seenAt) / BLOCK_MS) - b.height) : null;
     const build = (b && b.build) || (vn && vn.version ? String(vn.version).split('-').pop() : null);
     if (latest && build && build !== latest) {
-      await fireOnce(address, `outdated:${id}:${latest}`, 7 * 24 * HOUR, `🔧 Node ${tag} runs build <code>${build}</code>; the current release is <code>${latest}</code>. Upgrade keeps keys and data:\n<code>curl -fsSL https://mersennet.com/downloads/install.sh | sudo bash -s -- --operator ${address}</code>`);
+      await fireOnce(address, `outdated:${id}:${latest}`, 7 * 24 * HOUR, `🔧 Node ${tag} runs build <code>${build}</code>; the current release is <code>${latest}</code>. Upgrade keeps keys and data:\n<code>curl -fsSL https://mersennet.com/downloads/install.sh | sudo bash -s -- --operator ${address}</code>\nBest time: about halfway through an epoch (every 1,800 blocks, about an hour). By then the validator has proposed enough blocks that the few slots a restart misses neither bench nor jail it; right after a boundary they can.`);
     }
     // Right after an upgrade the watch reports on the node instead, allowing for the catch-up minute.
     const watching = await upgradeWatch(address, { id, tag, b, fresh, lag, latest });

@@ -477,8 +477,8 @@ export default function ValidatorSetPanel({ ownNodesSlot }: { ownNodesSlot?: HTM
                 return (
                   <tr key={v.identity} className={cn('border-b border-border last:border-0', own && 'bg-primary/5', !inSet && 'opacity-50')}>
                     <td className="py-1.5 pr-3 font-mono text-dim" title={inSet ? 'In the active set: proposes and votes this epoch' : 'Not in the active set this epoch'}>{i < (view?.params.maxValidators ?? 12) ? `#${i + 1}` : '—'}</td>
-                    <td className="py-1.5 pr-3 font-mono text-foreground">{shortenAddress(v.identity)}{v.genesis && <span className="text-dim"> · genesis</span>}</td>
-                    <td className="py-1.5 pr-3 font-mono text-dim">{shortenAddress(v.operator)}{own && <span className="text-primary"> · you</span>}</td>
+                    <td className="py-1.5 pr-3 font-mono text-foreground">{shortenAddress(v.identity)}{v.genesis && <span className="text-dim"> · genesis</span>}{own && <span className="text-primary"> · your node</span>}</td>
+                    <td className="py-1.5 pr-3 font-mono text-dim">{shortenAddress(v.operator)}</td>
                     <td className="py-1.5 pr-3 text-right font-mono">{fmtMrsn(v.selfStake)}</td>
                     <td className="py-1.5 pr-3 text-right font-mono">{fmtDelegated(v.delegated)}</td>
                     <td className={cn('py-1.5 pr-3 text-right font-mono', v.missedSlots > 0 && v.proposedSlots === 0 ? 'text-down' : '')} title={`Leader slots this epoch: blocks the node proposed vs. slots it missed. Missing more than 20% of at least 5 slots jails the node for the next epoch. All-time: ${v.totalProposed.toLocaleString()} blocks proposed since it registered.`}>{v.proposedSlots} proposed<span className="text-dim"> · {v.missedSlots} missed</span><div className="text-[10px] text-dim font-normal">{v.totalProposed.toLocaleString()} all-time</div></td>
