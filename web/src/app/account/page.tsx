@@ -50,7 +50,8 @@ function howCounted(p: AccountProduct): string {
 
 function productLink(p: AccountProduct): { href: string; label: string; external?: boolean } {
   if (p.key === 'node' && !(p.detail?.validators || []).length) return { href: RUN_A_NODE, label: 'Run a node', external: true };
-  return { href: p.href, label: p.label === 'Node' ? 'Validators' : p.label };
+  const labels: Partial<Record<AccountProduct['key'], string>> = { exchange: 'Portfolio', node: 'Validators' };
+  return { href: p.href, label: labels[p.key] ?? p.label };
 }
 
 export default function AccountPage() {
