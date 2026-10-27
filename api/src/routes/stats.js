@@ -15,11 +15,9 @@ const STATS_TTL_MS = Number(process.env.STATS_TTL_MS || 10_000);
 let statsCache = { at: 0, body: null, inflight: null };
 
 async function computeStats() {
-  // Notional = price × size ÷ the market's priceScale (chain prices are human × scale).
-  const VOL_DIV = chain.priceScaleSql('market_id');
   const [vol24h, vol7d, totalTrades, uniqueTraders] = await Promise.all([
-    pool.query(`SELECT COALESCE(SUM(price * size / ${VOL_DIV}), 0)::float8 as v FROM trades WHERE block_timestamp > NOW() - interval '24 hours'`),
-    pool.query(`SELECT COALESCE(SUM(price * size / ${VOL_DIV}), 0)::float8 as v FROM trades WHERE block_timestamp > NOW() - interval '7 days'`),
+    pool.query(`SELECT COALESCE(SUM(${chain.notionalSql('trades')}), 0)::float8 as v FROM trades WHERE block_timestamp > NOW() - interval '24 hours'`),
+    pool.query(`SELECT COALESCE(SUM(${chain.notionalSql('trades')}), 0)::float8 as v FROM trades WHERE block_timestamp > NOW() - interval '7 days'`),
     pool.query('SELECT COUNT(*) as c FROM trades'),
     pool.query('SELECT COUNT(DISTINCT taker) as c FROM trades'),
   ]);

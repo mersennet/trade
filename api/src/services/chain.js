@@ -770,11 +770,21 @@ function priceScaleSql(col = 'market_id') {
     .map((m) => `WHEN ${Number(m.id)} THEN ${Number(m.priceScale)}`).join(' ');
   return cases ? `(CASE ${col} ${cases} ELSE 1 END)` : '1';
 }
+/**
+ * SQL notional (human quote units) of the trade row `alias`. A market's trades
+ * from before its relist carry the old listing's prices and scale, so they
+ * count as 0 (market_relists, written by the indexer).
+ */
+function notionalSql(alias = 'trades') {
+  return `(CASE WHEN EXISTS (SELECT 1 FROM market_relists r WHERE r.market_id = ${alias}.market_id AND ${alias}.block_number < r.height) THEN 0
+    ELSE ${alias}.price * ${alias}.size / ${priceScaleSql(`${alias}.market_id`)} END)`;
+}
 
 module.exports = {
   MARKETS,
   priceScaleOf,
   priceScaleSql,
+  notionalSql,
   toHumanPrice,
   toChainPrice,
   getProtocol,

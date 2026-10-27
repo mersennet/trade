@@ -60,9 +60,8 @@ async function recordCommunity(telegram) {
 
 /** Human trading in [from, to): active traders, their volume, and who traded. */
 async function tradingBetween(from, to, bots) {
-  const ps = chain.priceScaleSql('t.market_id');
   const r = await pool.query(
-    `WITH t AS (SELECT LOWER(taker) AS taker, LOWER(maker) AS maker, (price * size / ${ps})::float8 AS notional
+    `WITH t AS (SELECT LOWER(taker) AS taker, LOWER(maker) AS maker, (${chain.notionalSql('t')})::float8 AS notional
                   FROM trades t WHERE block_timestamp >= $1 AND block_timestamp < $2)
      SELECT a, SUM(v)::float8 AS volume FROM (
        SELECT taker AS a, notional AS v FROM t WHERE NOT (taker = ANY($3) AND maker = ANY($3))
