@@ -7,7 +7,7 @@ import { useStore } from '@/stores/useStore';
 import { useWallet } from '@/hooks/useWallet';
 import { useMarketTick } from '@/hooks/useMarketTick';
 import { useToast } from '@/components/shared/Toast';
-import { api, type ClobProtocol } from '@/lib/api';
+import { api, type ClobProtocol, type NetworkFeeAction } from '@/lib/api';
 import { cn, formatPrice, formatNumber } from '@/lib/utils';
 import { getReferralCode } from '@/lib/referral';
 import { playSound } from '@/lib/sounds';
@@ -177,6 +177,15 @@ export default function TradeForm() {
     let alive = true;
     api.getProtocol().then((p) => { if (alive) setProtocol(p); }).catch(() => {});
     const stop = startPoll(() => api.getProtocol().then((p) => { if (alive) setProtocol(p); }), 60_000);
+    return () => { alive = false; stop(); };
+  }, []);
+
+  const [orderNetworkFee, setOrderNetworkFee] = useState<NetworkFeeAction | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const load = () => api.getNetworkFees().then((f) => { if (alive) setOrderNetworkFee(f.actions.find((a) => a.key === 'order') ?? null); });
+    load().catch(() => {});
+    const stop = startPoll(load, 60_000);
     return () => { alive = false; stop(); };
   }, []);
 
@@ -1272,6 +1281,14 @@ export default function TradeForm() {
             <span className="text-dim">{feesCharged ? 'Est. Fee' : 'Fee'}</span>
             <span className="font-mono text-dim">{feesCharged ? `${formatNumber(orderSummary.fee, 4)} ${market.quote}` : '0 (testnet)'}</span>
           </div>
+          {orderNetworkFee && (
+            <div className="flex items-center justify-between text-[10px]" title="Gas for putting the order on chain, paid in MRSN by your wallet (or your one-click agent key). Dollars at the testnet's MRSN/USD market price">
+              <span className="text-dim">Network Fee</span>
+              <span className="font-mono text-dim">
+                {+orderNetworkFee.mrsn.toPrecision(2)} MRSN{orderNetworkFee.usd != null ? ` ≈ $${orderNetworkFee.usd.toFixed(4)}` : ''}
+              </span>
+            </div>
+          )}
         </div>
       )}
     </div>

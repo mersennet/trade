@@ -116,6 +116,7 @@ export const api = {
   verifyNode: (body: { host: string; wallet: string; signature: string }) =>
     apiFetch<{ ok: boolean; identity: string; height: number; version: string; pointsPerDay: number }>('/nodes/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
   getAdoption: () => memo('adoption', 60_000, () => apiFetch<AdoptionStats>('/stats/adoption')),
+  getNetworkFees: () => memo('network-fees', 30_000, () => apiFetch<NetworkFees>('/stats/fees')),
   getPointsLeaderboard: (season = 1) => apiFetch<{ leaderboard: PointsEntry[] }>(`/points/leaderboard/season/${season}?limit=100`),
   getSprint: () => memo('sprint', 15_000, () => apiFetch<SprintStatus>('/points/sprint')),
   getVaultState: () => apiFetch<VaultState>('/vault/state'),
@@ -356,6 +357,8 @@ export interface AdoptionStats {
   community: { telegramMembers: number | null; github: { repos: number; stars: number; forks: number } | null };
   daily: { day: string; humanTrades: number; humanVolume: number; humanTraders: number; botTrades: number; botVolume: number; newTraders: number; faucetTxs: number | null; blocks: number | null; verifiedNodes: number | null; validators: number | null }[];
 }
+export interface NetworkFeeAction { key: 'transfer' | 'order' | 'delegate'; label: string; gas: number; mrsn: number; usd: number | null; }
+export interface NetworkFees { baseFeeGwei: number; minBaseFeeGwei: number; split: { treasuryPct: number; proposerPct: number; burnPct: number }; mrsnUsd: number | null; mrsnUsdSource: string; actions: NetworkFeeAction[]; updatedAt: string; }
 export interface PointsResponse { address: string; totalPoints: number; tradingPoints: number; lpPoints: number; referralPoints: number; nodePoints?: number; bonusPoints?: number; tier: string; rank: number; history: { point_type: string; amount: number; reason: string; created_at: string }[]; }
 export interface PointsEntry { rank: number; address: string; totalPoints: number; tier: string; tradingPoints?: number; nodePoints?: number; lpPoints?: number; referralPoints?: number; bonusPoints?: number; }
 export interface SprintStatus { weekStart: string; awardAt: string; prizes: number[]; standings: { rank: number; address: string; volume: number; trades: number }[]; lastWinners: { week_start: string; address: string; rank: number; volume: number; points: number }[]; }
