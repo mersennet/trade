@@ -118,6 +118,7 @@ export const api = {
   getAdoption: () => memo('adoption', 60_000, () => apiFetch<AdoptionStats>('/stats/adoption')),
   getNetworkFees: () => memo('network-fees', 30_000, () => apiFetch<NetworkFees>('/stats/fees')),
   getAccountSummary: (addr: string) => apiFetch<AccountSummary>(`/account/${addr}/summary`),
+  getRevenue: (adminKey: string) => apiFetch<RevenueReport>('/admin/revenue', { headers: { 'X-Admin-Key': adminKey } }),
   getPointsLeaderboard: (season = 1) => apiFetch<{ leaderboard: PointsEntry[] }>(`/points/leaderboard/season/${season}?limit=100`),
   getSprint: () => memo('sprint', 15_000, () => apiFetch<SprintStatus>('/points/sprint')),
   getVaultState: () => apiFetch<VaultState>('/vault/state'),
@@ -368,6 +369,23 @@ export interface AccountProductDetail {
 }
 export interface AccountProduct { key: 'exchange' | 'vault' | 'staking' | 'node' | 'referrals'; label: string; href: string; mrsn: number | null; usd: number | null; detail: AccountProductDetail | null; error: string | null; }
 export interface AccountSummary { address: string; mrsnUsd: number | null; mrsnUsdSource: string; products: AccountProduct[]; total: { mrsn: number; usd: number | null }; complete: boolean; updatedAt: string; }
+export type RevenuePayer = 'users' | 'flagged' | 'ours';
+export interface RevenueWindow {
+  byPayer: Record<RevenuePayer, { feesMrsn: number; treasuryMrsn: number; txs: number; takerVolumeUsd: number }>;
+  feesMrsn: number; treasuryMrsn: number; proposersMrsn: number; burnedMrsn: number; txs: number;
+  takerVolumeUsd: number; treasuryUsd: number | null; plannedTradingFeesUsd: number;
+}
+export interface RevenueReport {
+  generatedAt: string; mrsnUsd: number | null; baseFeeGwei: number; plannedTakerFee: number; treasury: string; since: string;
+  split: { treasury: number; proposers: number; burned: number };
+  reconcile: { treasuryBalanceMrsn: number | null; computedMrsn: number };
+  insurance: { fundMrsn: number; badDebtMrsn: number } | null;
+  windows: Record<'24h' | '7d' | '30d' | '1y' | 'all', RevenueWindow>;
+  change: { week: RevenueWindow & { from: string | null; to: string | null }; weekBefore: RevenueWindow & { from: string | null; to: string | null }; drivers: { payer: RevenuePayer; treasuryMrsn: number; treasuryMrsnBefore: number; deltaMrsn: number }[] };
+  topPayers: { address: string; payer: RevenuePayer; feesMrsn: number; feesMrsnBefore: number }[];
+  daily: { day: string; closed: boolean; feesMrsn: Record<RevenuePayer, number>; takerVolumeUsd: Record<RevenuePayer, number> }[];
+  events: { at: string; label: string; kind: string }[];
+}
 export interface PointsResponse { address: string; totalPoints: number; tradingPoints: number; lpPoints: number; referralPoints: number; nodePoints?: number; bonusPoints?: number; tier: string; rank: number; history: { point_type: string; amount: number; reason: string; created_at: string }[]; }
 export interface PointsEntry { rank: number; address: string; totalPoints: number; tier: string; tradingPoints?: number; nodePoints?: number; lpPoints?: number; referralPoints?: number; bonusPoints?: number; }
 export interface SprintStatus { weekStart: string; awardAt: string; prizes: number[]; standings: { rank: number; address: string; volume: number; trades: number }[]; lastWinners: { week_start: string; address: string; rank: number; volume: number; points: number }[]; }
