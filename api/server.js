@@ -137,6 +137,7 @@ app.use('/api/v1/stats/launch', require('./src/routes/launch'));
 app.use('/api/v1/stats/adoption', require('./src/routes/adoption'));
 app.use('/api/v1/stats/fees', require('./src/routes/fees'));
 app.use('/api/v1/account', require('./src/routes/account'));
+app.use('/api/v1/admin/revenue', require('./src/routes/revenue'));
 // Live CLOB protocol parameters (switch heights, margin bps, wei per unit) —
 // the terminal and bots read this instead of hard-coding heights.
 app.get('/api/v1/protocol', async (_req, res) => {
@@ -478,6 +479,8 @@ if (STANDBY) {
   try { require('./src/services/upgrades').start(); } catch (e) { console.log('[api] upgrades start:', e.message); }
   // Operator and delegator earnings per epoch (account summary) — primary only.
   try { require('./src/services/nodeRewards').start(); } catch (e) { console.log('[api] node rewards start:', e.message); }
+  // Fees per day and payer for the revenue dashboard — primary only.
+  try { require('./src/services/revenue').start(); } catch (e) { console.log('[api] revenue start:', e.message); }
 }
 
 // Unknown /api/v1 route → JSON 404 (not the HTML default); anything thrown
