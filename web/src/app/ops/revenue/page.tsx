@@ -169,7 +169,10 @@ export default function RevenuePage() {
               <div className="bg-surface border border-border rounded-xl p-4">
                 <p className="text-[11px] text-dim uppercase tracking-wider">Trading fees</p>
                 <p className="mt-1 text-2xl font-mono font-semibold">0</p>
-                <p className="text-xs text-dim">Testnet. At the planned {(data.plannedTakerFee * 100).toFixed(3)}% taker fee: {usd(w.plannedTradingFeesUsd)} on {usd(w.takerVolumeUsd)} taken</p>
+                <p className="text-xs text-dim">
+                  Testnet. At the planned {(data.plannedTakerFee * 100).toFixed(3)}% taker fee users would pay {usd(w.byPayer.users.takerVolumeUsd * data.plannedTakerFee)}
+                  ({usd(w.plannedTradingFeesUsd)} with our bots and flagged wallets)
+                </p>
               </div>
               <div className="bg-surface border border-border rounded-xl p-4">
                 <p className="text-[11px] text-dim uppercase tracking-wider">Insurance fund</p>
