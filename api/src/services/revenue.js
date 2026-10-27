@@ -155,7 +155,7 @@ async function report() {
   const sets = await payerSets();
   const now = Math.floor(Date.now() / 1000);
   const top = topPayers(sets);
-  const [{ rows: days }, live, protocol, treasuryWei, price, upg, { rows: notes }] = await Promise.all([
+  const [{ rows: days }, live, protocol, treasuryWei, price, upg, { rows: notes }, owed] = await Promise.all([
     pool.query(
       `SELECT to_char(day, 'YYYY-MM-DD') AS day, payer, gas::text AS gas, txs, taker_volume_usd, closed
          FROM revenue_daily ORDER BY day`,
@@ -166,6 +166,11 @@ async function report() {
     chain.getMarkPrice(1).then((p) => chain.toHumanPrice(1, p) || null).catch(() => null),
     upgrades.report().catch(() => ({ completed: [] })),
     pool.query('SELECT at, label, kind FROM ops_events ORDER BY at'),
+    // What the treasury owes delegators for the reward split (nodeRewards.js), not paid yet.
+    pool.query(
+      `SELECT COALESCE(SUM(owed_mrsn), 0)::float8 AS mrsn, COUNT(DISTINCT delegator)::int AS delegators, MIN(epoch) AS since_epoch
+         FROM delegator_shortfall WHERE paid_tx IS NULL`,
+    ).then((r) => r.rows[0]).catch(() => null),
   ]);
 
   const baseFeeWei = BigInt(protocol?.fees?.minBaseFeeWei || 1_000_000_000);
@@ -242,6 +247,7 @@ async function report() {
       computedMrsn: all.treasuryMrsn,
     },
     insurance: protocol ? { fundMrsn: Number(protocol.insuranceFund ?? 0), badDebtMrsn: Number(protocol.badDebt ?? 0) } : null,
+    delegatorShortfall: owed ? { owedMrsn: owed.mrsn, delegators: owed.delegators, sinceEpoch: owed.since_epoch != null ? Number(owed.since_epoch) : null } : null,
     windows: {
       '24h': summarize(live),
       '7d': summarize(sumDays(lastDays(7))),
