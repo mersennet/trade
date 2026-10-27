@@ -182,6 +182,15 @@ export default function RevenuePage() {
             </div>
           )}
 
+          {data.delegatorShortfall && (
+            <p className="text-xs text-dim">
+              Owed to delegators for the reward split:{' '}
+              <span className="font-mono text-foreground">{mrsn(data.delegatorShortfall.owedMrsn, 4)} MRSN</span> to{' '}
+              {data.delegatorShortfall.delegators} wallet{data.delegatorShortfall.delegators === 1 ? '' : 's'}
+              {data.delegatorShortfall.sinceEpoch != null ? ` since epoch ${data.delegatorShortfall.sinceEpoch}` : ''}. Paid from the treasury once the fix is live on chain.
+            </p>
+          )}
+
           {w && (
             <div className="bg-surface border border-border rounded-xl overflow-hidden">
               <div className="px-4 py-2.5 border-b border-border text-xs font-medium uppercase tracking-wider">Who pays · {WINDOW_LABEL[win]}</div>

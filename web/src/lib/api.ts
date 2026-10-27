@@ -380,6 +380,7 @@ export interface RevenueReport {
   split: { treasury: number; proposers: number; burned: number };
   reconcile: { treasuryBalanceMrsn: number | null; computedMrsn: number };
   insurance: { fundMrsn: number; badDebtMrsn: number } | null;
+  delegatorShortfall: { owedMrsn: number; delegators: number; sinceEpoch: number | null } | null;
   windows: Record<'24h' | '7d' | '30d' | '1y' | 'all', RevenueWindow>;
   change: { week: RevenueWindow & { from: string | null; to: string | null }; weekBefore: RevenueWindow & { from: string | null; to: string | null }; drivers: { payer: RevenuePayer; treasuryMrsn: number; treasuryMrsnBefore: number; deltaMrsn: number }[] };
   topPayers: { address: string; payer: RevenuePayer; feesMrsn: number; feesMrsnBefore: number }[];
