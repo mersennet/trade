@@ -701,6 +701,10 @@ const BUILTIN_SWITCHES = Number(process.env.CHAIN_ID || 131071) === 131071 ? {
   rejoinWindowHeight: 2554100,
   securityForkHeight: 2623500,
   usdcMarginOffHeight: 2670700,
+  // Release 93cd5c1: known before our own node reports them.
+  restartGraceHeight: 3720600,
+  delegatorShareHeight: 3720600,
+  timestampOrderHeight: 3720600,
 } : {};
 
 async function upcomingSwitches() {
@@ -730,7 +734,7 @@ async function upcomingSwitches() {
   };
   const all = { ...BUILTIN_SWITCHES, ...(p.switches || {}) };
   const vp = vset && vset.params;
-  if (vp) for (const k of ['benchHeight', 'jailEscalationHeight', 'rewardsToOperatorHeight', 'maxValidatorsHeight']) if (typeof vp[k] === 'number') all[k] = vp[k];
+  if (vp) for (const k of ['benchHeight', 'jailEscalationHeight', 'rewardsToOperatorHeight', 'maxValidatorsHeight', 'restartGraceHeight', 'delegatorShareHeight']) if (typeof vp[k] === 'number' && vp[k] > 0) all[k] = vp[k];
   const now = Date.now();
   const switches = Object.entries(all)
     .filter(([, h]) => typeof h === 'number' && h > height)
