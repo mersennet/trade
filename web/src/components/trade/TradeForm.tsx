@@ -1046,6 +1046,9 @@ export default function TradeForm() {
               );
             })}
           </div>
+          <p className="mt-1 text-[10.5px] leading-snug text-dim">
+            {t('trade.leverageHint', `Sizes this order from your available balance. Every fill joins your one ${market.base} position, which shows its effective leverage.`)}
+          </p>
         </div>
       )}
 
