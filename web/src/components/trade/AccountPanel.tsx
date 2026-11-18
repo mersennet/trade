@@ -381,11 +381,14 @@ export default function AccountPanel() {
               className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm font-mono text-foreground outline-none focus:border-primary/40"
             />
             <button
-              onClick={() => {
+              onClick={async () => {
                 // Floor to the cent: rounding up asks for more than the balance and the transfer fails.
                 const floorCents = (x: number) => (Math.floor(x * 100 + 1e-6) / 100).toFixed(2);
                 if (transferAsset === 'MRSN') {
-                  setTransferAmount(transferMode === 'deposit' ? floorCents(Math.max(0, walletMrsn - 0.01)) : floorCents(collateralNative));
+                  if (transferMode === 'deposit') { setTransferAmount(floorCents(Math.max(0, walletMrsn - 0.01))); return; }
+                  // Open positions keep their maintenance margin, so a withdrawal can release less than is deposited.
+                  const r = address ? await api.getCollateral(address).catch(() => null) : null;
+                  setTransferAmount(floorCents(Math.min(collateralNative, r?.withdrawable ?? collateralNative)));
                 } else {
                   const b = tokenBalances[transferAsset];
                   setTransferAmount(floorCents(transferMode === 'deposit' ? b?.wallet ?? 0 : b?.deposited ?? 0));

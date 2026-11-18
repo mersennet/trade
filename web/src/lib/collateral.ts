@@ -64,6 +64,25 @@ async function getSigner(provider: unknown) {
 }
 
 /**
+ * The precompile answers a deposit or withdrawal it refuses with `false` inside
+ * a successful transaction, so the receipt cannot show that nothing moved. Run
+ * the same call against the latest state first and stop before the wallet
+ * prompt. A node without call simulation skips the check.
+ */
+async function assertChainAccepts(from: string, data: string, refusal: string) {
+  let out: string;
+  try {
+    const { rpc } = await readProvider();
+    out = await rpc.call({ from, to: MERSENNET_ORDERS_PRECOMPILE, data });
+  } catch {
+    return;
+  }
+  if (BigInt(out && out !== '0x' ? out : '0x0') === 0n) throw new Error(refusal);
+}
+
+const WITHDRAW_REFUSED = 'the chain would refuse it: open positions keep part of your collateral as maintenance margin. Withdraw less, or reduce positions first.';
+
+/**
  * Deposit native MRSN collateral into the MersennetOrders precompile. The tx is
  * signed by the wallet; the precompile escrows the amount from the signer's
  * native balance (1:1 backed). Throws on rejection/chain error.
@@ -77,6 +96,7 @@ export async function depositCollateral(
   const amount = await toChainAmount(humanAmount);
   const iface = new e.Interface(PRECOMPILE_ABI);
   const data = iface.encodeFunctionData('depositCollateral', [amount]);
+  await assertChainAccepts(await signer.getAddress(), data, 'the chain would refuse it: the wallet balance does not cover this amount.');
   const tx = await signer.sendTransaction({ to: MERSENNET_ORDERS_PRECOMPILE, data, gasLimit: 200_000 });
   await tx.wait(1);
   return { vaultTx: tx.hash };
@@ -84,8 +104,8 @@ export async function depositCollateral(
 
 /**
  * Withdraw escrowed MRSN collateral back to the signer's native balance. The
- * precompile validates margin before releasing funds and reverts if the
- * withdrawal would breach maintenance margin.
+ * precompile refuses (returns false, moves nothing) a withdrawal that would
+ * leave equity under the maintenance margin of open positions.
  */
 export async function withdrawCollateral(
   provider: unknown,
@@ -96,6 +116,7 @@ export async function withdrawCollateral(
   const amount = await toChainAmount(humanAmount);
   const iface = new e.Interface(PRECOMPILE_ABI);
   const data = iface.encodeFunctionData('withdrawCollateral', [amount]);
+  await assertChainAccepts(await signer.getAddress(), data, WITHDRAW_REFUSED);
   const tx = await signer.sendTransaction({ to: MERSENNET_ORDERS_PRECOMPILE, data, gasLimit: 200_000 });
   await tx.wait(1);
   return { vaultTx: tx.hash };
@@ -187,6 +208,7 @@ export async function depositTokenCollateral(
   const amount = toTokenUnits(humanAmount, asset.decimals);
   const iface = new e.Interface(PRECOMPILE_ABI);
   const data = iface.encodeFunctionData('depositTokenCollateral', [asset.token, amount]);
+  await assertChainAccepts(await signer.getAddress(), data, `the chain would refuse it: the wallet's ${asset.symbol} balance does not cover this amount, or ${asset.symbol} is not accepted right now.`);
   const tx = await signer.sendTransaction({ to: MERSENNET_ORDERS_PRECOMPILE, data, gasLimit: 250_000 });
   await tx.wait(1);
   return { vaultTx: tx.hash };
@@ -202,6 +224,7 @@ export async function withdrawTokenCollateral(
   const amount = toTokenUnits(humanAmount, asset.decimals);
   const iface = new e.Interface(PRECOMPILE_ABI);
   const data = iface.encodeFunctionData('withdrawTokenCollateral', [asset.token, amount]);
+  await assertChainAccepts(await signer.getAddress(), data, WITHDRAW_REFUSED);
   const tx = await signer.sendTransaction({ to: MERSENNET_ORDERS_PRECOMPILE, data, gasLimit: 250_000 });
   await tx.wait(1);
   return { vaultTx: tx.hash };

@@ -33,16 +33,18 @@ router.get('/:address', async (req, res) => {
     // what the chain counts as margin: native MRSN plus registered token
     // collateral at its weight (USDC at 90%); `native` is the MRSN part alone
     // (the only part a native withdrawal can move).
-    const [margin, collateralRaw] = await Promise.all([
+    const [margin, collateralRaw, withdrawable] = await Promise.all([
       chain.getMarginCollateral(req.params.address),
       chain.getCollateralRaw(req.params.address),
+      chain.getWithdrawable(req.params.address),
     ]);
     res.json({
       collateral: margin.collateral,   // human, total margin (native + weighted tokens)
       native: margin.native,           // human, native MRSN collateral
       tokenMarginValue: margin.tokenMarginValue,
       tokens: margin.tokens,           // [{ token, symbol, amount, marginValue, weightBps }]
-      free: margin.native,             // legacy field: withdrawable native MRSN
+      withdrawable,                    // human, native MRSN a withdrawal can release now (open positions keep their maintenance margin)
+      free: withdrawable,              // legacy name for withdrawable
       collateralRaw,                   // raw native units for callers that need exact precision
       decimals: chain.collateralDecimals(),
       timestamp: Date.now(),

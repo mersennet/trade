@@ -73,7 +73,7 @@ export const api = {
   // NOTE: on-chain orders are cancelled with a signed tx via
   // cancelOrderOnChain (lib/orderSigning.ts) — there is no server-side cancel.
   getCollateral: (addr: string) =>
-    apiFetch<{ collateral: number; native: number; tokenMarginValue: number; tokens: { token: string; symbol: string; amount: number; marginValue: number; weightBps: number }[]; free: number; collateralRaw: string; decimals: number }>(`/collateral/${addr}`),
+    apiFetch<{ collateral: number; native: number; tokenMarginValue: number; tokens: { token: string; symbol: string; amount: number; marginValue: number; weightBps: number }[]; withdrawable: number; free: number; collateralRaw: string; decimals: number }>(`/collateral/${addr}`),
   // The collateral endpoints return calldata + the raw amount; the FRONTEND
   // then prompts the wallet to sign the approval + deposit/withdraw txs.
   // Use `useVault()` (lib/vault.ts) instead of calling these directly.
@@ -148,8 +148,12 @@ export const api = {
     apiFetch<{ ok: boolean; referrer: string; code: string; alreadyAttributed?: boolean }>('/referrals/attribute', { method: 'POST', body: JSON.stringify({ wallet, code, signature }) }),
   getBuilderCodes: () => apiFetch<{ codes: BuilderCode[] }>('/builder-codes'),
   getBuilderCodesByOwner: (address: string) => apiFetch<{ codes: BuilderCode[] }>(`/builder-codes/owner/${address}`),
-  createBuilderCode: (owner: string, label?: string, code?: string) =>
-    apiFetch<{ code: string }>('/builder-codes', { method: 'POST', body: JSON.stringify({ owner, label, code }) }),
+  // Creating a code is wallet-signed: fetch the exact text, sign it, post it back.
+  getBuilderCodeMessage: (owner: string, code?: string, label?: string) =>
+    apiFetch<{ owner: string; code: string; label: string; issuedAt: number; message: string }>(
+      `/builder-codes/message?owner=${owner}&code=${encodeURIComponent(code || '')}&label=${encodeURIComponent(label || '')}`),
+  createBuilderCode: (body: { owner: string; code: string; label: string; issuedAt: number; signature: string }) =>
+    apiFetch<{ code: string }>('/builder-codes', { method: 'POST', body: JSON.stringify(body) }),
   getStats: () => memo('stats', 5_000, () => apiFetch<ProtocolStats>('/stats')),
   /** Cheap RPC-backed head/interval reading for status chips (no DB aggregates). */
   getChainHealth: () => memo('chain-health', 2_000, () => apiFetch<ChainHealth>('/health/chain')),

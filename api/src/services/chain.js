@@ -270,6 +270,28 @@ async function getFreeCollateral(address) {
   return (await getMarginCollateral(address)).native;
 }
 
+/**
+ * Native MRSN a withdrawCollateral() would release now, by the chain's rule:
+ * at most the native collateral, and equity left after it (collateral plus
+ * weighted tokens plus open PnL at the chain's mark) must still cover the
+ * maintenance margin of every open position.
+ */
+async function getWithdrawable(address) {
+  const [margin, protocol] = await Promise.all([getMarginCollateral(address), getProtocol().catch(() => null)]);
+  const mm = Number(protocol?.maintenanceMarginBps || 0) / 10_000;
+  let pnl = 0;
+  let maintenance = 0;
+  for (const m of MARKETS) {
+    const pos = await getPosition(m.id, address);
+    const size = Number(pos.size);
+    if (!size) continue;
+    const mark = toHumanPrice(m.id, await getMarkPrice(m.id)) || Number(pos.entryPrice);
+    pnl += size * (mark - Number(pos.entryPrice));
+    maintenance += Math.abs(size) * mark * mm;
+  }
+  return Math.max(0, Math.min(margin.native, margin.collateral + pnl - maintenance));
+}
+
 // ---------------------------------------------------------------------
 // Margin collateral = native MRSN + registered token collateral at its weight
 // ---------------------------------------------------------------------
@@ -806,6 +828,7 @@ module.exports = {
   getCollateral,
   getCollateralRaw,
   getFreeCollateral,
+  getWithdrawable,
   getCollateralAssets,
   getMarginCollateral,
   getMarkPrice,
