@@ -129,7 +129,12 @@ async function rpcCall(method, params = []) {
       signal: controller.signal,
     });
     const json = await res.json();
-    if (json.error) throw new Error(json.error.message || JSON.stringify(json.error));
+    if (json.error) {
+      const err = new Error(json.error.message || JSON.stringify(json.error));
+      err.rpcCode = json.error.code;
+      err.rpcData = json.error.data;
+      throw err;
+    }
     return json.result;
   } catch (e) {
     e.upstream = true;
@@ -139,10 +144,25 @@ async function rpcCall(method, params = []) {
   }
 }
 
+/** A reverted eth_call as geth reports it: JSON-RPC error 3, revert bytes in `error.data`. */
+function isRevertError(e) {
+  return !!e && e.rpcCode === 3 && typeof e.rpcData === 'string' && /^0x(?:[0-9a-fA-F]{2})*$/.test(e.rpcData);
+}
+
+// Nodes before the eth_call-errors release answer a reverted call with the
+// revert bytes as the result; later nodes answer JSON-RPC error 3 with the same
+// bytes in `error.data`. Both come back here as the result, so the readers
+// below see one shape on either node. Any other error (a halt, a timeout)
+// still throws.
 async function ethCall(data, from) {
   const callObj = { to: PRECOMPILE, data };
   if (from) callObj.from = from;
-  return rpcCall('eth_call', [callObj, 'latest']);
+  try {
+    return await rpcCall('eth_call', [callObj, 'latest']);
+  } catch (e) {
+    if (isRevertError(e)) return e.rpcData;
+    throw e;
+  }
 }
 
 // ---------------------------------------------------------------------
