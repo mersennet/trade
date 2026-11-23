@@ -477,7 +477,15 @@ export default function ValidatorSetPanel({ ownNodesSlot }: { ownNodesSlot?: HTM
                 return (
                   <tr key={v.identity} className={cn('border-b border-border last:border-0', own && 'bg-primary/5', !inSet && 'opacity-50')}>
                     <td className="py-1.5 pr-3 font-mono text-dim" title={inSet ? 'In the active set: proposes and votes this epoch' : 'Not in the active set this epoch'}>{i < (view?.params.maxValidators ?? 12) ? `#${i + 1}` : '—'}</td>
-                    <td className="py-1.5 pr-3 font-mono text-foreground">{shortenAddress(v.identity)}{v.genesis && <span className="text-dim"> · genesis</span>}{own && <span className="text-primary"> · your node</span>}</td>
+                    <td className="py-1.5 pr-3 font-mono text-foreground">
+                      {shortenAddress(v.identity)}
+                      {(own || v.genesis) && (
+                        <div className="mt-0.5 flex flex-wrap gap-x-2 text-[10.5px]">
+                          {own && <span className="text-primary">your node</span>}
+                          {v.genesis && <span className="text-dim">genesis</span>}
+                        </div>
+                      )}
+                    </td>
                     <td className="py-1.5 pr-3 font-mono text-dim">{shortenAddress(v.operator)}</td>
                     <td className="py-1.5 pr-3 text-right font-mono">{fmtMrsn(v.selfStake)}</td>
                     <td className="py-1.5 pr-3 text-right font-mono">{fmtDelegated(v.delegated)}</td>

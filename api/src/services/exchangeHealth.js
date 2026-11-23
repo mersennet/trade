@@ -13,6 +13,8 @@
  *   makerQuoting     the vault has orders resting on the book
  *   vaultIdle        free MRSN in the vault above the reserve, i.e. not pushed
  *                    to collateral (a stuck vault-manager)
+ *   vaultCap         NAV within 5% of the deposit cap: at the cap every deposit
+ *                    reverts ("vault is full"; from 3 to 6 Nov nobody could deposit)
  *   indexerLag       trade indexer behind the chain head
  *
  * 200 `{ ok: true }` when every check passes, 503 with `failing: [...]`
@@ -29,6 +31,7 @@ const VAULT_RESERVE_BPS = Number(process.env.VAULT_RESERVE_BPS || 1000);
 const VAULT_MIN_PUSH_MRSN = Number(process.env.VAULT_MIN_PUSH_MRSN || 100);
 const SEL_NAV = '0xc1590cd7';          // nav()
 const SEL_FREE = '0x25185d3e';         // freeBalance()
+const SEL_CAP = '0xdbd5edc7';          // depositCap()
 
 const THRESHOLDS = {
   fillsWindowMin: 15,
@@ -36,6 +39,7 @@ const THRESHOLDS = {
   clobMinTxs: 30,   clobMaxFailRatio: 0.3,
   chainMinTxs: 50,  chainMaxFailRatio: 0.3,
   indexerMaxLagBlocks: 150,
+  vaultCapFullRatio: 0.95,
 };
 
 // The explorer indexer keeps every transaction (with status) in its own
@@ -67,6 +71,7 @@ async function probe() {
     rpcCall('eth_call', [{ to: VAULT_ADDRESS, data: SEL_FREE }, 'latest']),
     rpcCall('eth_blockNumber', []),
     pool.query('SELECT last_block FROM indexer_state WHERE id = 1'),
+    rpcCall('eth_call', [{ to: VAULT_ADDRESS, data: SEL_CAP }, 'latest']),
   ]);
   const val = (i) => (settled[i].status === 'fulfilled' ? settled[i].value : null);
   const err = (i) => (settled[i].status === 'rejected' ? String(settled[i].reason?.message || settled[i].reason) : null);
@@ -105,6 +110,17 @@ async function probe() {
     const detail = { navMrsn: Math.round(navMrsn), freeMrsn: Math.round(freeMrsn), idleMrsn: Math.round(idle) };
     if (idle >= VAULT_MIN_PUSH_MRSN) fail('vaultIdle', { ...detail, message: `${Math.round(idle)} MRSN of deposits not pushed to collateral` });
     else pass('vaultIdle', detail);
+  }
+
+  const cap = val(8);
+  if (!nav || !cap) fail('vaultCap', { error: err(4) || err(8) || 'no answer' });
+  else {
+    const navMrsn = Number(BigInt(nav)) / 1e18;
+    const capMrsn = Number(BigInt(cap)) / 1e18;
+    const detail = { navMrsn: Math.round(navMrsn), capMrsn: Math.round(capMrsn) };
+    if (capMrsn > 0 && navMrsn >= capMrsn * THRESHOLDS.vaultCapFullRatio) {
+      fail('vaultCap', { ...detail, message: `the vault is at ${Math.round((navMrsn / capMrsn) * 100)}% of its deposit cap; deposits revert at the cap` });
+    } else pass('vaultCap', detail);
   }
 
   const head = val(6) ? parseInt(val(6), 16) : null;

@@ -383,7 +383,7 @@ async function upgradeWatch(address, { id, tag, b, fresh, lag, latest }) {
       await setState(address, `wasbehind:${id}`, '0'); // the confirmation below says where it stands
       const height = lag == null ? '' : `Block height ${fmt(b.height)} — ${lag <= 20 ? 'in sync' : `catching up, ${fmt(lag)} blocks behind`}\n`;
       await fireOnce(address, `upgraded:${id}:${b.build}`, 30 * 24 * HOUR,
-        `✅ <b>Node ${tag} upgraded</b> and running as a systemd service.\nBinary <code>${b.build}</code> — up to date (was <code>${prev}</code>)\n${height}Keys, state and operator were kept; nothing else to do. If it falls behind or stops answering in the next 45 minutes, I will tell you here.`);
+        `✅ <b>Node ${tag} upgraded</b> and running.\nBinary <code>${b.build}</code> — up to date (was <code>${prev}</code>)\n${height}Keys, state and operator were kept; nothing else to do. If it falls behind or stops answering in the next 45 minutes, I will tell you here.`);
     } else if (prev && latest && b.build !== latest) {
       await fireOnce(address, `upgrade-other:${id}:${b.build}`, 7 * 24 * HOUR,
         `⚠️ Node ${tag} changed build from <code>${prev}</code> to <code>${b.build}</code>, but the current release is <code>${latest}</code>. Re-run the installer to get it (keeps keys and data):\n<code>curl -fsSL https://mersennet.com/downloads/install.sh | sudo bash -s -- --operator ${address}</code>`);

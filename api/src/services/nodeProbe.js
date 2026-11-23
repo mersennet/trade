@@ -10,15 +10,57 @@
  * our nonce (no replay).
  */
 const net = require('node:net');
+const dns = require('node:dns').promises;
 const { randomBytes } = require('node:crypto');
 const { ethers } = require('ethers');
 
 const DEFAULT_PORT = 30303;
 
-function whoami(host, port = DEFAULT_PORT, timeoutMs = 6000) {
+// Never dialled: this host's loopback, private and shared networks, link-local
+// (cloud metadata), documentation, benchmarking, multicast and reserved space.
+// BlockList checks IPv4-mapped IPv6 addresses against the IPv4 rules.
+const NOT_PUBLIC = new net.BlockList();
+for (const [a, p] of [
+  ['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8], ['169.254.0.0', 16],
+  ['172.16.0.0', 12], ['192.0.0.0', 24], ['192.0.2.0', 24], ['192.88.99.0', 24], ['192.168.0.0', 16],
+  ['198.18.0.0', 15], ['198.51.100.0', 24], ['203.0.113.0', 24], ['224.0.0.0', 4], ['240.0.0.0', 4],
+]) NOT_PUBLIC.addSubnet(a, p, 'ipv4');
+for (const [a, p] of [
+  ['::', 96], ['64:ff9b::', 96], ['64:ff9b:1::', 48], ['100::', 64], ['2001::', 23], ['2001:db8::', 32],
+  ['2002::', 16], ['fc00::', 7], ['fe80::', 10], ['ff00::', 8],
+]) NOT_PUBLIC.addSubnet(a, p, 'ipv6');
+
+function isPublicAddress(address) {
+  const family = net.isIP(address);
+  if (family === 0) return false;
+  return !NOT_PUBLIC.check(address, family === 6 ? 'ipv6' : 'ipv4');
+}
+
+/**
+ * Resolve `host` as the connection would (the resolver also reads numeric
+ * forms such as 2130706433 or 0x7f000001, and /etc/hosts names in any case)
+ * and return the address to dial. Every resolved address must be public; the
+ * caller dials the returned address, never the name, so a second lookup
+ * cannot answer differently.
+ */
+async function resolvePublic(host) {
+  let records;
+  try {
+    records = await dns.lookup(host, { all: true, verbatim: true });
+  } catch (e) {
+    throw new Error(`cannot resolve ${host} (${e.code || e.message})`);
+  }
+  if (!records.length || records.some((r) => !isPublicAddress(r.address))) {
+    throw new Error('host must resolve to a public IP address');
+  }
+  return records[0];
+}
+
+async function whoami(host, port = DEFAULT_PORT, timeoutMs = 6000) {
+  const target = await resolvePublic(host);
   return new Promise((resolve, reject) => {
     const nonce = randomBytes(32);
-    const sock = net.createConnection({ host, port });
+    const sock = net.createConnection({ host: target.address, port, family: target.family });
     let buf = Buffer.alloc(0);
     const fail = (msg) => { clearTimeout(timer); sock.destroy(); reject(new Error(msg)); };
     const timer = setTimeout(() => fail('node did not answer within 6s (is port 30303/tcp reachable?)'), timeoutMs);
@@ -64,4 +106,4 @@ function whoami(host, port = DEFAULT_PORT, timeoutMs = 6000) {
   });
 }
 
-module.exports = { whoami, DEFAULT_PORT };
+module.exports = { whoami, resolvePublic, isPublicAddress, DEFAULT_PORT };

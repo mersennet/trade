@@ -81,10 +81,29 @@ export async function readVault(account?: string | null): Promise<VaultOnChain> 
   };
 }
 
+/**
+ * Throw the vault's revert reason before the wallet is asked to sign. A mined
+ * revert carries no reason, and the chain answers a reverting eth_call with the
+ * revert data instead of an error, so read it here.
+ */
+async function preflight(from: string, data: string, value = 0n): Promise<void> {
+  const { ethers } = await import('ethers');
+  const rpc = new ethers.JsonRpcProvider(getDefaultChain().rpcUrls[0], undefined, { staticNetwork: true });
+  const out: string = await rpc.call({ to: MAKER_VAULT_ADDRESS, from, data, value }).catch((e) => {
+    const d = e?.data ?? e?.info?.error?.data;
+    return typeof d === 'string' ? d : '0x';
+  });
+  if (out.startsWith('0x08c379a0')) {
+    throw new Error(ethers.AbiCoder.defaultAbiCoder().decode(['string'], '0x' + out.slice(10))[0]);
+  }
+}
+
 /** Deposit `humanMrsn` MRSN; returns the tx hash. One wallet confirmation. */
 export async function depositToMakerVault(provider: unknown, humanMrsn: string): Promise<string> {
   const { ethers, c } = await contract(false, provider);
   const value = ethers.parseEther(String(humanMrsn).trim());
+  const from = await (c.runner as InstanceType<typeof ethers.JsonRpcSigner>).getAddress();
+  await preflight(from, c.interface.encodeFunctionData('deposit'), value);
   const tx = await c.deposit({ value, gasLimit: 450_000 });
   await tx.wait(1);
   return tx.hash as string;
@@ -94,6 +113,8 @@ export async function depositToMakerVault(provider: unknown, humanMrsn: string):
 export async function withdrawFromMakerVault(provider: unknown, shares: number): Promise<string> {
   const { ethers, c } = await contract(false, provider);
   const amount = ethers.parseEther(shares.toFixed(18));
+  const from = await (c.runner as InstanceType<typeof ethers.JsonRpcSigner>).getAddress();
+  await preflight(from, c.interface.encodeFunctionData('withdraw', [amount]));
   const tx = await c.withdraw(amount, { gasLimit: 400_000 });
   await tx.wait(1);
   return tx.hash as string;

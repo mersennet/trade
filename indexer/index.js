@@ -864,7 +864,9 @@ async function awardPoints() {
 }
 
 // ---------------------------------------------------------------------------
-// Referral points: a referrer earns 10 % of each referee's trading points.
+// Referral points: a referrer earns 10 % of the trading points each referee
+// earns after attributing, counted like trading points (daily cap, zero-point
+// markets, relists) and leaving out the referee's trades with the referrer.
 // Attribution rows come from the API (POST /api/v1/referrals/attribute, wallet-
 // signed, first code wins) into `referrals(referee, referrer, code)`.
 // Recomputed from scratch every run so it is idempotent.
@@ -901,13 +903,30 @@ async function ensurePointsSchema() {
 async function awardReferralPoints(season) {
   try {
     const r = await pool.query(
-      `SELECT LOWER(r.referrer) AS referrer, COALESCE(SUM(pb.trading_points), 0)::numeric AS referee_trading
+      `SELECT r.referrer, SUM(FLOOR(COALESCE((
+           SELECT SUM(LEAST(d.volume, $3::numeric)) FROM (
+             SELECT trades.block_timestamp::date AS day, SUM(trades.price * trades.size / ${priceScaleSql('trades.market_id')}) AS volume
+               FROM trades
+              WHERE (trades.taker = r.referee OR trades.maker = r.referee)
+                AND trades.block_timestamp >= r.attributed_at
+                AND trades.taker <> r.referrer AND trades.maker <> r.referrer
+                AND ${countedTradeSql('$2')}
+              GROUP BY 1
+           ) d), 0) * ${POINTS_PER_USD} / ${TRADE_USD_SCALE}))::numeric AS referee_trading
          FROM referrals r
-         LEFT JOIN points_balance pb ON LOWER(pb.address) = LOWER(r.referee) AND pb.season = $1
-        WHERE LOWER(r.referrer) <> LOWER(r.referee)
-          AND LOWER(r.referrer) NOT IN (SELECT address FROM excluded_addresses)
-        GROUP BY LOWER(r.referrer)`,
-      [season]
+        WHERE r.referrer <> r.referee
+          AND r.referrer ~ '^0x[0-9a-f]{40}$'
+          AND r.referrer <> ALL($1::text[]) AND r.referrer NOT IN (SELECT address FROM excluded_addresses)
+          AND r.referee <> ALL($1::text[]) AND r.referee NOT IN (SELECT address FROM excluded_addresses)
+        GROUP BY r.referrer`,
+      [BOT_ADDRESSES, POINTS_ZERO_MARKETS, POINTS_DAILY_CAP_USD]
+    );
+    // A referrer whose referrals no longer count (removed, excluded referee)
+    // drops out of the query: its referral points go to zero.
+    await pool.query(
+      `UPDATE points_balance SET referral_points = 0, updated_at = NOW()
+        WHERE season = $1 AND referral_points <> 0 AND address <> ALL($2::text[])`,
+      [season, r.rows.map((row) => row.referrer)]
     );
     let changed = 0;
     for (const row of r.rows) {

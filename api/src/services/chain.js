@@ -270,6 +270,28 @@ async function getFreeCollateral(address) {
   return (await getMarginCollateral(address)).native;
 }
 
+/**
+ * Native MRSN a withdrawCollateral() would release now, by the chain's rule:
+ * at most the native collateral, and equity left after it (collateral plus
+ * weighted tokens plus open PnL at the chain's mark) must still cover the
+ * maintenance margin of every open position.
+ */
+async function getWithdrawable(address) {
+  const [margin, protocol] = await Promise.all([getMarginCollateral(address), getProtocol().catch(() => null)]);
+  const mm = Number(protocol?.maintenanceMarginBps || 0) / 10_000;
+  let pnl = 0;
+  let maintenance = 0;
+  for (const m of MARKETS) {
+    const pos = await getPosition(m.id, address);
+    const size = Number(pos.size);
+    if (!size) continue;
+    const mark = toHumanPrice(m.id, await getMarkPrice(m.id)) || Number(pos.entryPrice);
+    pnl += size * (mark - Number(pos.entryPrice));
+    maintenance += Math.abs(size) * mark * mm;
+  }
+  return Math.max(0, Math.min(margin.native, margin.collateral + pnl - maintenance));
+}
+
 // ---------------------------------------------------------------------
 // Margin collateral = native MRSN + registered token collateral at its weight
 // ---------------------------------------------------------------------
@@ -701,6 +723,10 @@ const BUILTIN_SWITCHES = Number(process.env.CHAIN_ID || 131071) === 131071 ? {
   rejoinWindowHeight: 2554100,
   securityForkHeight: 2623500,
   usdcMarginOffHeight: 2670700,
+  // Release 93cd5c1: known before our own node reports them.
+  restartGraceHeight: 3720600,
+  delegatorShareHeight: 3720600,
+  timestampOrderHeight: 3720600,
 } : {};
 
 async function upcomingSwitches() {
@@ -730,7 +756,7 @@ async function upcomingSwitches() {
   };
   const all = { ...BUILTIN_SWITCHES, ...(p.switches || {}) };
   const vp = vset && vset.params;
-  if (vp) for (const k of ['benchHeight', 'jailEscalationHeight', 'rewardsToOperatorHeight', 'maxValidatorsHeight']) if (typeof vp[k] === 'number') all[k] = vp[k];
+  if (vp) for (const k of ['benchHeight', 'jailEscalationHeight', 'rewardsToOperatorHeight', 'maxValidatorsHeight', 'restartGraceHeight', 'delegatorShareHeight']) if (typeof vp[k] === 'number' && vp[k] > 0) all[k] = vp[k];
   const now = Date.now();
   const switches = Object.entries(all)
     .filter(([, h]) => typeof h === 'number' && h > height)
@@ -770,11 +796,21 @@ function priceScaleSql(col = 'market_id') {
     .map((m) => `WHEN ${Number(m.id)} THEN ${Number(m.priceScale)}`).join(' ');
   return cases ? `(CASE ${col} ${cases} ELSE 1 END)` : '1';
 }
+/**
+ * SQL notional (human quote units) of the trade row `alias`. A market's trades
+ * from before its relist carry the old listing's prices and scale, so they
+ * count as 0 (market_relists, written by the indexer).
+ */
+function notionalSql(alias = 'trades') {
+  return `(CASE WHEN EXISTS (SELECT 1 FROM market_relists r WHERE r.market_id = ${alias}.market_id AND ${alias}.block_number < r.height) THEN 0
+    ELSE ${alias}.price * ${alias}.size / ${priceScaleSql(`${alias}.market_id`)} END)`;
+}
 
 module.exports = {
   MARKETS,
   priceScaleOf,
   priceScaleSql,
+  notionalSql,
   toHumanPrice,
   toChainPrice,
   getProtocol,
@@ -792,6 +828,7 @@ module.exports = {
   getCollateral,
   getCollateralRaw,
   getFreeCollateral,
+  getWithdrawable,
   getCollateralAssets,
   getMarginCollateral,
   getMarkPrice,

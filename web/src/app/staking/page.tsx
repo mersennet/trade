@@ -247,10 +247,14 @@ export default function StakingPage() {
                 <tr key={r.address} id={`delegate-${r.address.toLowerCase()}`} className={cn('border-b border-border/50 last:border-0', own && 'bg-primary/5')}>
                   <td className="px-3 py-3 font-mono text-foreground">
                     {shortenAddress(r.address)}
-                    {info?.genesis && <span className="text-dim"> · genesis</span>}
-                    {info && info.status !== 'active' && <span className={info.status === 'jailed' ? 'text-down' : 'text-dim'}> · {info.status}</span>}
-                    {info?.benched && <span className="text-yellow"> · benched</span>}
-                    {own && <span className="text-primary"> · your node</span>}
+                    {(own || info?.genesis || (info && info.status !== 'active') || info?.benched) && (
+                      <div className="mt-0.5 flex flex-wrap gap-x-2 text-[10.5px]">
+                        {own && <span className="text-primary">your node</span>}
+                        {info?.genesis && <span className="text-dim">genesis</span>}
+                        {info && info.status !== 'active' && <span className={info.status === 'jailed' ? 'text-down' : 'text-dim'}>{info.status}</span>}
+                        {info?.benched && <span className="text-yellow">benched</span>}
+                      </div>
+                    )}
                   </td>
                   {/* Both stake columns in fixed decimals so they read as one unit:
                       0.00 · 1,004.91 · 41,002.00 (community feedback). Exact value on hover. */}

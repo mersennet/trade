@@ -338,7 +338,12 @@ export default function PositionsTable() {
                         <span className={cn('ml-1.5 text-[10px] font-medium', size > 0 ? 'text-green' : 'text-red')}>
                           {size > 0 ? 'LONG' : 'SHORT'}
                         </span>
-                        {p.leverage && <span className="ml-1 text-[10px] text-dim">{p.leverage}x</span>}
+                        {p.leverage && (
+                          <span className="ml-1 text-[10px] text-dim cursor-help"
+                            title="Effective leverage: position value ÷ account equity. Every order in a market joins this one position; the leverage picked on the ticket only sizes each order.">
+                            {p.leverage}x
+                          </span>
+                        )}
                       </td>
                       <td className={cn('px-2 py-2.5 text-right font-mono tabular-nums', size > 0 ? 'text-green' : 'text-red')}>
                         {formatNumber(Math.abs(size), 4)}

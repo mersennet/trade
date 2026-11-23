@@ -73,7 +73,7 @@ export const api = {
   // NOTE: on-chain orders are cancelled with a signed tx via
   // cancelOrderOnChain (lib/orderSigning.ts) — there is no server-side cancel.
   getCollateral: (addr: string) =>
-    apiFetch<{ collateral: number; native: number; tokenMarginValue: number; tokens: { token: string; symbol: string; amount: number; marginValue: number; weightBps: number }[]; free: number; collateralRaw: string; decimals: number }>(`/collateral/${addr}`),
+    apiFetch<{ collateral: number; native: number; tokenMarginValue: number; tokens: { token: string; symbol: string; amount: number; marginValue: number; weightBps: number }[]; withdrawable: number; free: number; collateralRaw: string; decimals: number }>(`/collateral/${addr}`),
   // The collateral endpoints return calldata + the raw amount; the FRONTEND
   // then prompts the wallet to sign the approval + deposit/withdraw txs.
   // Use `useVault()` (lib/vault.ts) instead of calling these directly.
@@ -116,6 +116,9 @@ export const api = {
   verifyNode: (body: { host: string; wallet: string; signature: string }) =>
     apiFetch<{ ok: boolean; identity: string; height: number; version: string; pointsPerDay: number }>('/nodes/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
   getAdoption: () => memo('adoption', 60_000, () => apiFetch<AdoptionStats>('/stats/adoption')),
+  getNetworkFees: () => memo('network-fees', 30_000, () => apiFetch<NetworkFees>('/stats/fees')),
+  getAccountSummary: (addr: string) => apiFetch<AccountSummary>(`/account/${addr}/summary`),
+  getRevenue: (adminKey: string) => apiFetch<RevenueReport>('/admin/revenue', { headers: { 'X-Admin-Key': adminKey } }),
   getPointsLeaderboard: (season = 1) => apiFetch<{ leaderboard: PointsEntry[] }>(`/points/leaderboard/season/${season}?limit=100`),
   getSprint: () => memo('sprint', 15_000, () => apiFetch<SprintStatus>('/points/sprint')),
   getVaultState: () => apiFetch<VaultState>('/vault/state'),
@@ -145,8 +148,12 @@ export const api = {
     apiFetch<{ ok: boolean; referrer: string; code: string; alreadyAttributed?: boolean }>('/referrals/attribute', { method: 'POST', body: JSON.stringify({ wallet, code, signature }) }),
   getBuilderCodes: () => apiFetch<{ codes: BuilderCode[] }>('/builder-codes'),
   getBuilderCodesByOwner: (address: string) => apiFetch<{ codes: BuilderCode[] }>(`/builder-codes/owner/${address}`),
-  createBuilderCode: (owner: string, label?: string, code?: string) =>
-    apiFetch<{ code: string }>('/builder-codes', { method: 'POST', body: JSON.stringify({ owner, label, code }) }),
+  // Creating a code is wallet-signed: fetch the exact text, sign it, post it back.
+  getBuilderCodeMessage: (owner: string, code?: string, label?: string) =>
+    apiFetch<{ owner: string; code: string; label: string; issuedAt: number; message: string }>(
+      `/builder-codes/message?owner=${owner}&code=${encodeURIComponent(code || '')}&label=${encodeURIComponent(label || '')}`),
+  createBuilderCode: (body: { owner: string; code: string; label: string; issuedAt: number; signature: string }) =>
+    apiFetch<{ code: string }>('/builder-codes', { method: 'POST', body: JSON.stringify(body) }),
   getStats: () => memo('stats', 5_000, () => apiFetch<ProtocolStats>('/stats')),
   /** Cheap RPC-backed head/interval reading for status chips (no DB aggregates). */
   getChainHealth: () => memo('chain-health', 2_000, () => apiFetch<ChainHealth>('/health/chain')),
@@ -355,6 +362,34 @@ export interface AdoptionStats {
   network: { height: number | null; blockTimeSec: number | null; tx24h: number | null; txTotal: number | null; contractsDeployed: number | null; validators: { registered: number; active: number | null; genesis?: number; community: number; jailed: number; benched?: number; statuses?: Record<string, number>; unregisteredNodesOnline?: number | null; networkStakeMrsn: number; delegatedMrsn: number; epoch: number | null; height: number | null } | null; verifiedNodes: number | null; verifiedNodesOnline: number | null; nodeOperators: number | null; uptime: { monitors: number; avg24h: number | null; avg30d: number | null } | null };
   community: { telegramMembers: number | null; github: { repos: number; stars: number; forks: number } | null };
   daily: { day: string; humanTrades: number; humanVolume: number; humanTraders: number; botTrades: number; botVolume: number; newTraders: number; faucetTxs: number | null; blocks: number | null; verifiedNodes: number | null; validators: number | null }[];
+}
+export interface NetworkFeeAction { key: 'transfer' | 'order' | 'delegate'; label: string; gas: number; mrsn: number; usd: number | null; }
+export interface NetworkFees { baseFeeGwei: number; minBaseFeeGwei: number; split: { treasuryPct: number; proposerPct: number; burnPct: number }; mrsnUsd: number | null; mrsnUsdSource: string; actions: NetworkFeeAction[]; updatedAt: string; }
+export interface AccountProductDetail {
+  equity?: number; unrealized?: number; deposited?: number; withdrawn?: number; value?: number;
+  delegated?: number; unclaimed?: number; claims?: number;
+  sinceBlock?: number | null; nodePoints?: number; validators?: { identity: string; status: string; blocksProposed: number }[];
+  referees?: number; referralPoints?: number;
+}
+export interface AccountProduct { key: 'exchange' | 'vault' | 'staking' | 'node' | 'referrals'; label: string; href: string; mrsn: number | null; usd: number | null; detail: AccountProductDetail | null; error: string | null; }
+export interface AccountSummary { address: string; mrsnUsd: number | null; mrsnUsdSource: string; products: AccountProduct[]; total: { mrsn: number; usd: number | null }; complete: boolean; updatedAt: string; }
+export type RevenuePayer = 'users' | 'flagged' | 'ours';
+export interface RevenueWindow {
+  byPayer: Record<RevenuePayer, { feesMrsn: number; treasuryMrsn: number; txs: number; takerVolumeUsd: number }>;
+  feesMrsn: number; treasuryMrsn: number; proposersMrsn: number; burnedMrsn: number; txs: number;
+  takerVolumeUsd: number; treasuryUsd: number | null; plannedTradingFeesUsd: number;
+}
+export interface RevenueReport {
+  generatedAt: string; mrsnUsd: number | null; baseFeeGwei: number; plannedTakerFee: number; treasury: string; since: string;
+  split: { treasury: number; proposers: number; burned: number };
+  reconcile: { treasuryBalanceMrsn: number | null; computedMrsn: number };
+  insurance: { fundMrsn: number; badDebtMrsn: number } | null;
+  delegatorShortfall: { owedMrsn: number; delegators: number; sinceEpoch: number | null } | null;
+  windows: Record<'24h' | '7d' | '30d' | '1y' | 'all', RevenueWindow>;
+  change: { week: RevenueWindow & { from: string | null; to: string | null }; weekBefore: RevenueWindow & { from: string | null; to: string | null }; drivers: { payer: RevenuePayer; treasuryMrsn: number; treasuryMrsnBefore: number; deltaMrsn: number }[] };
+  topPayers: { address: string; payer: RevenuePayer; feesMrsn: number; feesMrsnBefore: number }[];
+  daily: { day: string; closed: boolean; feesMrsn: Record<RevenuePayer, number>; takerVolumeUsd: Record<RevenuePayer, number> }[];
+  events: { at: string; label: string; kind: string }[];
 }
 export interface PointsResponse { address: string; totalPoints: number; tradingPoints: number; lpPoints: number; referralPoints: number; nodePoints?: number; bonusPoints?: number; tier: string; rank: number; history: { point_type: string; amount: number; reason: string; created_at: string }[]; }
 export interface PointsEntry { rank: number; address: string; totalPoints: number; tier: string; tradingPoints?: number; nodePoints?: number; lpPoints?: number; referralPoints?: number; bonusPoints?: number; }

@@ -139,7 +139,7 @@ async function computeFast() {
     pool.query(`
       WITH bots AS (SELECT address FROM excluded_addresses),
       t AS (SELECT t.*, (t.taker IN (SELECT address FROM bots) AND t.maker IN (SELECT address FROM bots)) AS bot,
-                   (t.price * t.size / ${chain.priceScaleSql('t.market_id')})::float8 AS notional
+                   (${chain.notionalSql('t')})::float8 AS notional
             FROM trades t)
       SELECT
         COUNT(*)::int AS trades_total,

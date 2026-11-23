@@ -1,12 +1,18 @@
 'use client';
 import { useEffect, useState } from 'react';
+import type { JsonRpcSigner } from 'ethers';
 import { useWallet } from '@/hooks/useWallet';
 import { useToast } from '@/components/shared/Toast';
 import { api, type BuilderCode, type ReferralStatus } from '@/lib/api';
 import { formatNumber } from '@/lib/utils';
 
+const failureText = (e: unknown) => {
+  const msg = (e as Error).message || '';
+  return /rejected|denied/i.test(msg) ? 'Cancelled in wallet' : `Failed: ${msg}`;
+};
+
 export default function ReferralsPage() {
-  const { address, isConnected } = useWallet();
+  const { address, isConnected, signer } = useWallet();
   const { toast } = useToast();
   const [myCodes, setMyCodes] = useState<BuilderCode[]>([]);
   const [newLabel, setNewLabel] = useState('');
@@ -29,16 +35,24 @@ export default function ReferralsPage() {
     }
   }, [address]);
 
+  // The wallet signs the code and label; the API registers only codes their owner signed.
+  const signAndCreate = async (owner: string, code?: string, label?: string) => {
+    if (!signer) throw new Error('Connect your wallet first');
+    const m = await api.getBuilderCodeMessage(owner, code, label);
+    const signature = await (signer as JsonRpcSigner).signMessage(m.message);
+    return api.createBuilderCode({ owner: m.owner, code: m.code, label: m.label, issuedAt: m.issuedAt, signature });
+  };
+
   const createCode = async () => {
     if (!address) { toast('Connect wallet first', 'error'); return; }
     try {
-      const res = await api.createBuilderCode(address, newLabel || undefined, newCode || undefined);
+      const res = await signAndCreate(address, newCode.trim() || undefined, newLabel.trim() || undefined);
       toast(`Builder code created: ${res.code}`, 'success');
       setNewLabel('');
       setNewCode('');
       // Refresh the list that is actually rendered ("Your Builder Codes").
       loadMyCodes(address);
-    } catch (e) { toast(`Failed: ${(e as Error).message}`, 'error'); }
+    } catch (e) { toast(failureText(e), 'error'); }
   };
 
   const copyLink = (code: string) => {
@@ -53,9 +67,9 @@ export default function ReferralsPage() {
     if (!address) return;
     setCreatingLink(true);
     try {
-      await api.createBuilderCode(address);
+      await signAndCreate(address);
       await loadMyCodes(address);
-    } catch (e) { toast(`Failed: ${(e as Error).message}`, 'error'); }
+    } catch (e) { toast(failureText(e), 'error'); }
     finally { setCreatingLink(false); }
   };
 

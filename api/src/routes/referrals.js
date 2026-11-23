@@ -5,8 +5,9 @@
  * they connect a wallet the terminal asks them to sign a one-line statement
  * and posts it here. The signature is what makes the attribution trustworthy:
  * nobody can attach someone else's wallet to their code. First code wins and
- * is permanent; self-referral is rejected. The indexer then pays the referrer
- * 10 % of the referee's trading points (see indexer awardReferralPoints).
+ * is permanent; self-referral and referring back the wallet that referred you
+ * are rejected. The indexer then pays the referrer 10 % of the trading points
+ * the referee earns after attributing (see indexer awardReferralPoints).
  */
 const { Router } = require('express');
 const { ethers } = require('ethers');
@@ -90,6 +91,8 @@ router.post('/attribute', strictLimiter, async (req, res) => {
     if (existing.rowCount > 0) {
       return res.json({ ok: true, alreadyAttributed: true, referrer: existing.rows[0].referrer, code: existing.rows[0].code });
     }
+    const reverse = await pool.query('SELECT 1 FROM referrals WHERE referee = $1 AND referrer = $2', [referrer, w]);
+    if (reverse.rowCount > 0) return res.status(400).json({ error: 'you referred the owner of this code; a referral cannot go both ways' });
     await pool.query('INSERT INTO referrals (referee, referrer, code) VALUES ($1, $2, $3) ON CONFLICT (referee) DO NOTHING', [w, referrer, c]);
     await pool.query('UPDATE builder_codes SET total_orders = total_orders + 1 WHERE code = $1', [c]).catch(() => {});
     res.json({ ok: true, referrer, code: c });
