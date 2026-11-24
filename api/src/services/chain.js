@@ -747,6 +747,8 @@ const BUILTIN_SWITCHES = Number(process.env.CHAIN_ID || 131071) === 131071 ? {
   restartGraceHeight: 3720600,
   delegatorShareHeight: 3720600,
   timestampOrderHeight: 3720600,
+  // Release 0b3596d.
+  precompileRollbackHeight: 4567200,
 } : {};
 
 async function upcomingSwitches() {
@@ -773,6 +775,7 @@ async function upcomingSwitches() {
     securityForkHeight: 'Signature checks on every block, order price band',
     usdcMarginOffHeight: 'Test USDC stops counting as margin',
     markPriceHeight: 'Bounded mark price, circuit breaker; liquidations within 5% of the mark',
+    precompileRollbackHeight: 'Contract calls into the order-book and staking precompiles (release 0b3596d)',
   };
   const all = { ...BUILTIN_SWITCHES, ...(p.switches || {}) };
   const vp = vset && vset.params;
